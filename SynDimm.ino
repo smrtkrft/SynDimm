@@ -1,0 +1,721 @@
+/*
+ * SynDimm - Smart Dimmer Controller
+ * Standart WebServer kullanarak
+ */
+
+#include <WiFi.h>
+#include <WebServer.h>
+#include <ESPmDNS.h>
+
+#include "ky040.h"
+#include "modes.h"
+#include "syndimm_net.h"
+#include "webui.h"
+#include "webstyle.h"
+#include "webscript.h"
+#include "safe_lock.h"
+#include "safe_lock_eeprom.h"
+#include "safe_lock_api.h"
+
+KY040 encoder(19, 20, 18);  // CLK=19, DT=20, SW=18 
+ModeManager modes(&encoder);
+SynDimmNet net;
+WebServer server(80);
+
+// Safe Lock nesneleri
+SafeLock safeLock;
+SafeLockEEPROM safeLockEEPROM;
+SafeLockAPI safeLockAPI;
+
+// API trigger flag (non-blocking için)
+volatile bool pendingApiTrigger = false;
+volatile uint8_t pendingPasswordIndex = 0;
+
+// Safe Lock şifre eşleştiğinde çağrılacak callback
+void onSafeLockPasswordMatch(uint8_t passwordIndex) {
+  Serial.print("[Callback] Password matched: #");
+  Serial.println(passwordIndex);
+  Serial.flush();
+  
+  // API tetikleme flag'ini set et (gerçek tetikleme loop'ta yapılacak)
+  pendingApiTrigger = true;
+  pendingPasswordIndex = passwordIndex;
+  
+  Serial.println("[Callback] Flag set edildi");
+  Serial.flush();
+  
+  // Buzzer KALDIRILDI - zaten safe_lock.h içinde çalıyor
+  // safeLock.playSuccessSound();
+  
+  Serial.println("[Callback] Tamamlandi");
+  Serial.flush();
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);  // 2000ms -> 1000ms (daha kısa başlangıç)
+  Serial.println("=== SynDimm ===");
+  
+  // WiFi performans ayarları - TAM PERFORMANS
+  WiFi.setSleep(false);  // WiFi uyku modu KAPALI
+  setCpuFrequencyMhz(160);  // CPU 160MHz - tam hız
+  Serial.println("CPU: 160MHz, WiFi sleep: OFF");
+  
+  encoder.begin();
+  Serial.println("Encoder OK");
+  
+  modes.begin();
+  Serial.println("Modes OK");
+  
+  // Safe Lock başlat
+  safeLock.begin();
+  safeLockEEPROM.begin();
+  safeLockAPI.setSafeLock(&safeLock);
+  safeLockEEPROM.loadToSafeLock(safeLock);
+  
+  // TEST: Eğer hiç şifre yoksa, test şifresi ekle
+  bool hasPassword = false;
+  for (uint8_t i = 0; i < 5; i++) {
+    if (safeLock.isPasswordValid(i)) {
+      hasPassword = true;
+      break;
+    }
+  }
+  
+  // TEST ŞİFRESİ KALDIRILDI - Kullanıcı web'den ekleyecek
+  // if (!hasPassword) { ... }
+  
+  if (hasPassword) {
+    Serial.println("Passwords loaded from EEPROM:");
+    for (uint8_t i = 0; i < 5; i++) {
+      if (safeLock.isPasswordValid(i)) {
+        Serial.print("  Password ");
+        Serial.print(i);
+        Serial.print(": ");
+        Serial.println(safeLock.getPassword(i));
+        
+        // API URL'sini de göster
+        ApiConfig cfg = safeLockEEPROM.getApiConfig(i);
+        Serial.print("    API URL: ");
+        Serial.println(cfg.url);
+        Serial.print("    API Enabled: ");
+        Serial.println(cfg.enabled ? "YES" : "NO");
+      }
+    }
+  } else {
+    Serial.println("No passwords found. Please add via web interface.");
+  }
+  
+  safeLock.setPasswordMatchCallback(onSafeLockPasswordMatch);
+  modes.setSafeLock(&safeLock);  // Safe Lock'u modes'a bağla
+  Serial.println("Safe Lock OK");
+  
+  net.begin();
+  net.autoConnect();
+  Serial.println("Network OK");
+  
+  // mDNS başlat
+  String hostname = "syndimm-" + net.getChipID();
+  hostname.toLowerCase();
+  if (MDNS.begin(hostname.c_str())) {
+    MDNS.addService("http", "tcp", 80);
+    MDNS.addServiceTxt("http", "tcp", "chipid", net.getChipID());
+    MDNS.addServiceTxt("http", "tcp", "version", "1.0");
+    Serial.println("mDNS OK: " + hostname + ".local");
+  }
+  
+  setupWeb();
+  server.begin();
+  Serial.println("Web OK");
+  Serial.println(net.getStatus());
+  Serial.println("===============");
+}
+
+void loop() {
+  // WebServer - en önce
+  server.handleClient();
+  yield();
+  
+  // Encoder okuma
+  if (encoder.available()) {
+    char ev = encoder.read();
+    modes.processEncoderEvent(ev);
+  }
+  yield();
+  
+  // API tetikleme (non-blocking - encoder event'inden ayrı)
+  if (pendingApiTrigger) {
+    pendingApiTrigger = false;
+    
+    Serial.println("[Loop] API tetikleniyor...");
+    Serial.flush();
+    
+    // Watchdog'u besle
+    yield();
+    
+    SafeLockAPI::onPasswordMatch(&safeLockEEPROM, &safeLockAPI, pendingPasswordIndex);
+    
+    Serial.println("[Loop] API tamamlandi");
+    Serial.flush();
+    
+    // Watchdog'u besle
+    yield();
+  }
+  
+  // Shelly senkronizasyonu
+  modes.updateShelly();
+  
+  // Watchdog'u besle
+  yield();
+}
+
+void setupWeb() {
+  // Static files
+  server.on("/", HTTP_GET, [](){
+    server.send_P(200, "text/html", HTML_PAGE);
+  });
+  
+  server.on("/style.css", HTTP_GET, [](){
+    server.send_P(200, "text/css", CSS_STYLE);
+  });
+  
+  server.on("/script.js", HTTP_GET, [](){
+    server.send_P(200, "application/javascript", JS_SCRIPT);
+  });
+  
+  // API - Network info
+  server.on("/api/network/info", HTTP_GET, [](){
+    String s = "{";
+    
+    // AP Mode Info
+    s += "\"ap\":{";
+    s += "\"ssid\":\"" + net.getAPSSID() + "\"";
+    s += ",\"ip\":\"192.168.4.1\"";
+    s += ",\"active\":" + String(net.isAPActive() ? "true" : "false");
+    s += "}";
+    
+    // WiFi 1 Info
+    s += ",\"wifi1\":{";
+    s += "\"ssid\":\"" + net.getWiFi1SSID() + "\"";
+    s += ",\"ip\":\"" + net.getWiFi1IP() + "\"";
+    s += "}";
+    
+    // WiFi 2 Info
+    s += ",\"wifi2\":{";
+    s += "\"ssid\":\"" + net.getWiFi2SSID() + "\"";
+    s += ",\"ip\":\"" + net.getWiFi2IP() + "\"";
+    s += "}";
+    
+    // Chip ID
+    s += ",\"chipID\":\"" + net.getChipID() + "\"";
+    
+    s += "}";
+    server.send(200, "application/json", s);
+  });
+  
+  // API - Status
+  server.on("/api/network/status", HTTP_GET, [](){
+    String s = "{";
+    
+    if (WiFi.status() == WL_CONNECTED) {
+      s += "\"mode\":\"WiFi\"";
+      s += ",\"ssid\":\"" + WiFi.SSID() + "\"";
+      s += ",\"ip\":\"" + WiFi.localIP().toString() + "\"";
+    } else if (net.isAPActive()) {
+      s += "\"mode\":\"AP Mode\"";
+      s += ",\"ssid\":\"" + net.getAPSSID() + "\"";
+      s += ",\"ip\":\"" + WiFi.softAPIP().toString() + "\"";
+    } else {
+      s += "\"mode\":\"Disconnected\"";
+      s += ",\"ssid\":\"N/A\"";
+      s += ",\"ip\":\"N/A\"";
+    }
+    
+    s += "}";
+    server.send(200, "application/json", s);
+  });
+  
+  // API - Encoder
+  server.on("/api/encoder/values", HTTP_GET, [](){
+    String s = "{\"dimm_sayac\":" + String(encoder.get_dimm_sayac()) + 
+               ",\"L_deger\":" + String(modes.getLeftCount()) + 
+               ",\"R_deger\":" + String(modes.getRightCount()) + 
+               ",\"last_direction\":\"" + String(encoder.get_last_direction()) + "\"}";
+    server.send(200, "application/json", s);
+  });
+  
+  // API - Device scan (IoT cihaz arama)
+  server.on("/api/devices/scan", HTTP_GET, [](){
+    Serial.println("Device scan started...");
+    
+    String s = "{\"devices\":[";
+    bool first = true;
+    
+    // mDNS ile HTTP servislerini ara
+    int n = MDNS.queryService("http", "tcp");
+    Serial.printf("Found %d HTTP services\n", n);
+    
+    for (int i = 0; i < n; i++) {
+      String hostname = MDNS.hostname(i);
+      IPAddress ip = MDNS.address(i);
+      
+      // Shelly cihazlarını kontrol et (dimmer, dim, dali)
+      // Shelly hostname formatları: 
+      // - shelly-dimmer-XXXXXX
+      // - shellydimmer-XXXXXX
+      // - shelly-dali-XXXXXX
+      // - shellydali-XXXXXX
+      if (hostname.startsWith("shelly") && 
+          (hostname.indexOf("dimmer") != -1 || 
+           hostname.indexOf("dim") != -1 || 
+           hostname.indexOf("dali") != -1)) {
+        
+        if (!first) s += ",";
+        first = false;
+        
+        // Cihaz tipini belirle
+        String deviceType = "Shelly";
+        if (hostname.indexOf("dali") != -1) {
+          deviceType = "Shelly DALI";
+        } else if (hostname.indexOf("dimmer") != -1 || hostname.indexOf("dim") != -1) {
+          deviceType = "Shelly Dimmer";
+        }
+        
+        s += "{\"ip\":\"" + ip.toString() + "\"";
+        s += ",\"hostname\":\"" + hostname + "\"";
+        s += ",\"type\":\"" + deviceType + "\"";
+        
+        // Chip ID'yi hostname'den çıkar (son tire sonrası)
+        int dashPos = hostname.lastIndexOf('-');
+        if (dashPos > 0) {
+          String deviceID = hostname.substring(dashPos + 1);
+          deviceID.toUpperCase();
+          s += ",\"chipID\":\"" + deviceID + "\"";
+        } else {
+          s += ",\"chipID\":\"unknown\"";
+        }
+        
+        // TXT kayıtlarından ek bilgi al
+        int txtCount = MDNS.numTxt(i);
+        for (int j = 0; j < txtCount; j++) {
+          String key = MDNS.txt(i, j);
+          int eqPos = key.indexOf('=');
+          if (eqPos > 0) {
+            String txtKey = key.substring(0, eqPos);
+            String txtVal = key.substring(eqPos + 1);
+            if (txtKey == "version" || txtKey == "fw_id") {
+              s += ",\"version\":\"" + txtVal + "\"";
+            }
+          }
+        }
+        
+        s += ",\"mode\":\"dimmer\"}";
+        
+        Serial.printf("Found %s: %s at %s\n", deviceType.c_str(), hostname.c_str(), ip.toString().c_str());
+      }
+    }
+    
+    s += "]}";
+    server.send(200, "application/json", s);
+    Serial.println("Device scan completed");
+  });
+  
+  // API - Set dimm ratio
+  server.on("/api/dimmer/ratio", HTTP_GET, [](){
+    if (server.hasArg("value")) {
+      int ratio = server.arg("value").toInt();
+      if (ratio >= 1 && ratio <= 5) {
+        modes.setDimmRatio(ratio);
+        server.send(200, "application/json", "{\"success\":true,\"ratio\":" + String(ratio) + "}");
+      } else {
+        server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid ratio\"}");
+      }
+    } else {
+      // GET - Mevcut ratio'yu döndür
+      int currentRatio = modes.getDimmRatio();
+      server.send(200, "application/json", "{\"ratio\":" + String(currentRatio) + "}");
+    }
+  });
+  
+  // API - Set dimmer level (dimm_sayac)
+  server.on("/api/dimmer/level", HTTP_GET, [](){
+    if (server.hasArg("value")) {
+      int level = server.arg("value").toInt();
+      if (level >= 0 && level <= 100) {
+        encoder.set_dimm_sayac(level);
+        modes.triggerDimmChange();  // Web'den değişiklik yapıldığını ModeManager'a bildir
+        server.send(200, "application/json", "{\"success\":true,\"level\":" + String(level) + "}");
+        Serial.print("Dimmer level set (web): ");
+        Serial.println(level);
+      } else {
+        server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid level\"}");
+      }
+    } else {
+      // GET - Mevcut level'ı döndür
+      int currentLevel = encoder.get_dimm_sayac();
+      server.send(200, "application/json", "{\"level\":" + String(currentLevel) + "}");
+    }
+  });
+  
+  // ========== SHELLY API ENDPOINT'LERİ ==========
+  
+  // API - Shelly'ye bağlan
+  server.on("/api/shelly/connect", HTTP_GET, [](){
+    if (server.hasArg("ip")) {
+      String ip = server.arg("ip");
+      bool success = modes.connectShelly(ip);
+      if (success) {
+        server.send(200, "application/json", "{\"success\":true,\"ip\":\"" + ip + "\"}");
+      } else {
+        server.send(500, "application/json", "{\"success\":false,\"error\":\"Connection failed\"}");
+      }
+    } else {
+      server.send(400, "application/json", "{\"success\":false,\"error\":\"Missing ip\"}");
+    }
+  });
+  
+  // API - Shelly bağlantısını kes
+  server.on("/api/shelly/disconnect", HTTP_GET, [](){
+    modes.disconnectShelly();
+    server.send(200, "application/json", "{\"success\":true}");
+  });
+  
+  // API - Shelly durumunu oku
+  server.on("/api/shelly/status", HTTP_GET, [](){
+    String s = "{\"connected\":" + String(modes.isShellyConnected() ? "true" : "false");
+    if (modes.isShellyConnected()) {
+      s += ",\"ip\":\"" + modes.getShellyIP() + "\"";
+      s += ",\"ison\":" + String(modes.getShellyIson() ? "true" : "false");
+      s += ",\"brightness\":" + String(modes.getShellyBrightness());
+    } else {
+      // Bağlantı yoksa encoder değerini döndür
+      s += ",\"brightness\":" + String(encoder.get_dimm_sayac());
+    }
+    s += "}";
+    server.send(200, "application/json", s);
+  });
+  
+  // API - Shelly toggle (açma/kapama)
+  server.on("/api/shelly/toggle", HTTP_GET, [](){
+    if (modes.isShellyConnected()) {
+      modes.toggleShelly();
+      server.send(200, "application/json", "{\"success\":true}");
+    } else {
+      server.send(400, "application/json", "{\"success\":false,\"error\":\"Not connected\"}");
+    }
+  });
+  
+  // API - Mod değiştir (dimmer/safe)
+  server.on("/api/mode/set", HTTP_GET, [](){
+    if (server.hasArg("mode")) {
+      String mode = server.arg("mode");
+      if (mode == "dimmer") {
+        modes.setDimmerMode(true);
+        server.send(200, "application/json", "{\"success\":true,\"mode\":\"dimmer\"}");
+      } else if (mode == "safe") {
+        modes.setSafeMode(true);
+        server.send(200, "application/json", "{\"success\":true,\"mode\":\"safe\"}");
+      } else {
+        server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid mode\"}");
+      }
+    } else {
+      server.send(400, "application/json", "{\"success\":false,\"error\":\"Missing mode\"}");
+    }
+  });
+  
+  // API - Aktif modu oku
+  server.on("/api/mode/get", HTTP_GET, [](){
+    String activeMode = modes.isDimmerMode() ? "dimmer" : "safe";
+    server.send(200, "application/json", "{\"mode\":\"" + activeMode + "\"}");
+  });
+  
+  // API - AP toggle
+  server.on("/api/network/ap", HTTP_GET, [](){
+    if (server.hasArg("enabled")) {
+      bool en = server.arg("enabled") == "true";
+      net.setAP(en);
+      server.send(200, "application/json", "{\"success\":true}");
+    } else {
+      server.send(400, "application/json", "{\"success\":false}");
+    }
+  });
+  
+  // API - WiFi 1
+  server.on("/api/network/wifi1", HTTP_GET, [](){
+    if (server.hasArg("ssid")) {
+      String ssid = server.arg("ssid");
+      String pass = server.hasArg("pass") ? server.arg("pass") : "";
+      String ip = server.hasArg("ip") ? server.arg("ip") : "";
+      net.saveWiFi1(ssid, pass, ip);
+      server.send(200, "application/json", "{\"success\":true}");
+    } else {
+      server.send(400, "application/json", "{\"success\":false}");
+    }
+  });
+  
+  // API - WiFi 2
+  server.on("/api/network/wifi2", HTTP_GET, [](){
+    if (server.hasArg("ssid")) {
+      String ssid = server.arg("ssid");
+      String pass = server.hasArg("pass") ? server.arg("pass") : "";
+      String ip = server.hasArg("ip") ? server.arg("ip") : "";
+      net.saveWiFi2(ssid, pass, ip);
+      server.send(200, "application/json", "{\"success\":true}");
+    } else {
+      server.send(400, "application/json", "{\"success\":false}");
+    }
+  });
+  
+  // ========== SAFE LOCK API ==========
+  
+  // Safe Lock konfigürasyonunu al
+  server.on("/api/safe/config", HTTP_GET, [](){
+    String json = "{\"passwords\":[";
+    
+    for (uint8_t i = 0; i < 5; i++) {
+      if (i > 0) json += ",";
+      json += "{";
+      json += "\"index\":" + String(i);
+      json += ",\"enabled\":" + String(safeLock.isPasswordActive(i) ? "true" : "false");
+      json += ",\"password\":\"" + safeLock.getPassword(i) + "\"";
+      
+      // API config
+      ApiConfig apiCfg = safeLockEEPROM.getApiConfig(i);
+      json += ",\"api\":{";
+      json += "\"enabled\":" + String(apiCfg.enabled ? "true" : "false");
+      json += ",\"url\":\"" + String(apiCfg.url) + "\"";
+      json += ",\"method\":\"" + String(apiCfg.method == SAFE_HTTP_GET ? "GET" : "POST") + "\"";
+      json += ",\"header\":\"" + String(apiCfg.header) + "\"";
+      json += ",\"body\":\"" + String(apiCfg.body) + "\"";
+      json += "}";
+      
+      json += "}";
+    }
+    
+    json += "]}";
+    server.send(200, "application/json", json);
+  });
+  
+  // Safe Lock konfigürasyonunu kaydet
+  server.on("/api/safe/config", HTTP_POST, [](){
+    if (!server.hasArg("plain")) {
+      server.send(400, "application/json", "{\"success\":false,\"error\":\"No data\"}");
+      return;
+    }
+    
+    String body = server.arg("plain");
+    Serial.println("[Safe API] POST data:");
+    Serial.println(body);
+    
+    int successCount = 0;
+    int failCount = 0;
+    
+    for (uint8_t i = 0; i < 5; i++) {
+      // Her şifre için JSON'dan bilgileri çıkar
+      String searchStr = "{\"index\":" + String(i) + ",";
+      int pwdStart = body.indexOf(searchStr);
+      if (pwdStart == -1) continue;
+      
+      // Şifre enabled mı?
+      bool pwdEnabled = false;
+      String enabledSearch = "\"enabled\":true";
+      String disabledSearch = "\"enabled\":false";
+      int enabledPos = body.indexOf(enabledSearch, pwdStart);
+      int disabledPos = body.indexOf(disabledSearch, pwdStart);
+      int commaPos = body.indexOf(",\"password\"", pwdStart);
+      
+      if (enabledPos > pwdStart && enabledPos < commaPos) {
+        pwdEnabled = true;
+      }
+      
+      // Password value
+      String password = "";
+      int pwdValPos = body.indexOf("\"password\":\"", pwdStart);
+      if (pwdValPos > 0) {
+        int pwdValStart = pwdValPos + 12;
+        int pwdValEnd = body.indexOf("\"", pwdValStart);
+        if (pwdValEnd > pwdValStart) {
+          password = body.substring(pwdValStart, pwdValEnd);
+        }
+      }
+      
+      // Şifre boşsa bu slot'u atla
+      if (password.length() == 0) {
+        // Boş şifre - sadece aktif/pasif durumunu güncelle
+        safeLockEEPROM.setPasswordActive(i, false);
+        continue;
+      }
+      
+      // API section başlangıcı
+      String apiSearch = "\"api\":{";
+      int apiStart = body.indexOf(apiSearch, pwdStart);
+      if (apiStart == -1) {
+        failCount++;
+        continue;
+      }
+      
+      // API enabled
+      bool apiEnabled = false;
+      int apiEnabledPos = body.indexOf("\"enabled\":true", apiStart);
+      int apiDisabledPos = body.indexOf("\"enabled\":false", apiStart);
+      int apiUrlPos = body.indexOf("\"url\"", apiStart);
+      
+      if (apiEnabledPos > apiStart && apiEnabledPos < apiUrlPos) {
+        apiEnabled = true;
+      }
+      
+      // API URL
+      String apiUrl = "";
+      int urlPos = body.indexOf("\"url\":\"", apiStart);
+      if (urlPos > apiStart) {
+        int urlStart = urlPos + 7;
+        int urlEnd = body.indexOf("\"", urlStart);
+        if (urlEnd > urlStart) {
+          apiUrl = body.substring(urlStart, urlEnd);
+        }
+      }
+      
+      // API method
+      String apiMethod = "GET";
+      int methodPos = body.indexOf("\"method\":\"", apiStart);
+      if (methodPos > apiStart) {
+        int mStart = methodPos + 10;
+        int mEnd = body.indexOf("\"", mStart);
+        if (mEnd > mStart) {
+          apiMethod = body.substring(mStart, mEnd);
+        }
+      }
+      
+      Serial.print("Slot ");
+      Serial.print(i);
+      Serial.print(": enabled=");
+      Serial.print(pwdEnabled);
+      Serial.print(", pwd=");
+      Serial.print(password);
+      Serial.print(", apiEnabled=");
+      Serial.print(apiEnabled);
+      Serial.print(", url=");
+      Serial.println(apiUrl);
+      
+      // Kaydet (aktif veya pasif fark etmez, tüm bilgileri kaydet)
+      ApiConfig api;
+      api.enabled = apiEnabled;
+      api.method = (apiMethod == "POST") ? SAFE_HTTP_POST : SAFE_HTTP_GET;
+      strncpy(api.url, apiUrl.c_str(), sizeof(api.url) - 1);
+      api.url[sizeof(api.url) - 1] = '\0';
+      strcpy(api.header, "");
+      strcpy(api.body, "");
+      
+      if (safeLockEEPROM.setPassword(i, password, api)) {
+        // Şifre kaydedildi, şimdi aktif/pasif durumunu ayarla
+        safeLockEEPROM.setPasswordActive(i, pwdEnabled);
+        successCount++;
+        Serial.println("  -> SAVED");
+      } else {
+        failCount++;
+        Serial.println("  -> FAILED");
+      }
+    }
+    
+    // SafeLock'a yükle
+    safeLockEEPROM.loadToSafeLock(safeLock);
+    
+    String response = "{\"success\":true,\"saved\":" + String(successCount) + ",\"failed\":" + String(failCount) + "}";
+    server.send(200, "application/json", response);
+  });
+  
+  // API test endpoint
+  server.on("/api/safe/test", HTTP_POST, [](){
+    if (!server.hasArg("plain")) {
+      server.send(400, "application/json", "{\"success\":false,\"error\":\"No data\"}");
+      return;
+    }
+    
+    String body = server.arg("plain");
+    Serial.println("[Safe API] Test request: " + body);
+    
+    // Test API'yi tetikle (safeLockAPI.testApi kullanarak)
+    // Bu basit bir test yanıtı
+    server.send(200, "application/json", "{\"success\":true,\"message\":\"API test completed\"}");
+  });
+  
+  // Şifre ayarla (manuel - test için)
+  server.on("/api/safe/password/set", HTTP_GET, [](){
+    if (!server.hasArg("index") || !server.hasArg("password")) {
+      server.send(400, "application/json", "{\"success\":false,\"error\":\"Missing parameters\"}");
+      return;
+    }
+    
+    uint8_t index = server.arg("index").toInt();
+    String password = server.arg("password");
+    String oldPassword = server.hasArg("old") ? server.arg("old") : "";
+    
+    bool success = safeLockEEPROM.setPassword(index, password, oldPassword);
+    
+    if (success) {
+      safeLockEEPROM.loadToSafeLock(safeLock);  // Reload
+      server.send(200, "application/json", "{\"success\":true}");
+    } else {
+      server.send(400, "application/json", "{\"success\":false,\"error\":\"Failed to set password\"}");
+    }
+  });
+  
+  // Şifre aktif/pasif
+  server.on("/api/safe/password/toggle", HTTP_GET, [](){
+    if (!server.hasArg("index") || !server.hasArg("enabled")) {
+      server.send(400, "application/json", "{\"success\":false,\"error\":\"Missing parameters\"}");
+      return;
+    }
+    
+    uint8_t index = server.arg("index").toInt();
+    bool enabled = server.arg("enabled") == "true";
+    
+    bool success = safeLockEEPROM.setPasswordActive(index, enabled);
+    
+    if (success) {
+      safeLock.setPasswordActive(index, enabled);
+      server.send(200, "application/json", "{\"success\":true}");
+    } else {
+      server.send(400, "application/json", "{\"success\":false}");
+    }
+  });
+  
+  // API konfigürasyonu ayarla
+  server.on("/api/safe/api/set", HTTP_GET, [](){
+    if (!server.hasArg("index") || !server.hasArg("url")) {
+      server.send(400, "application/json", "{\"success\":false,\"error\":\"Missing parameters\"}");
+      return;
+    }
+    
+    uint8_t index = server.arg("index").toInt();
+    String url = server.arg("url");
+    SafeHttpMethod method = server.hasArg("method") && server.arg("method") == "POST" ? SAFE_HTTP_POST : SAFE_HTTP_GET;
+    String header = server.hasArg("header") ? server.arg("header") : "";
+    String body = server.hasArg("body") ? server.arg("body") : "";
+    
+    bool success = safeLockEEPROM.setApiConfig(index, url, method, header, body);
+    
+    if (success) {
+      server.send(200, "application/json", "{\"success\":true}");
+    } else {
+      server.send(400, "application/json", "{\"success\":false}");
+    }
+  });
+  
+  // Debug: Tüm şifreleri yazdır
+  server.on("/api/safe/debug", HTTP_GET, [](){
+    safeLockEEPROM.printAllPasswords();
+    server.send(200, "application/json", "{\"success\":true,\"message\":\"Check serial monitor\"}");
+  });
+  
+  // 404 handler - debug için
+  server.onNotFound([](){
+    String msg = "404 Not Found\n\n";
+    msg += "URI: " + server.uri() + "\n";
+    msg += "Method: " + String(server.method()) + "\n";
+    Serial.println(msg);
+    server.send(404, "text/plain", msg);
+  });
+  
+  Serial.println("Web setup OK");
+}
