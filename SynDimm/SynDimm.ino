@@ -63,7 +63,7 @@ void setupMDNS() {
   if (MDNS.begin(hostname.c_str())) {
     MDNS.addService("http", "tcp", 80);
     MDNS.addServiceTxt("http", "tcp", "chipid", net.getChipID());
-    MDNS.addServiceTxt("http", "tcp", "version", "1.0");
+    MDNS.addServiceTxt("http", "tcp", "version", FIRMWARE_VERSION);
     Serial.println("mDNS OK: " + hostname + ".local");
   } else {
     Serial.println("mDNS FAIL");
@@ -303,7 +303,7 @@ void setupWeb() {
     
     // Chip ID and Version
     s += ",\"chipID\":\"" + net.getChipID() + "\"";
-    s += ",\"version\":\"v1.0.0\"";
+    s += ",\"version\":\"v" + String(FIRMWARE_VERSION) + "\"";
     
     // mDNS hostname (aktif olan)
     String hostname = "";

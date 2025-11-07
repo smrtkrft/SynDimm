@@ -16,6 +16,7 @@
 #include <HTTPUpdate.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include "version.h"  // Version bilgisi buradan alınır
 
 class SynDimmOTA {
@@ -67,10 +68,14 @@ private:
       return false;
     }
     
+    WiFiClientSecure client;
+    client.setInsecure();  // Sertifika doğrulamasını atla (HTTPS için gerekli)
+    
     HTTPClient http;
-    http.begin(GITHUB_API_URL);
+    http.begin(client, GITHUB_API_URL);
     http.addHeader("Accept", "application/vnd.github.v3+json");
     http.addHeader("User-Agent", "SynDimm-ESP32");
+    http.setTimeout(15000);  // 15 saniye timeout
     
     Serial.println("[OTA] Checking for updates...");
     Serial.print("[OTA] Current version: ");
@@ -213,7 +218,8 @@ public:
     Serial.println(latestVersion);
     Serial.println("[OTA] ===================================");
     
-    WiFiClient client;
+    WiFiClientSecure client;
+    client.setInsecure();  // Sertifika doğrulamasını atla
     
     // HTTPUpdate başlat
     httpUpdate.setLedPin(LED_BUILTIN, LOW);
