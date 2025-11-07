@@ -17,7 +17,7 @@
 // ============================================
 // VERSION BURADAN DEĞİŞTİRİLİR!
 // ============================================
-#define FIRMWARE_VERSION "1.0.1"
+#define FIRMWARE_VERSION "1.0.0"
 // ============================================
 
 // Build bilgileri (opsiyonel)

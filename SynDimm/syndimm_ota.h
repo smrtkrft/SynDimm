@@ -24,11 +24,11 @@ private:
   // GitHub repo bilgileri
   const String GITHUB_OWNER = "smrtkrft";
   const String GITHUB_REPO = "SynDimm";
-  const String GITHUB_API_URL = "https://api.github.com/repos/smrtkrft/SynDimm/releases/latest";
+  const String GITHUB_API_URL = "https://api.github.com/repos/smrtkrft/SynDimm/releases/latest";  // HTTPS geri
   
   // OTA ayarları
   unsigned long lastCheckTime;
-  const unsigned long checkInterval = 5 * 60 * 1000;  // 5 dakika (300000 ms)
+  const unsigned long checkInterval = 1 * 60 * 1000;  // 1 dakika (60000 ms) - TEST İÇİN
   bool updateInProgress;
   bool updateAvailable;
   String latestVersion;
@@ -68,20 +68,51 @@ private:
       return false;
     }
     
+    Serial.println("[OTA] Checking for updates...");
+    Serial.print("[OTA] Current version: ");
+    Serial.println(FIRMWARE_VERSION);
+    Serial.print("[OTA] WiFi RSSI: ");
+    Serial.println(WiFi.RSSI());
+    Serial.print("[OTA] Local IP: ");
+    Serial.println(WiFi.localIP());
+    Serial.print("[OTA] Gateway: ");
+    Serial.println(WiFi.gatewayIP());
+    Serial.print("[OTA] DNS: ");
+    Serial.println(WiFi.dnsIP());
+    
+    // DNS test - GitHub IP'sini resolve et
+    IPAddress githubIP;
+    Serial.print("[OTA] Resolving api.github.com... ");
+    if (WiFi.hostByName("api.github.com", githubIP)) {
+      Serial.print("OK: ");
+      Serial.println(githubIP);
+    } else {
+      Serial.println("FAILED! DNS problem detected.");
+      return false;
+    }
+    
+    Serial.print("[OTA] Connecting to GitHub API: ");
+    Serial.println(GITHUB_API_URL);
+    
     WiFiClientSecure client;
-    client.setInsecure();  // Sertifika doğrulamasını atla (HTTPS için gerekli)
+    client.setInsecure();  // Sertifika doğrulamasını atla
     
     HTTPClient http;
     http.begin(client, GITHUB_API_URL);
     http.addHeader("Accept", "application/vnd.github.v3+json");
     http.addHeader("User-Agent", "SynDimm-ESP32");
-    http.setTimeout(15000);  // 15 saniye timeout
+    http.setTimeout(20000);  // 20 saniye timeout
+    http.setConnectTimeout(10000);  // 10 saniye connect timeout
     
-    Serial.println("[OTA] Checking for updates...");
-    Serial.print("[OTA] Current version: ");
-    Serial.println(FIRMWARE_VERSION);
-    
+    Serial.println("[OTA] Sending GET request...");
     int httpCode = http.GET();
+    Serial.print("[OTA] HTTP response code: ");
+    Serial.println(httpCode);
+    
+    if (httpCode == -1) {
+      Serial.println("[OTA] Connection failed. SSL/TLS handshake problem.");
+      Serial.println("  This is common on ESP32C6 with HTTPS.");
+    }
     
     if (httpCode == HTTP_CODE_OK) {
       String payload = http.getString();
@@ -106,6 +137,9 @@ private:
         String name = asset["name"].as<String>();
         if (name.endsWith(".bin")) {
           downloadUrl = asset["browser_download_url"].as<String>();
+          // HTTPS kullan (GitHub HTTP'yi desteklemiyor)
+          Serial.print("[OTA] Binary URL: ");
+          Serial.println(downloadUrl);
           break;
         }
       }
@@ -216,14 +250,22 @@ public:
     Serial.println(FIRMWARE_VERSION);
     Serial.print("[OTA] New: ");
     Serial.println(latestVersion);
+    Serial.print("[OTA] Download URL: ");
+    Serial.println(downloadUrl);
     Serial.println("[OTA] ===================================");
     
+    // Her zaman HTTPS kullan (GitHub HTTP'yi desteklemiyor)
     WiFiClientSecure client;
     client.setInsecure();  // Sertifika doğrulamasını atla
+    client.setTimeout(30);  // 30 saniye timeout
+    
+    Serial.println("[OTA] Using HTTPS client with setInsecure()");
+    Serial.println("[OTA] Starting binary download...");
     
     // HTTPUpdate başlat
     httpUpdate.setLedPin(LED_BUILTIN, LOW);
     httpUpdate.rebootOnUpdate(true);  // Güncelleme sonrası otomatik reboot
+    httpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);  // Redirect'leri takip et
     
     t_httpUpdate_return ret = httpUpdate.update(client, downloadUrl);
     

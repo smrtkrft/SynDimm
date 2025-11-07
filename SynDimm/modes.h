@@ -341,7 +341,7 @@ public:
     HTTPClient http;
     String url = "http://" + deviceIP + "/light/0";
     http.begin(url);
-    http.setTimeout(1500);  // 2000ms → 1500ms (daha hızlı)
+    http.setTimeout(3000);  // 1500ms → 3000ms (daha güvenilir)
     
     int httpCode = http.GET();
     
@@ -349,11 +349,16 @@ public:
       String payload = http.getString();
       parseDeviceStatus(payload);
     } else {
-      Serial.println("Cihaz okuma hatasi: " + String(httpCode));
+      Serial.print("Cihaz okuma hatasi: ");
+      Serial.print(httpCode);
+      Serial.print(" (");
+      Serial.print(deviceIP);
+      Serial.println(")");
       // 3 başarısız denemeden sonra bağlantıyı kes
       static int failCount = 0;
       failCount++;
       if (failCount > 3) {
+        Serial.println("3 basarisiz deneme - baglanti kesiliyor");
         disconnectDevice();
         failCount = 0;
       }

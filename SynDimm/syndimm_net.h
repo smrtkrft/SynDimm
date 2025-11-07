@@ -96,14 +96,24 @@ public:
     
     // Statik IP varsa ayarla
     if (ip.length() > 0 && ip != "0.0.0.0") {
-      IPAddress localIP, gateway, subnet;
+      IPAddress localIP, gateway, subnet, dns1, dns2;
       if (localIP.fromString(ip)) {
         // Gateway: IP'nin son oktetini 1 yap (örn: 192.168.1.1)
         gateway = localIP;
         gateway[3] = 1;
         subnet.fromString("255.255.255.0");
-        WiFi.config(localIP, gateway, subnet);
+        dns1.fromString("8.8.8.8");  // Google DNS
+        dns2.fromString("8.8.4.4");  // Google DNS backup
+        WiFi.config(localIP, gateway, subnet, dns1, dns2);
+        Serial.println("  DNS: 8.8.8.8, 8.8.4.4 (Google)");
       }
+    } else {
+      // DHCP kullanılıyor - yine de DNS'i manuel ayarla
+      IPAddress dns1, dns2;
+      dns1.fromString("8.8.8.8");
+      dns2.fromString("8.8.4.4");
+      WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, dns1, dns2);
+      Serial.println("  DNS: 8.8.8.8, 8.8.4.4 (Google)");
     }
     
     Serial.print("  Baglaniyor");
