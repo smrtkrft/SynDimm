@@ -88,6 +88,22 @@ body {
     margin-bottom: 4px;
 }
 
+.brand-info {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    align-items: center;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-top: 8px;
+}
+
+.chip-id, .version-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
 .brand-link {
     font-size: 1.05rem;
     color: var(--text-secondary);
@@ -843,6 +859,8 @@ body {
     gap: var(--spacing-xs);
     padding: var(--spacing-md);
     background: var(--bg);
+    align-items: center;
+    text-align: center;
 }
 
 .status-item.status-toggle {
@@ -866,6 +884,25 @@ body {
     font-size: 1rem;
     color: var(--text);
     font-weight: 600;
+}
+
+.status-value-stacked {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+}
+
+.ip-value {
+    font-size: 1rem;
+    color: var(--text);
+    font-weight: 600;
+}
+
+.domain-value {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
 }
 
 /* ========== Form Group ========== */
@@ -909,6 +946,13 @@ body {
 
 .form-group input::placeholder {
     color: var(--text-secondary);
+}
+
+.form-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 4px;
 }
 
 /* ========== Info Guide ========== */
@@ -992,23 +1036,38 @@ body {
     line-height: 1.6;
 }
 
+.doc-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    align-items: center;
+}
+
 .doc-button {
     display: inline-block;
-    padding: var(--spacing-md) var(--spacing-xl);
-    background: var(--bg);
-    border: 1px solid var(--border);
+    padding: 12px 32px;
+    background: var(--text);
+    border: 1px solid var(--text);
     border-radius: var(--radius);
-    color: var(--text);
+    color: var(--bg);
     text-decoration: none;
     font-weight: 600;
     font-size: 0.95rem;
     transition: all 0.2s;
+    text-align: center;
+    min-width: 140px;
 }
 
 .doc-button:hover {
-    background: var(--text);
-    color: var(--bg);
+    background: var(--bg);
+    color: var(--text);
     border-color: var(--text);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="light"] .doc-button:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 /* ========== Safe Lock Styles ========== */

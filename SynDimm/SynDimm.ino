@@ -7,12 +7,16 @@
 #include <WebServer.h>
 #include <ESPmDNS.h>
 
+#include "version.h"
 #include "ky040.h"
 #include "modes.h"
 #include "syndimm_net.h"
+#include "syndimm_buzzer.h"
+#include "syndimm_ota.h"
 #include "webui.h"
 #include "webstyle.h"
 #include "webscript.h"
+#include "translations.h"
 #include "safe_lock.h"
 #include "safe_lock_eeprom.h"
 #include "safe_lock_api.h"
@@ -20,7 +24,51 @@
 KY040 encoder(19, 20, 18);  // CLK=19, DT=20, SW=18 
 ModeManager modes(&encoder);
 SynDimmNet net;
+SynDimmBuzzer buzzer;
+SynDimmOTA ota;
 WebServer server(80);
+
+// mDNS helper fonksiyon
+void setupMDNS() {
+  String hostname;
+  
+  // WiFi bağlıysa ve custom local domain varsa onu kullan
+  if (WiFi.status() == WL_CONNECTED) {
+    // Aktif WiFi'nin local domain'ini kontrol et
+    String customDomain = "";
+    if (WiFi.SSID() == net.getWiFi1SSID() && net.getWiFi1Local().length() > 0) {
+      customDomain = net.getWiFi1Local();
+    } else if (WiFi.SSID() == net.getWiFi2SSID() && net.getWiFi2Local().length() > 0) {
+      customDomain = net.getWiFi2Local();
+    }
+    
+    if (customDomain.length() > 0) {
+      hostname = customDomain;
+      // Eğer kullanıcı .local ile kaydettiyse çıkar
+      if (hostname.endsWith(".local")) {
+        hostname = hostname.substring(0, hostname.length() - 6);
+      }
+    } else {
+      hostname = "syndimm-" + net.getChipID();
+    }
+  } else {
+    // AP modda default hostname
+    hostname = "syndimm-" + net.getChipID();
+  }
+  
+  hostname.toLowerCase();
+  
+  // mDNS'i yeniden başlat
+  MDNS.end();
+  if (MDNS.begin(hostname.c_str())) {
+    MDNS.addService("http", "tcp", 80);
+    MDNS.addServiceTxt("http", "tcp", "chipid", net.getChipID());
+    MDNS.addServiceTxt("http", "tcp", "version", "1.0");
+    Serial.println("mDNS OK: " + hostname + ".local");
+  } else {
+    Serial.println("mDNS FAIL");
+  }
+}
 
 // Safe Lock nesneleri
 SafeLock safeLock;
@@ -38,14 +86,12 @@ void onSafeLockPasswordMatch(uint8_t passwordIndex) {
   Serial.flush();
   
   // API tetikleme flag'ini set et (gerçek tetikleme loop'ta yapılacak)
+  // Buzzer API sonucuna göre çalacak
   pendingApiTrigger = true;
   pendingPasswordIndex = passwordIndex;
   
   Serial.println("[Callback] Flag set edildi");
   Serial.flush();
-  
-  // Buzzer KALDIRILDI - zaten safe_lock.h içinde çalıyor
-  // safeLock.playSuccessSound();
   
   Serial.println("[Callback] Tamamlandi");
   Serial.flush();
@@ -54,12 +100,25 @@ void onSafeLockPasswordMatch(uint8_t passwordIndex) {
 void setup() {
   Serial.begin(115200);
   delay(1000);  // 2000ms -> 1000ms (daha kısa başlangıç)
-  Serial.println("=== SynDimm ===");
+  Serial.println("===============================");
+  Serial.print("=== ");
+  Serial.print(PROJECT_NAME);
+  Serial.print(" v");
+  Serial.print(FIRMWARE_VERSION);
+  Serial.println(" ===");
+  Serial.print("Build: ");
+  Serial.print(BUILD_DATE);
+  Serial.print(" ");
+  Serial.println(BUILD_TIME);
+  Serial.println("===============================");
   
   // WiFi performans ayarları - TAM PERFORMANS
   WiFi.setSleep(false);  // WiFi uyku modu KAPALI
   setCpuFrequencyMhz(160);  // CPU 160MHz - tam hız
   Serial.println("CPU: 160MHz, WiFi sleep: OFF");
+  
+  // Buzzer başlat
+  buzzer.begin();
   
   encoder.begin();
   Serial.println("Encoder OK");
@@ -114,15 +173,12 @@ void setup() {
   net.autoConnect();
   Serial.println("Network OK");
   
+  // OTA sistemi başlat (WiFi'den sonra)
+  ota.begin();
+  Serial.println("OTA OK");
+  
   // mDNS başlat
-  String hostname = "syndimm-" + net.getChipID();
-  hostname.toLowerCase();
-  if (MDNS.begin(hostname.c_str())) {
-    MDNS.addService("http", "tcp", 80);
-    MDNS.addServiceTxt("http", "tcp", "chipid", net.getChipID());
-    MDNS.addServiceTxt("http", "tcp", "version", "1.0");
-    Serial.println("mDNS OK: " + hostname + ".local");
-  }
+  setupMDNS();
   
   setupWeb();
   server.begin();
@@ -136,10 +192,26 @@ void loop() {
   server.handleClient();
   yield();
   
+  // OTA update check (her 5 dakikada otomatik)
+  ota.update();
+  
+  // Buzzer update (non-blocking)
+  buzzer.update();
+  
   // Encoder okuma
   if (encoder.available()) {
     char ev = encoder.read();
+    
     modes.processEncoderEvent(ev);
+    
+    // Mod değişimi sonrası buzzer (hangi moda geçildiğine göre)
+    if (ev == 'M') {
+      if (modes.isDimmerMode()) {
+        buzzer.playShort();  // 1 kısa bip - Dimmer
+      } else if (modes.isSafeMode()) {
+        buzzer.playDouble();  // 2 kısa bip - Safe
+      }
+    }
   }
   yield();
   
@@ -153,10 +225,26 @@ void loop() {
     // Watchdog'u besle
     yield();
     
-    SafeLockAPI::onPasswordMatch(&safeLockEEPROM, &safeLockAPI, pendingPasswordIndex);
+    ApiResponseStatus apiResult = SafeLockAPI::onPasswordMatch(&safeLockEEPROM, &safeLockAPI, pendingPasswordIndex);
     
     Serial.println("[Loop] API tamamlandi");
     Serial.flush();
+    
+    // API sonucuna göre buzzer çal
+    if (apiResult == API_SUCCESS) {
+      buzzer.playApiSuccess();  // 2 kısa + 1 uzun bip
+      Serial.println("[Buzzer] API Success");
+    } else if (apiResult == API_NO_WIFI || apiResult == API_WIFI_ERROR) {
+      buzzer.playApiFail();  // 5 kısa bip
+      Serial.println("[Buzzer] No WiFi");
+    } else if (apiResult == API_DISABLED) {
+      // API devre dışı - sessiz
+      Serial.println("[Buzzer] API Disabled - Silent");
+    } else {
+      // Diğer hatalar (timeout, error, vb)
+      buzzer.playApiFail();  // 5 kısa bip
+      Serial.println("[Buzzer] API Fail");
+    }
     
     // Watchdog'u besle
     yield();
@@ -183,6 +271,11 @@ void setupWeb() {
     server.send_P(200, "application/javascript", JS_SCRIPT);
   });
   
+  // API - Translations
+  server.on("/translations.json", HTTP_GET, [](){
+    server.send_P(200, "application/json", TRANSLATIONS_JSON);
+  });
+  
   // API - Network info
   server.on("/api/network/info", HTTP_GET, [](){
     String s = "{";
@@ -198,16 +291,35 @@ void setupWeb() {
     s += ",\"wifi1\":{";
     s += "\"ssid\":\"" + net.getWiFi1SSID() + "\"";
     s += ",\"ip\":\"" + net.getWiFi1IP() + "\"";
+    s += ",\"local\":\"" + net.getWiFi1Local() + "\"";
     s += "}";
     
     // WiFi 2 Info
     s += ",\"wifi2\":{";
     s += "\"ssid\":\"" + net.getWiFi2SSID() + "\"";
     s += ",\"ip\":\"" + net.getWiFi2IP() + "\"";
+    s += ",\"local\":\"" + net.getWiFi2Local() + "\"";
     s += "}";
     
-    // Chip ID
+    // Chip ID and Version
     s += ",\"chipID\":\"" + net.getChipID() + "\"";
+    s += ",\"version\":\"v1.0.0\"";
+    
+    // mDNS hostname (aktif olan)
+    String hostname = "";
+    if (WiFi.status() == WL_CONNECTED) {
+      if (WiFi.SSID() == net.getWiFi1SSID() && net.getWiFi1Local().length() > 0) {
+        hostname = net.getWiFi1Local();
+      } else if (WiFi.SSID() == net.getWiFi2SSID() && net.getWiFi2Local().length() > 0) {
+        hostname = net.getWiFi2Local();
+      } else {
+        hostname = "syndimm-" + net.getChipID();
+      }
+    } else {
+      hostname = "syndimm-" + net.getChipID();
+    }
+    hostname.toLowerCase();
+    s += ",\"mdns\":\"" + hostname + ".local\"";
     
     s += "}";
     server.send(200, "application/json", s);
@@ -216,19 +328,40 @@ void setupWeb() {
   // API - Status
   server.on("/api/network/status", HTTP_GET, [](){
     String s = "{";
+    String mdnsHostname = "";
     
     if (WiFi.status() == WL_CONNECTED) {
       s += "\"mode\":\"WiFi\"";
       s += ",\"ssid\":\"" + WiFi.SSID() + "\"";
       s += ",\"ip\":\"" + WiFi.localIP().toString() + "\"";
+      
+      // Aktif WiFi'nin custom local domain'ini kontrol et
+      if (WiFi.SSID() == net.getWiFi1SSID() && net.getWiFi1Local().length() > 0) {
+        mdnsHostname = net.getWiFi1Local();
+      } else if (WiFi.SSID() == net.getWiFi2SSID() && net.getWiFi2Local().length() > 0) {
+        mdnsHostname = net.getWiFi2Local();
+      } else {
+        mdnsHostname = "syndimm-" + net.getChipID();
+      }
     } else if (net.isAPActive()) {
       s += "\"mode\":\"AP Mode\"";
       s += ",\"ssid\":\"" + net.getAPSSID() + "\"";
       s += ",\"ip\":\"" + WiFi.softAPIP().toString() + "\"";
+      // AP modda sadece default hostname
+      mdnsHostname = "syndimm-" + net.getChipID();
     } else {
       s += "\"mode\":\"Disconnected\"";
       s += ",\"ssid\":\"N/A\"";
       s += ",\"ip\":\"N/A\"";
+      mdnsHostname = "N/A";
+    }
+    
+    // mDNS hostname ekle
+    if (mdnsHostname != "N/A") {
+      mdnsHostname.toLowerCase();
+      s += ",\"mdns\":\"" + mdnsHostname + ".local\"";
+    } else {
+      s += ",\"mdns\":\"N/A\"";
     }
     
     s += "}";
@@ -429,6 +562,36 @@ void setupWeb() {
     server.send(200, "application/json", "{\"mode\":\"" + activeMode + "\"}");
   });
   
+  // API - OTA version bilgisi
+  server.on("/api/ota/info", HTTP_GET, [](){
+    String json = "{";
+    json += "\"current\":\"" + ota.getCurrentVersion() + "\",";
+    json += "\"latest\":\"" + ota.getLatestVersion() + "\",";
+    json += "\"updateAvailable\":" + String(ota.isUpdateAvailable() ? "true" : "false") + ",";
+    json += "\"updateInProgress\":" + String(ota.isUpdateInProgress() ? "true" : "false") + ",";
+    json += "\"projectName\":\"" + String(PROJECT_NAME) + "\",";
+    json += "\"buildDate\":\"" + String(BUILD_DATE) + "\",";
+    json += "\"buildTime\":\"" + String(BUILD_TIME) + "\"";
+    json += "}";
+    server.send(200, "application/json", json);
+  });
+  
+  // API - Manuel OTA update tetikle
+  server.on("/api/ota/update", HTTP_GET, [](){
+    if (ota.isUpdateInProgress()) {
+      server.send(400, "application/json", "{\"success\":false,\"error\":\"Update already in progress\"}");
+      return;
+    }
+    
+    // Non-blocking: Update'i başlat ve hemen yanıt dön
+    bool started = ota.checkAndUpdate();
+    if (started) {
+      server.send(200, "application/json", "{\"success\":true,\"message\":\"Update started\"}");
+    } else {
+      server.send(200, "application/json", "{\"success\":false,\"message\":\"No update available or check failed\"}");
+    }
+  });
+  
   // API - AP toggle
   server.on("/api/network/ap", HTTP_GET, [](){
     if (server.hasArg("enabled")) {
@@ -446,7 +609,13 @@ void setupWeb() {
       String ssid = server.arg("ssid");
       String pass = server.hasArg("pass") ? server.arg("pass") : "";
       String ip = server.hasArg("ip") ? server.arg("ip") : "";
-      net.saveWiFi1(ssid, pass, ip);
+      String localDomain = server.hasArg("local") ? server.arg("local") : "";
+      net.saveWiFi1(ssid, pass, ip, localDomain);
+      
+      // mDNS'i güncelle
+      delay(1000); // WiFi bağlantısının kurulması için bekle
+      setupMDNS();
+      
       server.send(200, "application/json", "{\"success\":true}");
     } else {
       server.send(400, "application/json", "{\"success\":false}");
@@ -459,7 +628,13 @@ void setupWeb() {
       String ssid = server.arg("ssid");
       String pass = server.hasArg("pass") ? server.arg("pass") : "";
       String ip = server.hasArg("ip") ? server.arg("ip") : "";
-      net.saveWiFi2(ssid, pass, ip);
+      String localDomain = server.hasArg("local") ? server.arg("local") : "";
+      net.saveWiFi2(ssid, pass, ip, localDomain);
+      
+      // mDNS'i güncelle
+      delay(1000); // WiFi bağlantısının kurulması için bekle
+      setupMDNS();
+      
       server.send(200, "application/json", "{\"success\":true}");
     } else {
       server.send(400, "application/json", "{\"success\":false}");

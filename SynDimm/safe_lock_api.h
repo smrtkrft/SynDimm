@@ -28,7 +28,9 @@ enum ApiResponseStatus {
   API_TIMEOUT,              // Zaman aşımı
   API_ERROR,                // HTTP hatası (400+, 500+)
   API_WIFI_ERROR,           // WiFi bağlantısı yok
-  API_INVALID_CONFIG        // Geçersiz konfigürasyon
+  API_INVALID_CONFIG,       // Geçersiz konfigürasyon
+  API_NO_WIFI,              // WiFi bağlı değil
+  API_DISABLED              // API devre dışı
 };
 
 // ==================== API YÖNETİM SINIFI ====================
@@ -221,7 +223,7 @@ public:
   }
   
   // Şifre eşleştiğinde tetiklenecek callback
-  static void onPasswordMatch(SafeLockEEPROM* eeprom, SafeLockAPI* api, uint8_t passwordIndex) {
+  static ApiResponseStatus onPasswordMatch(SafeLockEEPROM* eeprom, SafeLockAPI* api, uint8_t passwordIndex) {
     Serial.print("[SafeLock] Sifre eslesti: #");
     Serial.println(passwordIndex);
     Serial.flush();
@@ -237,7 +239,7 @@ public:
     
     if (!apiConfig.enabled) {
       Serial.println("[API] API devre disi");
-      return;
+      return API_DISABLED;
     }
     
     // KENDİ IP'SİNE İSTEK ENGELLE (infinite loop önleme)
@@ -247,13 +249,13 @@ public:
       Serial.println("[API] HATA: Kendi IP'sine istek gonderilemez!");
       Serial.print("[API] Kendi IP: ");
       Serial.println(myIP);
-      return;
+      return API_ERROR;
     }
     
     // WiFi kontrolü
     if (WiFi.status() != WL_CONNECTED) {
       Serial.println("[API] WiFi bagli degil");
-      return;
+      return API_NO_WIFI;
     }
     
     Serial.println("[API] API tetikleniyor...");
@@ -264,6 +266,8 @@ public:
     Serial.print("[API] Sonuc: ");
     Serial.println(status);
     Serial.flush();
+    
+    return status;
   }
   
   // Test API isteği (web arayüzünden test için)

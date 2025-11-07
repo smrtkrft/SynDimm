@@ -105,6 +105,17 @@ public:
     }
   }
   
+  // Mod değiştirme (toggle)
+  void toggleMode() {
+    if (dimmerMode) {
+      setSafeMode(true);
+      Serial.println("[Mode] Dimmer -> Safe (Long Press)");
+    } else {
+      setDimmerMode(true);
+      Serial.println("[Mode] Safe -> Dimmer (Long Press)");
+    }
+  }
+  
   bool isDimmerMode() { return dimmerMode; }
   bool isSafeMode() { return safeMode; }
   
@@ -134,6 +145,37 @@ public:
   // Encoder event'lerini işle ve matematiksel işlemleri yap
   void processEncoderEvent(char event) {
     if (event == 0) return;  // Boş event
+    
+    // Mod değiştirme eventi (3+ saniye basılı tutup döndür ve bırak)
+    if (event == 'M') {
+      // Hangi yöne çevrildiğini kontrol et
+      char direction = encoder->getModeSelectDirection();
+      
+      if (direction == 'L') {
+        // Sol çevirme: Safe moduna geç (zaten Safe'deysen hiçbir şey yapma)
+        if (!safeMode) {
+          setSafeMode(true);
+          Serial.println("[Mode] Dimmer -> Safe (Left turn)");
+        } else {
+          Serial.println("[Mode] Already in Safe mode (Left turn ignored)");
+        }
+      } else if (direction == 'R') {
+        // Sağ çevirme: Dimmer moduna geç (zaten Dimmer'daysan hiçbir şey yapma)
+        if (!dimmerMode) {
+          setDimmerMode(true);
+          Serial.println("[Mode] Safe -> Dimmer (Right turn)");
+        } else {
+          Serial.println("[Mode] Already in Dimmer mode (Right turn ignored)");
+        }
+      }
+      return;
+    }
+    
+    // Mod seçme modunda encoder eventlerini yok say
+    if (encoder->isModeSelectActive()) {
+      Serial.println("[Mode] Mode select active - Encoder disabled");
+      return;
+    }
     
     // Yön sayaçlarını güncelle (KY040'dan taşındı)
     if (event == 'L') {

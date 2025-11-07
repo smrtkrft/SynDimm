@@ -16,8 +16,8 @@ private:
   String apSSID;
   bool apActive;
   
-  String wifi1_ssid, wifi1_pass, wifi1_ip;
-  String wifi2_ssid, wifi2_pass, wifi2_ip;
+  String wifi1_ssid, wifi1_pass, wifi1_ip, wifi1_local;
+  String wifi2_ssid, wifi2_pass, wifi2_ip, wifi2_local;
   
 public:
   SynDimmNet() : apActive(false) {}
@@ -38,9 +38,11 @@ public:
     wifi1_ssid = prefs.getString("w1ssid", "");
     wifi1_pass = prefs.getString("w1pass", "");
     wifi1_ip = prefs.getString("w1ip", "");
+    wifi1_local = prefs.getString("w1local", "");
     wifi2_ssid = prefs.getString("w2ssid", "");
     wifi2_pass = prefs.getString("w2pass", "");
     wifi2_ip = prefs.getString("w2ip", "");
+    wifi2_local = prefs.getString("w2local", "");
     prefs.end();
   }
   
@@ -60,7 +62,37 @@ public:
   bool connectWiFi(String ssid, String pass, String ip) {
     if (ssid.length() == 0) return false;
     
+    // Debug: Şifre uzunluğunu göster
+    Serial.print("  [Debug] Sifre uzunlugu: ");
+    Serial.print(pass.length());
+    Serial.println(" karakter");
+    
+    // Önce WiFi taraması yap - ağ açık mı kontrol et
+    Serial.print("  Ag taraniyor: ");
+    Serial.print(ssid);
+    Serial.print("... ");
+    
     WiFi.mode(WIFI_STA);
+    int n = WiFi.scanNetworks();
+    bool networkFound = false;
+    
+    for (int i = 0; i < n; i++) {
+      if (WiFi.SSID(i) == ssid) {
+        networkFound = true;
+        Serial.print("Bulundu! Sinyal: ");
+        Serial.print(WiFi.RSSI(i));
+        Serial.println(" dBm");
+        break;
+      }
+    }
+    
+    if (!networkFound) {
+      Serial.println("Bulunamadi!");
+      WiFi.scanDelete();
+      return false;
+    }
+    
+    WiFi.scanDelete();
     
     // Statik IP varsa ayarla
     if (ip.length() > 0 && ip != "0.0.0.0") {
@@ -74,48 +106,98 @@ public:
       }
     }
     
+    Serial.print("  Baglaniyor");
     WiFi.begin(ssid.c_str(), pass.c_str());
     
     int count = 0;
-    while (WiFi.status() != WL_CONNECTED && count < 20) {
-      delay(250);  // 500ms -> 250ms (daha kısa delay)
+    while (WiFi.status() != WL_CONNECTED && count < 40) {  // 10 saniye timeout
+      delay(250);
+      Serial.print(".");
       yield();     // WDT reset
       count++;
     }
+    Serial.println();
     
     if (WiFi.status() == WL_CONNECTED) {
+      Serial.print("  Baglanildi! IP: ");
+      Serial.println(WiFi.localIP());
+      
       // WiFi bağlıysa AP'yi kapat
       if (apActive) {
         stopAP();
-        Serial.println("AP kapatildi - WiFi bagli");
+        Serial.println("  AP kapatildi");
       }
       return true;
     }
     
+    // Bağlantı hatası - detaylı hata kodu
+    Serial.print("  Baglanti hatasi! Durum: ");
+    switch (WiFi.status()) {
+      case WL_NO_SSID_AVAIL:
+        Serial.println("SSID bulunamadi");
+        break;
+      case WL_CONNECT_FAILED:
+        Serial.println("Baglanti basarisiz (yanlis sifre?)");
+        break;
+      case WL_DISCONNECTED:
+        Serial.println("Baglanti kesildi");
+        break;
+      case WL_IDLE_STATUS:
+        Serial.println("Bos (WiFi.begin() cagrilmadi?)");
+        break;
+      default:
+        Serial.print("Bilinmeyen hata kodu: ");
+        Serial.println(WiFi.status());
+        break;
+    }
+    
+    WiFi.disconnect(true);  // Temiz disconnect
+    delay(100);
     return false;
   }
   
   void autoConnect() {
-    if (connectWiFi(wifi1_ssid, wifi1_pass, wifi1_ip)) {
-      Serial.println("WiFi 1 OK");
-      return;
+    Serial.println("=== Ag Baglantisi Baslatiliyor ===");
+    
+    // Önce WiFi 1'i dene
+    if (wifi1_ssid.length() > 0) {
+      Serial.println("[WiFi 1] SSID: " + wifi1_ssid);
+      if (connectWiFi(wifi1_ssid, wifi1_pass, wifi1_ip)) {
+        Serial.println("[WiFi 1] Basarili!");
+        return;
+      }
+      Serial.println("[WiFi 1] Basarisiz!");
+    } else {
+      Serial.println("[WiFi 1] Kayitli degil");
     }
-    if (connectWiFi(wifi2_ssid, wifi2_pass, wifi2_ip)) {
-      Serial.println("WiFi 2 OK");
-      return;
+    
+    // WiFi 1 başarısızsa WiFi 2'yi dene
+    if (wifi2_ssid.length() > 0) {
+      Serial.println("[WiFi 2] SSID: " + wifi2_ssid);
+      if (connectWiFi(wifi2_ssid, wifi2_pass, wifi2_ip)) {
+        Serial.println("[WiFi 2] Basarili!");
+        return;
+      }
+      Serial.println("[WiFi 2] Basarisiz!");
+    } else {
+      Serial.println("[WiFi 2] Kayitli degil");
     }
-    Serial.println("AP mode");
+    
+    // Her ikisi de başarısızsa AP başlat
+    Serial.println("=== WiFi Bulunamadi - AP Mode ===");
     startAP();
   }
   
-  void saveWiFi1(String ssid, String pass, String ip) {
+  void saveWiFi1(String ssid, String pass, String ip, String localDomain = "") {
     wifi1_ssid = ssid;
     wifi1_pass = pass;
     wifi1_ip = ip;
+    wifi1_local = localDomain;
     prefs.begin("net", false);
     prefs.putString("w1ssid", ssid);
     prefs.putString("w1pass", pass);
     prefs.putString("w1ip", ip);
+    prefs.putString("w1local", localDomain);
     prefs.end();
     
     // Kayıt sonrası hemen bağlan
@@ -123,14 +205,16 @@ public:
     connectWiFi(ssid, pass, ip);
   }
   
-  void saveWiFi2(String ssid, String pass, String ip) {
+  void saveWiFi2(String ssid, String pass, String ip, String localDomain = "") {
     wifi2_ssid = ssid;
     wifi2_pass = pass;
     wifi2_ip = ip;
+    wifi2_local = localDomain;
     prefs.begin("net", false);
     prefs.putString("w2ssid", ssid);
     prefs.putString("w2pass", pass);
     prefs.putString("w2ip", ip);
+    prefs.putString("w2local", localDomain);
     prefs.end();
     
     // Kayıt sonrası hemen bağlan
@@ -143,8 +227,10 @@ public:
   bool isAPActive() { return apActive; }
   String getWiFi1SSID() { return wifi1_ssid; }
   String getWiFi1IP() { return wifi1_ip; }
+  String getWiFi1Local() { return wifi1_local; }
   String getWiFi2SSID() { return wifi2_ssid; }
   String getWiFi2IP() { return wifi2_ip; }
+  String getWiFi2Local() { return wifi2_local; }
   
   String getStatus() {
     if (WiFi.status() == WL_CONNECTED) {

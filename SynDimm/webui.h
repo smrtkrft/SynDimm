@@ -21,8 +21,11 @@ const char HTML_PAGE[] PROGMEM = R"=====(
         <div class="container">
             <div class="header-content">
                 <div class="brand">
-                    <h1>SynDimm</h1>
-                    <a href="https://smartkraft.ch" target="_blank" class="brand-link">SmartKraft</a>
+                    <h1 data-i18n="header.title">SmartKraft SynDimm</h1>
+                    <div class="brand-info">
+                        <span class="chip-id"><span data-i18n="header.chipId">Chip ID</span>: <span id="chip-id-value">Loading...</span></span>
+                        <span class="version-info"><span data-i18n="header.version">Version</span>: v1.0.0</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -32,10 +35,10 @@ const char HTML_PAGE[] PROGMEM = R"=====(
     <nav class="nav">
         <div class="container">
             <div class="nav-links">
-                <a href="#" class="nav-link active" data-tab="control">Hizli kontrol</a>
-                <a href="#" class="nav-link" data-tab="settings">Modlar</a>
-                <a href="#" class="nav-link" data-tab="network">Baglanti</a>
-                <a href="#" class="nav-link" data-tab="info">Info</a>
+                <a href="#" class="nav-link active" data-tab="control" data-i18n="nav.control">Hizli kontrol</a>
+                <a href="#" class="nav-link" data-tab="settings" data-i18n="nav.settings">Modlar</a>
+                <a href="#" class="nav-link" data-tab="network" data-i18n="nav.network">Baglanti</a>
+                <a href="#" class="nav-link" data-tab="info" data-i18n="nav.info">Info</a>
             </div>
         </div>
     </nav>
@@ -47,29 +50,29 @@ const char HTML_PAGE[] PROGMEM = R"=====(
             <!-- Tab: Control -->
             <section id="control" class="tab-section active">
                 <div class="panel">
-                    <div class="section-header">Aktif Modunuzu Secin</div>
+                    <div class="section-header" data-i18n="control.selectMode">Aktif Modunuzu Secin</div>
                     <div class="mode-grid">
                         <label class="mode-card active">
                             <input type="radio" name="mode" value="dimmer" checked>
                             <div class="mode-content">
-                                <div class="mode-name">Dimmer</div>
-                                <div class="mode-desc">Control brightness levels</div>
+                                <div class="mode-name" data-i18n="control.mode.dimmer.name">Dimmer</div>
+                                <div class="mode-desc" data-i18n="control.mode.dimmer.desc">Control brightness levels</div>
                             </div>
                             <div class="mode-check"></div>
                         </label>
                         <label class="mode-card">
                             <input type="radio" name="mode" value="safe">
                             <div class="mode-content">
-                                <div class="mode-name">Safe</div>
-                                <div class="mode-desc">Counter display mode</div>
+                                <div class="mode-name" data-i18n="control.mode.safe.name">Safe</div>
+                                <div class="mode-desc" data-i18n="control.mode.safe.desc">Counter display mode</div>
                             </div>
                             <div class="mode-check"></div>
                         </label>
                         <label class="mode-card">
                             <input type="radio" name="mode" value="panic">
                             <div class="mode-content">
-                                <div class="mode-name">Panik</div>
-                                <div class="mode-desc">Emergency mode</div>
+                                <div class="mode-name" data-i18n="control.mode.panic.name">Panik</div>
+                                <div class="mode-desc" data-i18n="control.mode.panic.desc">Emergency mode</div>
                             </div>
                             <div class="mode-check"></div>
                         </label>
@@ -79,21 +82,21 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                     
                     <div class="preferences-row">
                         <div class="pref-section">
-                            <label class="pref-label">Theme</label>
+                            <label class="pref-label" data-i18n="control.theme.label">Theme</label>
                             <div class="option-group compact">
                                 <label class="option-card active">
                                     <input type="radio" name="theme" value="dark" checked>
-                                    <span>Dark</span>
+                                    <span data-i18n="control.theme.dark">Dark</span>
                                 </label>
                                 <label class="option-card">
                                     <input type="radio" name="theme" value="light">
-                                    <span>Light</span>
+                                    <span data-i18n="control.theme.light">Light</span>
                                 </label>
                             </div>
                         </div>
                         <div class="pref-divider"></div>
                         <div class="pref-section">
-                            <label class="pref-label">Language</label>
+                            <label class="pref-label" data-i18n="control.language.label">Language</label>
                             <div class="option-group compact">
                                 <label class="option-card">
                                     <input type="radio" name="language" value="en">
@@ -119,21 +122,21 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                 <!-- Dimmer Mode Accordion -->
                 <div class="accordion-panel">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title">Dimmer</span>
+                        <span class="accordion-title" data-i18n="settings.dimmer.title">Dimmer</span>
                         <span class="accordion-arrow">▼</span>
                     </div>
                     <div class="accordion-content collapsed">
                         <div class="dimmer-status">
                             <div class="status-item">
-                                <span class="status-label">Connection</span>
-                                <span class="status-value" id="dimmer-connection">Connected</span>
+                                <span class="status-label" data-i18n="settings.dimmer.connection">Connection</span>
+                                <span class="status-value" id="dimmer-connection" data-i18n="settings.dimmer.connected">Connected</span>
                             </div>
                             <div class="status-item">
-                                <span class="status-label">Device</span>
+                                <span class="status-label" data-i18n="settings.dimmer.device">Device</span>
                                 <span class="status-value" id="dimmer-device">Shelly (192.168.11.11)</span>
                             </div>
                             <div class="status-item status-toggle">
-                                <span class="status-label">Power</span>
+                                <span class="status-label" data-i18n="settings.dimmer.power">Power</span>
                                 <label class="device-toggle">
                                     <input type="checkbox" id="device-power" checked onchange="toggleDevicePower(this.checked)">
                                     <span class="device-toggle-slider"></span>
@@ -143,22 +146,22 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                         <div class="slider-controls">
                             <div class="slider-group">
                                 <span class="slider-value" id="brightness-value">50</span>
-                                <label class="slider-label">Brightness</label>
+                                <label class="slider-label" data-i18n="settings.dimmer.brightness">Brightness</label>
                                 <input type="range" class="range-slider" min="0" max="100" value="50" id="brightness" oninput="updateSliderValue(this)">
                             </div>
                             <div class="slider-group">
                                 <span class="slider-value" id="ratio-value">3</span>
-                                <label class="slider-label">Dimm Ratio</label>
+                                <label class="slider-label" data-i18n="settings.dimmer.dimmRatio">Dimm Ratio</label>
                                 <input type="range" class="range-slider" min="1" max="5" value="3" id="ratio" oninput="updateSliderValue(this)">
                             </div>
                         </div>
                         <div class="scan-section">
-                            <button class="btn btn-scan" onclick="scanDevices()">Scan Network</button>
+                            <button class="btn btn-scan" onclick="scanDevices()" data-i18n="settings.dimmer.scanNetwork">Scan Network</button>
                         </div>
                         <div class="device-list">
                             <div class="empty-state">
-                                <p>No devices found</p>
-                                <span>Start scanning to discover devices</span>
+                                <p data-i18n="settings.dimmer.noDevices">No devices found</p>
+                                <span data-i18n="settings.dimmer.startScanning">Start scanning to discover devices</span>
                             </div>
                         </div>
                     </div>
@@ -167,16 +170,16 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                 <!-- Safe Mode Accordion -->
                 <div class="accordion-panel">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title">Safe</span>
+                        <span class="accordion-title" data-i18n="settings.safe.title">Safe</span>
                         <span class="accordion-arrow">▼</span>
                     </div>
                     <div class="accordion-content collapsed">
                         <div class="safe-tabs">
-                            <button class="safe-tab active" onclick="switchSafeTab(0)">Password 1</button>
-                            <button class="safe-tab" onclick="switchSafeTab(1)">Password 2</button>
-                            <button class="safe-tab" onclick="switchSafeTab(2)">Password 3</button>
-                            <button class="safe-tab" onclick="switchSafeTab(3)">Password 4</button>
-                            <button class="safe-tab" onclick="switchSafeTab(4)">Password 5</button>
+                            <button class="safe-tab active" onclick="switchSafeTab(0)"><span data-i18n="settings.safe.password">Password</span> 1</button>
+                            <button class="safe-tab" onclick="switchSafeTab(1)"><span data-i18n="settings.safe.password">Password</span> 2</button>
+                            <button class="safe-tab" onclick="switchSafeTab(2)"><span data-i18n="settings.safe.password">Password</span> 3</button>
+                            <button class="safe-tab" onclick="switchSafeTab(3)"><span data-i18n="settings.safe.password">Password</span> 4</button>
+                            <button class="safe-tab" onclick="switchSafeTab(4)"><span data-i18n="settings.safe.password">Password</span> 5</button>
                         </div>
                         
                         <!-- Password 1 -->
@@ -534,17 +537,17 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                 <!-- Panic Mode Accordion -->
                 <div class="accordion-panel">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title">Panic</span>
+                        <span class="accordion-title" data-i18n="settings.panic.title">Panic</span>
                         <span class="accordion-arrow">▼</span>
                     </div>
                     <div class="accordion-content collapsed">
-                        <p class="panel-text">Panik butonu acil durumlarda sevdiklerinize haber vermek veya yardım istemek için tasarlanmaktadır. Encoder'a dokunduğunuzda veya çevirdiğinizde (yön ve miktar fark etmeksizin), API üzerinden mobil uygulamaya sinyal gönderilerek telefonun zil sesi tetiklenir ve mesaj metni iletilir. Sistem şu anda geliştirilme aşamasındadır.</p>
+                        <p class="panel-text" data-i18n="settings.panic.description">Panik butonu acil durumlarda sevdiklerinize haber vermek veya yardım istemek için tasarlanmaktadır. Encoder'a dokunduğunuzda veya çevirdiğinizde (yön ve miktar fark etmeksizin), API üzerinden mobil uygulamaya sinyal gönderilerek telefonun zil sesi tetiklenir ve mesaj metni iletilir. Sistem şu anda geliştirilme aşamasındadır.</p>
                     </div>
                 </div>
                 
                 <!-- Save Button -->
                 <div class="network-save">
-                    <button class="btn-save" onclick="saveModeConfig()">Save Mode Configuration</button>
+                    <button class="btn-save" onclick="saveModeConfig()" data-i18n="settings.saveConfig">Save Mode Configuration</button>
                 </div>
             </section>
             
@@ -552,44 +555,49 @@ const char HTML_PAGE[] PROGMEM = R"=====(
             <section id="network" class="tab-section">
                 <div class="network-status">
                     <div class="status-item">
-                        <span class="status-label">Mode</span>
-                        <span class="status-value">WiFi</span>
+                        <span class="status-label" data-i18n="network.status.mode">MOD</span>
+                        <span class="status-value" data-i18n="network.status.wifi">WiFi</span>
                     </div>
                     <div class="status-item">
-                        <span class="status-label">SSID</span>
+                        <span class="status-label" data-i18n="network.status.ssid">SSID</span>
                         <span class="status-value">MyNetwork</span>
                     </div>
                     <div class="status-item">
-                        <span class="status-label">IP Address</span>
-                        <span class="status-value">192.168.1.100</span>
+                        <span class="status-label" data-i18n="network.status.ip">IP Adresi</span>
+                        <div class="status-value-stacked">
+                            <span class="ip-value">192.168.1.100</span>
+                            <span class="domain-value" id="status-mdns">syndimm-xxxxxx.local</span>
+                        </div>
                     </div>
                 </div>
                 
                 <div class="accordion-panel">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title">AP MODU AYARLARI</span>
-                        <span class="accordion-status inactive" id="ap-status">Inactive</span>
+                        <span class="accordion-title" data-i18n="network.ap.title">AP MODU AYARLARI</span>
+                        <span class="accordion-status inactive" id="ap-status" data-i18n="network.ap.inactive">Inactive</span>
                         <span class="accordion-arrow">▼</span>
                     </div>
                     <div class="accordion-content collapsed">
                         <div class="info-row">
-                            <span class="info-label">SSID</span>
+                            <span class="info-label" data-i18n="network.ap.ssid">SSID</span>
                             <span class="info-value" id="ap-ssid-display">SynDimm-XXXXXX</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label">Password</span>
-                            <span class="info-value">None (Open Network)</span>
+                            <span class="info-label" data-i18n="network.ap.password">Password</span>
+                            <span class="info-value" data-i18n="network.ap.noPassword">None (Open Network)</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label">IP Address</span>
+                            <span class="info-label" data-i18n="network.ap.ip">IP Address</span>
                             <span class="info-value">192.168.4.1</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label" data-i18n="network.ap.mdns">mDNS Address</span>
+                            <span class="info-value" id="ap-mdns-display">syndimm-xxxxxx.local</span>
                         </div>
                         <div class="info-row" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;">
                             <span class="info-label" style="font-size: 0.85rem; opacity: 0.7; line-height: 1.5;">
-                                <strong>Otomatik Failover:</strong><br>
-                                Primary WiFi → Backup WiFi → AP Mode<br>
-                                <br>
-                                AP Mode otomatik olarak devreye girer. Şifresiz açık ağ olarak çalışır.
+                                <strong data-i18n="network.ap.autoFailover">Otomatik Failover:</strong><br>
+                                <span data-i18n="network.ap.failoverDesc">Primary WiFi → Backup WiFi → AP Mode<br><br>AP Mode otomatik olarak devreye girer. Şifresiz açık ağ olarak çalışır.</span>
                             </span>
                         </div>
                     </div>
@@ -597,82 +605,95 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                 
                 <div class="accordion-panel">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title">PRIMARY WIFI</span>
-                        <span class="accordion-status connected">Connected</span>
+                        <span class="accordion-title" data-i18n="network.wifi1.title">PRIMARY WIFI</span>
+                        <span class="accordion-status connected" data-i18n="network.wifi1.connected">Connected</span>
                         <span class="accordion-arrow">▼</span>
                     </div>
                     <div class="accordion-content collapsed">
                         <div class="form-group">
-                            <label for="wifi1-ssid">SSID</label>
-                            <input type="text" id="wifi1-ssid" placeholder="Enter WiFi SSID">
+                            <label for="wifi1-ssid" data-i18n="network.wifi1.ssid">SSID</label>
+                            <input type="text" id="wifi1-ssid" placeholder="Enter WiFi SSID" data-i18n-placeholder="network.wifi1.ssidPlaceholder">
                         </div>
                         <div class="form-group">
-                            <label for="wifi1-password">Password</label>
-                            <input type="password" id="wifi1-password" placeholder="Enter WiFi password">
+                            <label for="wifi1-password" data-i18n="network.wifi1.password">Password</label>
+                            <input type="password" id="wifi1-password" placeholder="Enter WiFi password" data-i18n-placeholder="network.wifi1.passwordPlaceholder">
                         </div>
                         <div class="form-group">
-                            <label for="wifi1-ip">Static IP (optional)</label>
-                            <input type="text" id="wifi1-ip" placeholder="Leave empty for DHCP">
+                            <label for="wifi1-ip" data-i18n="network.wifi1.staticIp">Static IP (optional)</label>
+                            <input type="text" id="wifi1-ip" placeholder="Leave empty for DHCP" data-i18n-placeholder="network.wifi1.staticIpPlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="wifi1-local" data-i18n="network.wifi1.localDomain">.local Domain (optional)</label>
+                            <input type="text" id="wifi1-local" placeholder="e.g., mysyndimm" data-i18n-placeholder="network.wifi1.localDomainPlaceholder">
+                            <small class="form-hint">Will be accessible as [name].local on the network</small>
                         </div>
                     </div>
                 </div>
                 
                 <div class="accordion-panel">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title">BACKUP WIFI</span>
-                        <span class="accordion-status not-configured">Not Configured</span>
+                        <span class="accordion-title" data-i18n="network.wifi2.title">BACKUP WIFI</span>
+                        <span class="accordion-status not-configured" data-i18n="network.wifi2.notConfigured">Not Configured</span>
                         <span class="accordion-arrow">▼</span>
                     </div>
                     <div class="accordion-content collapsed">
                         <div class="form-group">
-                            <label for="wifi2-ssid">SSID</label>
-                            <input type="text" id="wifi2-ssid" placeholder="Enter WiFi SSID">
+                            <label for="wifi2-ssid" data-i18n="network.wifi2.ssid">SSID</label>
+                            <input type="text" id="wifi2-ssid" placeholder="Enter WiFi SSID" data-i18n-placeholder="network.wifi2.ssidPlaceholder">
                         </div>
                         <div class="form-group">
-                            <label for="wifi2-password">Password</label>
-                            <input type="password" id="wifi2-password" placeholder="Enter WiFi password">
+                            <label for="wifi2-password" data-i18n="network.wifi2.password">Password</label>
+                            <input type="password" id="wifi2-password" placeholder="Enter WiFi password" data-i18n-placeholder="network.wifi2.passwordPlaceholder">
                         </div>
                         <div class="form-group">
-                            <label for="wifi2-ip">Static IP (optional)</label>
-                            <input type="text" id="wifi2-ip" placeholder="Leave empty for DHCP">
+                            <label for="wifi2-ip" data-i18n="network.wifi2.staticIp">Static IP (optional)</label>
+                            <input type="text" id="wifi2-ip" placeholder="Leave empty for DHCP" data-i18n-placeholder="network.wifi2.staticIpPlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="wifi2-local" data-i18n="network.wifi2.localDomain">.local Domain (optional)</label>
+                            <input type="text" id="wifi2-local" placeholder="e.g., mysyndimm" data-i18n-placeholder="network.wifi2.localDomainPlaceholder">
+                            <small class="form-hint">Will be accessible as [name].local on the network</small>
                         </div>
                     </div>
                 </div>
                 
                 <div style="text-align: center; margin-top: 30px;">
-                    <button class="btn-save" onclick="saveNetworkConfig()">Save Network Configuration</button>
+                    <button class="btn-save" onclick="saveNetworkConfig()" data-i18n="network.saveConfig">Save Network Configuration</button>
                 </div>
             </section>
             
             <!-- Tab: Info -->
             <section id="info" class="tab-section">
                 <div class="info-guide">
-                    <h3>Kullanım Kılavuzu</h3>
+                    <h3 data-i18n="info.userGuide">Kullanım Kılavuzu</h3>
                     
-                    <h4>Dimmer Modu</h4>
-                    <p><strong>Encoder ile Kontrol:</strong> Saat yönünde çevirerek parlaklığı artırın, ters yönde azaltın. Encoder butonuna basarak bağlı cihazı açıp/kapatabilirsiniz.</p>
-                    <p><strong>Cihaz Bağlantısı:</strong> Settings → Dimmer bölümünden Scan Network ile ağınızdaki akıllı dimmer cihazlarını bulun ve Connect butonuyla senkronize olun.</p>
-                    <p><strong>Web Kontrolü:</strong> Control sekmesinden Brightness (parlaklık) ve Dimm Ratio (her encoder hareketi için değişim miktarı 1-5 arası) ayarlarını yapabilirsiniz.</p>
+                    <h4 data-i18n="info.dimmerMode.title">Dimmer Modu</h4>
+                    <p><strong data-i18n="info.dimmerMode.encoderControl.title">Encoder ile Kontrol:</strong> <span data-i18n="info.dimmerMode.encoderControl.text">Saat yönünde çevirerek parlaklığı artırın, ters yönde azaltın. Encoder butonuna basarak bağlı cihazı açıp/kapatabilirsiniz.</span></p>
+                    <p><strong data-i18n="info.dimmerMode.deviceConnection.title">Cihaz Bağlantısı:</strong> <span data-i18n="info.dimmerMode.deviceConnection.text">Settings → Dimmer bölümünden Scan Network ile ağınızdaki akıllı dimmer cihazlarını bulun ve Connect butonuyla senkronize olun.</span></p>
+                    <p><strong data-i18n="info.dimmerMode.webControl.title">Web Kontrolü:</strong> <span data-i18n="info.dimmerMode.webControl.text">Control sekmesinden Brightness (parlaklık) ve Dimm Ratio (her encoder hareketi için değişim miktarı 1-5 arası) ayarlarını yapabilirsiniz.</span></p>
                     
-                    <h4>Safe Lock Modu</h4>
-                    <p><strong>Şifre Sistemi:</strong> Encoder hareketleriyle şifre girilir. Örnek: R5-L3-R2-B (sağa 5, sola 3, sağa 2, buton bas).</p>
-                    <p><strong>Ayarlama:</strong> Settings → Safe sekmesinden 5 farklı şifre kaydedebilirsiniz. Her şifre için API URL tanımlayın.</p>
-                    <p><strong>Tetikleme:</strong> Doğru şifre girildiğinde, o şifreye kayıtlı API otomatik olarak çağrılır (HTTP GET/POST).</p>
-                    <p><strong>Kullanım Alanları:</strong> Akıllı kilit açma, garaj kapısı kontrolü, özel otomasyon senaryoları.</p>
+                    <h4 data-i18n="info.safeMode.title">Safe Lock Modu</h4>
+                    <p><strong data-i18n="info.safeMode.passwordSystem.title">Şifre Sistemi:</strong> <span data-i18n="info.safeMode.passwordSystem.text">Encoder hareketleriyle şifre girilir. Örnek: R5-L3-R2-B (sağa 5, sola 3, sağa 2, buton bas).</span></p>
+                    <p><strong data-i18n="info.safeMode.configuration.title">Ayarlama:</strong> <span data-i18n="info.safeMode.configuration.text">Settings → Safe sekmesinden 5 farklı şifre kaydedebilirsiniz. Her şifre için API URL tanımlayın.</span></p>
+                    <p><strong data-i18n="info.safeMode.triggering.title">Tetikleme:</strong> <span data-i18n="info.safeMode.triggering.text">Doğru şifre girildiğinde, o şifreye kayıtlı API otomatik olarak çağrılır (HTTP GET/POST).</span></p>
+                    <p><strong data-i18n="info.safeMode.useCases.title">Kullanım Alanları:</strong> <span data-i18n="info.safeMode.useCases.text">Akıllı kilit açma, garaj kapısı kontrolü, özel otomasyon senaryoları.</span></p>
                     
-                    <h4>Panik Modu</h4>
-                    <p><strong>Acil Bildirim:</strong> Encoder'a dokunduğunuzda veya çevirdiğinizde (yön/miktar önemsiz) API üzerinden mobil uygulamaya sinyal gönderilir.</p>
-                    <p><strong>İşlev:</strong> Hedef telefonda zil sesi tetiklenir ve acil durum mesajı iletilir.</p>
-                    <p class="warning-text">Panik modu geliştirme aşamasındadır.</p>
+                    <h4 data-i18n="info.panicMode.title">Panik Modu</h4>
+                    <p><strong data-i18n="info.panicMode.emergencyNotification.title">Acil Bildirim:</strong> <span data-i18n="info.panicMode.emergencyNotification.text">Encoder'a dokunduğunuzda veya çevirdiğinizde (yön/miktar önemsiz) API üzerinden mobil uygulamaya sinyal gönderilir.</span></p>
+                    <p><strong data-i18n="info.panicMode.function.title">İşlev:</strong> <span data-i18n="info.panicMode.function.text">Hedef telefonda zil sesi tetiklenir ve acil durum mesajı iletilir.</span></p>
+                    <p class="warning-text" data-i18n="info.panicMode.warning">Panik modu geliştirme aşamasındadır.</p>
                     
-                    <h4>Ağ Ayarları</h4>
-                    <p><strong>WiFi Bağlantısı:</strong> Network sekmesinden SSID ve şifre girerek WiFi ağına bağlanın.</p>
-                    <p><strong>IP Yapılandırması:</strong> DHCP (otomatik) veya Statik IP seçeneklerini kullanabilirsiniz.</p>
+                    <h4 data-i18n="info.networkSettings.title">Ağ Ayarları</h4>
+                    <p><strong data-i18n="info.networkSettings.wifiConnection.title">WiFi Bağlantısı:</strong> <span data-i18n="info.networkSettings.wifiConnection.text">Network sekmesinden SSID ve şifre girerek WiFi ağına bağlanın.</span></p>
+                    <p><strong data-i18n="info.networkSettings.ipConfiguration.title">IP Yapılandırması:</strong> <span data-i18n="info.networkSettings.ipConfiguration.text">DHCP (otomatik) veya Statik IP seçeneklerini kullanabilirsiniz.</span></p>
                 </div>
                 <div class="info-documentation">
-                    <h3 class="doc-title">Destek ve Dokümantasyon</h3>
-                    <p class="doc-description">Detaylı kullanım kılavuzu, örnek senaryolar ve güncellemeler için:</p>
-                    <a href="https://smartkraft.ch/syndimm" target="_blank" class="doc-button">SmartKraft.ch/SynDimm</a>
+                    <h3 class="doc-title" data-i18n="info.documentation.title">Destek ve Dokümantasyon</h3>
+                    <p class="doc-description" data-i18n="info.documentation.description">Detaylı kullanım kılavuzu, örnek senaryolar ve güncellemeler için:</p>
+                    <div class="doc-buttons">
+                        <a href="https://smartkraft.ch/syndimm" target="_blank" class="doc-button">SmartKraft.ch</a>
+                        <a href="https://github.com/smrtkrft/SynDimm" target="_blank" class="doc-button">GitHub</a>
+                    </div>
                 </div>
             </section>
             

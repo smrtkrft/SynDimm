@@ -31,7 +31,13 @@ private:
   // Buton state değişkenleri
   bool lastButtonState;
   unsigned long lastButtonTime;
+  unsigned long buttonPressTime;  // Butonun basıldığı an
+  bool buttonWasPressed;  // Buton basıldı mı flag
+  bool modeSelectActive;  // Mod seçme modu aktif mi (3+ saniye basılı)
+  bool encoderRotatedDuringPress;  // Basılıyken encoder döndü mü
+  char modeSelectDirection;  // Mod seçerken hangi yöne çevrildi ('L' veya 'R')
   const unsigned long buttonDebounceDelay = 50; // 50ms buton debounce
+  const unsigned long longPressTime = 3000; // 3 saniye basılı tutma
   
   // Event buffer
   volatile char eventBuffer[10];
@@ -66,6 +72,17 @@ private:
     
     // CLK değiştiğinde kontrol et
     if (aState != aLastState) {
+      // Mod seçme modu aktif mi kontrol et
+      if (modeSelectActive) {
+        encoderRotatedDuringPress = true;
+        // Mod seçerken hangi yöne çevrildiğini kaydet
+        if (aState == bState) {
+          modeSelectDirection = 'L';
+        } else {
+          modeSelectDirection = 'R';
+        }
+      }
+      
       // Yön belirleme: ATAMALAR TERS ÇEVRİLDİ (L ↔ R)
       if (aState == bState) {
         // Sol dönüş (önceden R idi)
@@ -100,9 +117,10 @@ private:
 public:
   KY040(uint8_t clk, uint8_t dt, uint8_t sw) 
     : clkPin(clk), dtPin(dt), swPin(sw), 
-      lastInterruptTime(0), lastButtonTime(0),
+      lastInterruptTime(0), lastButtonTime(0), buttonPressTime(0),
       bufferWriteIndex(0), bufferReadIndex(0),
-      dimm_sayac(100), lastDirection(0) {
+      dimm_sayac(100), lastDirection(0), buttonWasPressed(false),
+      modeSelectActive(false), encoderRotatedDuringPress(false), modeSelectDirection(0) {
     lastButtonState = HIGH;
   }
   
@@ -134,24 +152,67 @@ public:
       return true;
     }
     
-    // Buton kontrolü
+    // Buton kontrolü - YENİ MANTIK
     bool currentButtonState = digitalRead(swPin);
+    unsigned long currentTime = millis();
+    
     if (currentButtonState != lastButtonState) {
-      unsigned long currentTime = millis();
       if (currentTime - lastButtonTime > buttonDebounceDelay) {
+        
         if (currentButtonState == LOW) {
-          // Buton basıldı
-          addEvent('B');
+          // Buton basıldı - zamanı kaydet
+          buttonPressTime = currentTime;
+          buttonWasPressed = true;
+          modeSelectActive = false;
+          encoderRotatedDuringPress = false;
+          modeSelectDirection = 0;  // Yön sıfırla
+          lastButtonTime = currentTime;
+          Serial.println("[Encoder] Button pressed");
+          
+        } else if (currentButtonState == HIGH && buttonWasPressed) {
+          // Buton bırakıldı
+          unsigned long pressDuration = currentTime - buttonPressTime;
+          
+          Serial.print("[Encoder] Button released after ");
+          Serial.print(pressDuration);
+          Serial.println(" ms");
+          
+          if (modeSelectActive && encoderRotatedDuringPress) {
+            // Mod seçme modundayken encoder döndürüldü - Mod değiştir
+            addEvent('M');  // M = Mode change
+            Serial.println("[Encoder] Mode select completed -> Mod degistir (M)");
+          } else if (pressDuration < longPressTime) {
+            // Kısa basma - Normal buton eventi
+            addEvent('B');
+            Serial.println("[Encoder] Short press -> Button (B)");
+          } else {
+            // 3+ saniye basıldı ama encoder dönmedi - hiçbir şey yapma
+            Serial.println("[Encoder] Long press but no rotation -> Ignored");
+          }
+          
+          buttonWasPressed = false;
+          modeSelectActive = false;
+          encoderRotatedDuringPress = false;
+          modeSelectDirection = 0;  // Yön sıfırla
           lastButtonTime = currentTime;
         }
       }
     }
+    
+    // Buton 3+ saniye basılı mı kontrol et
+    if (buttonWasPressed && !modeSelectActive) {
+      if (currentTime - buttonPressTime >= longPressTime) {
+        modeSelectActive = true;
+        Serial.println("[Encoder] Mode select ACTIVE - Rotate encoder to select mode");
+      }
+    }
+    
     lastButtonState = currentButtonState;
     
     return (bufferReadIndex != bufferWriteIndex);
   }
   
-  // Bir sonraki eventi oku (L, R, veya B)
+  // Bir sonraki eventi oku (L=Sol, R=Sağ, B=Kısa basma, M=Uzun basma)
   char read() {
     if (bufferReadIndex != bufferWriteIndex) {
       char event = eventBuffer[bufferReadIndex];
@@ -164,6 +225,16 @@ public:
   // Tüm buffer'ı temizle
   void clear() {
     bufferReadIndex = bufferWriteIndex;
+  }
+  
+  // Mod seçme modu aktif mi?
+  bool isModeSelectActive() const {
+    return modeSelectActive;
+  }
+  
+  // Mod seçerken hangi yöne çevrildi?
+  char getModeSelectDirection() const {
+    return modeSelectDirection;
   }
   
   // ========== MATEMATİKSEL FONKSİYONLAR ==========

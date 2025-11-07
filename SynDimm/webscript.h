@@ -10,6 +10,70 @@ const char JS_SCRIPT[] PROGMEM = R"=====(
 // ===================================
 // SynDimm - Minimal Control Panel JS
 // ===================================
+
+// ========== Translation System ==========
+let translations = {};
+let currentLang = localStorage.getItem('syndimm-language') || 'tr';
+
+// Load translations
+async function loadTranslations() {
+    try {
+        const response = await fetch('/translations.json');
+        translations = await response.json();
+        console.log('Translations loaded');
+        applyTranslations(currentLang);
+    } catch (err) {
+        console.error('Failed to load translations:', err);
+    }
+}
+
+// Get translated text by key path
+function t(keyPath, lang = currentLang) {
+    const keys = keyPath.split('.');
+    let value = translations;
+    for (const key of keys) {
+        if (value && value[key]) {
+            value = value[key];
+        } else {
+            return keyPath; // Return key if translation not found
+        }
+    }
+    return value[lang] || value['en'] || keyPath;
+}
+
+// Apply translations to all elements with data-i18n
+function applyTranslations(lang) {
+    currentLang = lang;
+    
+    // Translate text content
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        el.textContent = t(key, lang);
+    });
+    
+    // Translate placeholders
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        el.placeholder = t(key, lang);
+    });
+    
+    // Update HTML attributes like innerHTML (for complex HTML)
+    document.querySelectorAll('[data-i18n-html]').forEach(el => {
+        const key = el.getAttribute('data-i18n-html');
+        el.innerHTML = t(key, lang);
+    });
+    
+    console.log('Language set to:', lang);
+}
+
+// Switch language
+function switchLanguage(lang) {
+    localStorage.setItem('syndimm-language', lang);
+    applyTranslations(lang);
+}
+
+// ========== End Translation System ==========
+
 // Tab Navigation
 document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', (e) => {
@@ -169,8 +233,10 @@ document.querySelectorAll('input[name="language"]').forEach(radio => {
             }
         });
         e.target.closest('.option-card').classList.add('active');
-        console.log('Language:', e.target.value);
-        // API call or page reload with new language
+        const lang = e.target.value;
+        console.log('Language:', lang);
+        // Apply translations
+        switchLanguage(lang);
     });
 });
 // AP Mode Toggle
@@ -274,7 +340,7 @@ function toggleDevice() {
 }
 // Update Connection Status
 function updateConnectionStatus() {
-    fetch('/api/shelly/status')
+    fetch('/api/shelly/status', { signal: AbortSignal.timeout(3000) })
         .then(r => r.json())
         .then(data => {
             // Update dimmer status grid
@@ -306,7 +372,11 @@ function updateConnectionStatus() {
                 if (devicePower) devicePower.checked = false;
             }
         })
-        .catch(err => console.error('Status error:', err));
+        .catch(err => {
+            // Silently ignore temporary network errors during reconnection
+            if (err.name === 'AbortError' || err.name === 'TimeoutError') return;
+            console.debug('Status error:', err);
+        });
 }
 // Update Encoder Brightness (real-time sync from encoder)
 function updateEncoderBrightness() {
@@ -361,16 +431,21 @@ function saveNetworkConfig() {
     const wifi1_ssid = document.getElementById('wifi1-ssid').value;
     const wifi1_password = document.getElementById('wifi1-password').value;
     const wifi1_ip = document.getElementById('wifi1-ip').value;
+    const wifi1_local = document.getElementById('wifi1-local').value;
+    
     // Get WiFi 2 values
     const wifi2_ssid = document.getElementById('wifi2-ssid').value;
     const wifi2_password = document.getElementById('wifi2-password').value;
     const wifi2_ip = document.getElementById('wifi2-ip').value;
+    const wifi2_local = document.getElementById('wifi2-local').value;
+    
     let saveCount = 0;
     let successCount = 0;
+    
     // Save WiFi 1 if SSID is provided
     if (wifi1_ssid) {
         saveCount++;
-        fetch(`/api/network/wifi1?ssid=${encodeURIComponent(wifi1_ssid)}&pass=${encodeURIComponent(wifi1_password)}&ip=${encodeURIComponent(wifi1_ip)}`)
+        fetch(`/api/network/wifi1?ssid=${encodeURIComponent(wifi1_ssid)}&pass=${encodeURIComponent(wifi1_password)}&ip=${encodeURIComponent(wifi1_ip)}&local=${encodeURIComponent(wifi1_local)}`)
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
@@ -385,10 +460,11 @@ function saveNetworkConfig() {
                 alert('Error saving WiFi 1 configuration');
             });
     }
+    
     // Save WiFi 2 if SSID is provided
     if (wifi2_ssid) {
         saveCount++;
-        fetch(`/api/network/wifi2?ssid=${encodeURIComponent(wifi2_ssid)}&pass=${encodeURIComponent(wifi2_password)}&ip=${encodeURIComponent(wifi2_ip)}`)
+        fetch(`/api/network/wifi2?ssid=${encodeURIComponent(wifi2_ssid)}&pass=${encodeURIComponent(wifi2_password)}&ip=${encodeURIComponent(wifi2_ip)}&local=${encodeURIComponent(wifi2_local)}`)
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
@@ -403,13 +479,24 @@ function saveNetworkConfig() {
                 alert('Error saving WiFi 2 configuration');
             });
     }
+    
     if (saveCount === 0) {
         alert('Please enter at least one WiFi SSID');
         return;
     }
+    
     function checkComplete() {
         if (successCount === saveCount) {
-            alert('Network configuration saved. Restarting...');
+            alert('Network configuration saved. Device is reconnecting...\n\nPage will reload in 5 seconds.');
+            
+            // Sayfa yenilemeden önce periyodik güncellemeleri durdur
+            // (Bu, hataların görünmesini önler)
+            
+            // 5 saniye sonra sayfayı yenile
+            setTimeout(() => {
+                // Mevcut IP adresiyle yenile (mDNS henüz hazır olmayabilir)
+                window.location.reload();
+            }, 5000);
         }
     }
 }
@@ -430,57 +517,95 @@ function saveModeConfig() {
 }
 // Update Network Status
 function updateNetworkStatus() {
-    fetch('/api/network/status')
+    fetch('/api/network/status', { 
+        signal: AbortSignal.timeout(3000) // 3 saniye timeout
+    })
         .then(r => r.json())
         .then(data => {
             const statusItems = document.querySelectorAll('.network-status .status-value');
-            if (statusItems.length >= 3) {
+            if (statusItems.length >= 2) {
                 statusItems[0].textContent = data.mode || 'Unknown';
                 statusItems[1].textContent = data.ssid || 'N/A';
-                statusItems[2].textContent = data.ip || 'N/A';
+            }
+            
+            // Update IP and mDNS (stacked layout)
+            const ipValue = document.querySelector('.ip-value');
+            const mdnsStatus = document.getElementById('status-mdns');
+            
+            if (ipValue) {
+                ipValue.textContent = data.ip || 'N/A';
+            }
+            if (mdnsStatus && data.mdns) {
+                mdnsStatus.textContent = data.mdns;
             }
         })
-        .catch(err => console.error('Network status error:', err));
+        .catch(err => {
+            // Hataları sessizce yoksay (cihaz yeniden bağlanıyorsa normal)
+            if (err.name !== 'AbortError' && err.name !== 'TimeoutError') {
+                console.debug('Network status temporarily unavailable');
+            }
+        });
 }
 // Load Network Info
 function loadNetworkInfo() {
     fetch('/api/network/info')
         .then(r => r.json())
         .then(data => {
+            // Update Chip ID in header
+            if (data.chipID) {
+                const chipIdValue = document.getElementById('chip-id-value');
+                if (chipIdValue) {
+                    chipIdValue.textContent = data.chipID;
+                }
+            }
+            
             // AP Mode Info (read-only display)
             if (data.ap) {
                 const apSSIDDisplay = document.getElementById('ap-ssid-display');
+                const apMdnsDisplay = document.getElementById('ap-mdns-display');
                 const apStatus = document.getElementById('ap-status');
+                
                 if (apSSIDDisplay) {
                     apSSIDDisplay.textContent = data.ap.ssid || 'SynDimm-XXXXXX';
                 }
+                
+                if (apMdnsDisplay && data.mdns) {
+                    apMdnsDisplay.textContent = data.mdns;
+                }
+                
                 if (apStatus) {
                     if (data.ap.active) {
-                        apStatus.textContent = 'Active';
+                        apStatus.textContent = t('network.ap.active');
                         apStatus.classList.remove('inactive');
                         apStatus.classList.add('connected');
                     } else {
-                        apStatus.textContent = 'Inactive';
+                        apStatus.textContent = t('network.ap.inactive');
                         apStatus.classList.remove('connected');
                         apStatus.classList.add('inactive');
                     }
                 }
             }
+            
             // WiFi 1 Config
             if (data.wifi1) {
                 const wifi1SSID = document.getElementById('wifi1-ssid');
                 const wifi1IP = document.getElementById('wifi1-ip');
+                const wifi1Local = document.getElementById('wifi1-local');
                 if (wifi1SSID) wifi1SSID.value = data.wifi1.ssid || '';
                 if (wifi1IP) wifi1IP.value = data.wifi1.ip || '';
+                if (wifi1Local) wifi1Local.value = data.wifi1.local || '';
                 // Update WiFi 1 status badge
                 updateWiFiStatus('wifi1', data.wifi1.ssid);
             }
+            
             // WiFi 2 Config
             if (data.wifi2) {
                 const wifi2SSID = document.getElementById('wifi2-ssid');
                 const wifi2IP = document.getElementById('wifi2-ip');
+                const wifi2Local = document.getElementById('wifi2-local');
                 if (wifi2SSID) wifi2SSID.value = data.wifi2.ssid || '';
                 if (wifi2IP) wifi2IP.value = data.wifi2.ip || '';
+                if (wifi2Local) wifi2Local.value = data.wifi2.local || '';
                 // Update WiFi 2 status badge
                 updateWiFiStatus('wifi2', data.wifi2.ssid);
             }
@@ -585,6 +710,18 @@ function loadDimmerSettings() {
 // Initialize - Load all data on page load
 function initializePage() {
     console.log('SynDimm initializing...');
+    
+    // Load translations first
+    loadTranslations().then(() => {
+        // Set saved language
+        const savedLang = localStorage.getItem('syndimm-language') || 'tr';
+        const langRadio = document.querySelector(`input[name="language"][value="${savedLang}"]`);
+        if (langRadio) {
+            langRadio.checked = true;
+            langRadio.closest('.option-card')?.classList.add('active');
+        }
+    });
+    
     // Load theme from localStorage
     const savedTheme = localStorage.getItem('syndimm-theme') || 'dark';
     document.body.setAttribute('data-theme', savedTheme);
@@ -594,6 +731,7 @@ function initializePage() {
         themeRadio.checked = true;
         themeRadio.closest('.option-card')?.classList.add('active');
     }
+    
     // Load network configuration
     loadNetworkInfo();
     // Update network status
@@ -610,11 +748,14 @@ function initializePage() {
     scanDevices();
     // Load Safe Lock configuration
     loadSafeLockConfig();
+    
     // Start periodic status updates - HIZLI SENKRONIZASYON (her 500ms)
     setInterval(() => {
         updateConnectionStatus();
         updateNetworkStatus();
+        loadCurrentMode();  // Poll mode changes from encoder
     }, 500);  // 5000ms -> 500ms (10x daha hızlı)
+    
     console.log('SynDimm initialized');
 }
 // ===================================
