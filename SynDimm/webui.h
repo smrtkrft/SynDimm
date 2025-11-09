@@ -61,6 +61,14 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                             <div class="mode-check"></div>
                         </label>
                         <label class="mode-card">
+                            <input type="radio" name="mode" value="shutter">
+                            <div class="mode-content">
+                                <div class="mode-name" data-i18n="control.mode.shutter.name">Shutter</div>
+                                <div class="mode-desc" data-i18n="control.mode.shutter.desc">Control shutter position</div>
+                            </div>
+                            <div class="mode-check"></div>
+                        </label>
+                        <label class="mode-card">
                             <input type="radio" name="mode" value="safe">
                             <div class="mode-content">
                                 <div class="mode-name" data-i18n="control.mode.safe.name">Safe</div>
@@ -69,10 +77,13 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                             <div class="mode-check"></div>
                         </label>
                         <label class="mode-card">
-                            <input type="radio" name="mode" value="panic">
+                            <input type="radio" name="mode" value="panic" disabled>
                             <div class="mode-content">
-                                <div class="mode-name" data-i18n="control.mode.panic.name">Panik</div>
-                                <div class="mode-desc" data-i18n="control.mode.panic.desc">Emergency mode</div>
+                                <div class="mode-name" data-i18n="control.mode.panic.name">Panic</div>
+                                <div class="mode-desc">
+                                    <span data-i18n="control.mode.panic.desc">Emergency mode</span>
+                                    <br><em style="font-size: 0.85em; color: var(--text-muted);">(Coming Soon)</em>
+                                </div>
                             </div>
                             <div class="mode-check"></div>
                         </label>
@@ -157,12 +168,48 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                         </div>
                         <div class="scan-section">
                             <button class="btn btn-scan" onclick="scanDevices()" data-i18n="settings.dimmer.scanNetwork">Scan Network</button>
+                            <button class="btn btn-manual" onclick="showManualIPDialog()" data-i18n="settings.dimmer.manualIP">Manual IP</button>
                         </div>
                         <div class="device-list">
                             <div class="empty-state">
                                 <p data-i18n="settings.dimmer.noDevices">No devices found</p>
                                 <span data-i18n="settings.dimmer.startScanning">Start scanning to discover devices</span>
                             </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Shutter Mode Accordion -->
+                <div class="accordion-panel">
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <span class="accordion-title" data-i18n="settings.shutter.title">Shutter</span>
+                        <span class="accordion-arrow">▼</span>
+                    </div>
+                    <div class="accordion-content collapsed">
+                        <div class="shutter-status">
+                            <div class="status-item">
+                                <span class="status-label" data-i18n="settings.shutter.position">Position</span>
+                                <span class="status-value" id="shutter-position">50%</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="status-label" data-i18n="settings.shutter.status">Status</span>
+                                <span class="status-value" id="shutter-status" data-i18n="settings.shutter.stopped">Stopped</span>
+                            </div>
+                        </div>
+                        <div class="slider-controls">
+                            <div class="slider-group">
+                                <span class="slider-value" id="shutter-position-value">50</span>
+                                <label class="slider-label" data-i18n="settings.shutter.setPosition">Set Position</label>
+                                <input type="range" class="range-slider" min="0" max="100" value="50" id="shutter-slider" oninput="updateShutterSlider(this)">
+                            </div>
+                        </div>
+                        <div class="button-group">
+                            <button class="btn btn-primary" onclick="shutterOpen()" data-i18n="settings.shutter.open">Open</button>
+                            <button class="btn btn-secondary" onclick="shutterStop()" data-i18n="settings.shutter.stop">Stop</button>
+                            <button class="btn btn-primary" onclick="shutterClose()" data-i18n="settings.shutter.close">Close</button>
+                        </div>
+                        <div class="info-text">
+                            <p data-i18n="settings.shutter.info">Use encoder to control shutter position. Rotate left to close, right to open.</p>
                         </div>
                     </div>
                 </div>
@@ -716,6 +763,25 @@ const char HTML_PAGE[] PROGMEM = R"=====(
             
         </div>
     </main>
+    
+    <!-- Manual IP Modal -->
+    <div id="manualIPModal" class="modal" onclick="modalBackdropClick(event)">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 data-i18n="settings.dimmer.manualIPTitle">Connect to Device</h3>
+                <span class="modal-close" onclick="closeManualIPModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <label for="manualIP" data-i18n="settings.dimmer.enterIP">Enter IP Address:</label>
+                <input type="text" id="manualIP" class="modal-input" placeholder="192.168.1.100" pattern="\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}">
+                <div class="modal-error" id="manualIPError"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeManualIPModal()" data-i18n="common.cancel">Cancel</button>
+                <button class="btn btn-primary" onclick="connectManualIP()" data-i18n="common.connect">Connect</button>
+            </div>
+        </div>
+    </div>
     
     <script src="script.js"></script>
 </body>

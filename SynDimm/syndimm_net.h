@@ -119,6 +119,10 @@ public:
     Serial.print("  Baglaniyor");
     WiFi.begin(ssid.c_str(), pass.c_str());
     
+    // CRITICAL: Disable WiFi power save - "asla uyku moduna girmeyecek"
+    WiFi.setSleep(false);
+    Serial.println("  [WiFi] Power save disabled");
+    
     int count = 0;
     while (WiFi.status() != WL_CONNECTED && count < 40) {  // 10 saniye timeout
       delay(250);
@@ -236,9 +240,11 @@ public:
   String getAPSSID() { return apSSID; }
   bool isAPActive() { return apActive; }
   String getWiFi1SSID() { return wifi1_ssid; }
+  String getWiFi1Pass() { return wifi1_pass; }  // NEW: For WiFi watchdog
   String getWiFi1IP() { return wifi1_ip; }
   String getWiFi1Local() { return wifi1_local; }
   String getWiFi2SSID() { return wifi2_ssid; }
+  String getWiFi2Pass() { return wifi2_pass; }  // NEW: For WiFi watchdog
   String getWiFi2IP() { return wifi2_ip; }
   String getWiFi2Local() { return wifi2_local; }
   

@@ -66,6 +66,18 @@ const char TRANSLATIONS_JSON[] PROGMEM = R"=====(
           "tr": "Parlaklik seviyelerini kontrol et"
         }
       },
+      "shutter": {
+        "name": {
+          "en": "Shutter",
+          "de": "Rollladen",
+          "tr": "Panjur"
+        },
+        "desc": {
+          "en": "Control shutter position",
+          "de": "Rollladenposition steuern",
+          "tr": "Panjur konumunu kontrol et"
+        }
+      },
       "safe": {
         "name": {
           "en": "Safe",
@@ -163,6 +175,16 @@ const char TRANSLATIONS_JSON[] PROGMEM = R"=====(
         "de": "Netzwerk scannen",
         "tr": "Ag Tara"
       },
+      "manualIP": {
+        "en": "Manual IP",
+        "de": "Manuelle IP",
+        "tr": "Manuel IP"
+      },
+      "stopScanning": {
+        "en": "Stop Scanning",
+        "de": "Scan stoppen",
+        "tr": "Taramayi Durdur"
+      },
       "noDevices": {
         "en": "No devices found",
         "de": "Keine Geräte gefunden",
@@ -172,6 +194,63 @@ const char TRANSLATIONS_JSON[] PROGMEM = R"=====(
         "en": "Start scanning to discover devices",
         "de": "Starten Sie den Scan, um Geräte zu finden",
         "tr": "Cihazlari bulmak icin taramayi baslatin"
+      }
+    },
+    "shutter": {
+      "title": {
+        "en": "Shutter",
+        "de": "Rollladen",
+        "tr": "Panjur"
+      },
+      "position": {
+        "en": "Position",
+        "de": "Position",
+        "tr": "Konum"
+      },
+      "status": {
+        "en": "Status",
+        "de": "Status",
+        "tr": "Durum"
+      },
+      "stopped": {
+        "en": "Stopped",
+        "de": "Gestoppt",
+        "tr": "Durdu"
+      },
+      "opening": {
+        "en": "Opening",
+        "de": "Öffnet",
+        "tr": "Aciliyor"
+      },
+      "closing": {
+        "en": "Closing",
+        "de": "Schließt",
+        "tr": "Kapaniyor"
+      },
+      "setPosition": {
+        "en": "Set Position",
+        "de": "Position einstellen",
+        "tr": "Konum Ayarla"
+      },
+      "open": {
+        "en": "Open",
+        "de": "Öffnen",
+        "tr": "Ac"
+      },
+      "close": {
+        "en": "Close",
+        "de": "Schließen",
+        "tr": "Kapat"
+      },
+      "stop": {
+        "en": "Stop",
+        "de": "Stopp",
+        "tr": "Durdur"
+      },
+      "info": {
+        "en": "Use encoder to control shutter position. Rotate left to close, right to open.",
+        "de": "Verwenden Sie den Encoder, um die Rollladenposition zu steuern. Links drehen zum Schließen, rechts zum Öffnen.",
+        "tr": "Panjur konumunu kontrol etmek icin encoder kullanin. Kapatmak icin sola, acmak icin saga cevirin."
       }
     },
     "safe": {

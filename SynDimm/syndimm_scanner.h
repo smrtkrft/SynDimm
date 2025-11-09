@@ -9,6 +9,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
 
 struct DimmerDevice {
   String ip;
@@ -21,6 +22,7 @@ struct DimmerDevice {
 class NetworkScanner {
 private:
   std::vector<DimmerDevice> foundDevices;
+  std::vector<DimmerDevice> currentScanDevices;  // Temporary list for current scan
   bool scanInProgress;
   int scannedCount;
   int totalToScan;
@@ -30,8 +32,18 @@ private:
   static const int NUM_PARALLEL_TASKS = 5;  // 5 paralel task
   TaskHandle_t workerTasks[NUM_PARALLEL_TASKS];
   int nextIPToScan;
-  String baseIP;
+  char baseIP[16];  // Static buffer instead of String (prevent heap fragmentation)
   IPAddress localIPCache;
+  
+  // Adaptive timeout - öğrenen sistem
+  uint16_t adaptiveTimeout;  // Başlangıç 500ms, başarılı cihazlardan öğrenir
+  
+  // Persistent HTTP clients per worker (connection reuse)
+  HTTPClient* workerHTTPClients[NUM_PARALLEL_TASKS];
+  WiFiClient* workerWiFiClients[NUM_PARALLEL_TASKS];
+  
+  // EEPROM persistent device list
+  Preferences prefs;
   
   // Worker task parametresi
   struct WorkerParams {
@@ -49,7 +61,7 @@ private:
   
   // Her worker'ın işi
   void workerTask(int workerId) {
-    Serial.printf("[Scanner] Worker %d started\n", workerId);
+    // DEBUG REMOVED: Worker started log
     
     while (true) {
       // Mutex ile sonraki IP'yi al
@@ -65,20 +77,22 @@ private:
         break;
       }
       
-      // Bu IP'yi tara
-      String targetIP = baseIP + String(ipIndex);
+      // Bu IP'yi tara (statik buffer kullan - heap fragmentation önleme)
+      char targetIP[16];
+      snprintf(targetIP, sizeof(targetIP), "%s%d", baseIP, ipIndex);
       
       // Kendi IP'yi atla
-      if (targetIP == localIPCache.toString()) {
+      String targetIPStr = String(targetIP);
+      if (targetIPStr == localIPCache.toString()) {
         continue;
       }
       
-      // Cihazı kontrol et
+      // Cihazı kontrol et (worker ID ile persistent HTTP client)
       DimmerDevice device;
-      if (checkIfDimmer(targetIP, device)) {
-        // Mutex ile listeye ekle
+      if (checkIfDimmer(targetIPStr, device, workerId)) {
+        // Mutex ile geçici tarama listesine ekle
         if (xSemaphoreTake(devicesMutex, portMAX_DELAY) == pdTRUE) {
-          foundDevices.push_back(device);
+          currentScanDevices.push_back(device);
           xSemaphoreGive(devicesMutex);
         }
       }
@@ -87,11 +101,7 @@ private:
       if (xSemaphoreTake(devicesMutex, portMAX_DELAY) == pdTRUE) {
         scannedCount++;
         
-        // Progress göster (her 25 IP'de)
-        if (scannedCount % 25 == 0) {
-          Serial.printf("[Scanner] Progress: %d/%d IPs scanned, %d dimmers found (Worker %d)\n", 
-                        scannedCount, totalToScan, foundDevices.size(), workerId);
-        }
+        // DEBUG REMOVED: Progress log every 25 IPs (reduces overhead)
         
         xSemaphoreGive(devicesMutex);
       }
@@ -101,7 +111,7 @@ private:
       yield();
     }
     
-    Serial.printf("[Scanner] Worker %d finished\n", workerId);
+    // DEBUG REMOVED: Worker finished log
   }
   
   // Task için static wrapper (coordinator)
@@ -110,23 +120,40 @@ private:
     scanner->coordinatorTask();
   }
   
-  // Cihaz tipini kontrol et
-  bool checkIfDimmer(String ip, DimmerDevice& device) {
-    HTTPClient http;
-    WiFiClient client;
+  // Cihaz tipini kontrol et (persistent HTTP client ile)
+  bool checkIfDimmer(String ip, DimmerDevice& device, int workerId) {
+    // Worker'a özel persistent client kullan (connection reuse)
+    if (workerHTTPClients[workerId] == nullptr) {
+      workerHTTPClients[workerId] = new HTTPClient();
+      workerWiFiClients[workerId] = new WiFiClient();
+      workerHTTPClients[workerId]->setReuse(true);  // HTTP keep-alive
+    }
+    
+    HTTPClient* http = workerHTTPClients[workerId];
+    WiFiClient* client = workerWiFiClients[workerId];
+    
+    // Adaptive timeout kullan (başarılı cihazlardan öğrenir)
+    unsigned long startTime = millis();
     
     // Önce Gen2 (RPC) API'yi dene - /rpc/Shelly.GetDeviceInfo
-    http.begin(client, "http://" + ip + "/rpc/Shelly.GetDeviceInfo");
-    http.setTimeout(800);  // 2s → 800ms (Shelly hızlı cevap verir)
+    http->begin(*client, "http://" + ip + "/rpc/Shelly.GetDeviceInfo");
+    http->setTimeout(adaptiveTimeout);  // Öğrenen timeout
     
-    int httpCode = http.GET();
+    int httpCode = http->GET();
     
     if (httpCode == 200) {
-      String payload = http.getString();
-      http.end();
+      unsigned long responseTime = millis() - startTime;
+      String payload = http->getString();
+      // NOT: http->end() KALDIRILDI - keep-alive için bağlantı açık kalacak
       
-      // JSON parse et
-      JsonDocument doc;
+      // Timeout'u öğren: başarılı response time * 1.5, max 800ms
+      uint16_t newTimeout = min((uint16_t)(responseTime * 1.5), (uint16_t)800);
+      if (newTimeout > adaptiveTimeout && newTimeout < 800) {
+        adaptiveTimeout = newTimeout;
+      }
+      
+      // JSON parse et (statik bellek - heap fragmentation önleme)
+      StaticJsonDocument<512> doc;  // Shelly Gen2 response max ~400 bytes
       DeserializationError error = deserializeJson(doc, payload);
       
       if (!error) {
@@ -150,32 +177,26 @@ private:
             device.type = "Shelly Dimmer 2";
           }
           
-          Serial.printf("[Scanner] Found dimmer (Gen2): %s at %s\n", device.type.c_str(), ip.c_str());
-          return true;
+          return true;  // Dimmer found (Gen2)
         }
       }
     } else if (httpCode <= 0) {
-      // Connection failed - quick fail, hemen kes
-      http.end();
-      
-      // Gen1 de deneme, zaten bağlantı yok
-      return false;
+      // Connection failed - quick fail
+      return false;  // Bağlantı yok, Gen1 denemeye gerek yok
     }
     
-    http.end();
+    // Gen2 değilse Gen1 API'yi dene - /shelly
+    http->begin(*client, "http://" + ip + "/shelly");
+    http->setTimeout(adaptiveTimeout);  // Aynı adaptive timeout
     
-    // Gen1 API'yi dene - /shelly
-    http.begin(client, "http://" + ip + "/shelly");
-    http.setTimeout(800);  // 2s → 800ms
-    
-    httpCode = http.GET();
+    httpCode = http->GET();
     
     if (httpCode == 200) {
-      String payload = http.getString();
-      http.end();
+      String payload = http->getString();
+      // NOT: http->end() KALDIRILDI - keep-alive
       
-      // JSON parse et
-      JsonDocument doc;
+      // JSON parse et (statik bellek - heap fragmentation önleme)
+      StaticJsonDocument<256> doc;  // Shelly Gen1 response max ~200 bytes
       DeserializationError error = deserializeJson(doc, payload);
       
       if (!error) {
@@ -195,18 +216,12 @@ private:
             device.type = "Shelly Dimmer 2";
           }
           
-          Serial.printf("[Scanner] Found dimmer (Gen1): %s at %s\n", device.type.c_str(), ip.c_str());
-          return true;
+          return true;  // Dimmer found (Gen1)
         }
       }
-    } else if (httpCode <= 0) {
-      // Connection failed - quick fail
-      http.end();
-      return false;
     }
     
-    http.end();
-    return false;
+    return false;  // Dimmer değil
   }
   
 public:
@@ -215,10 +230,18 @@ public:
     // Mutex oluştur
     devicesMutex = xSemaphoreCreateMutex();
     
-    // Worker task handle'ları sıfırla
+    // Worker task handle'ları ve HTTP client'ları sıfırla
     for (int i = 0; i < NUM_PARALLEL_TASKS; i++) {
       workerTasks[i] = NULL;
+      workerHTTPClients[i] = nullptr;
+      workerWiFiClients[i] = nullptr;
     }
+    
+    // Adaptive timeout başlangıç değeri
+    adaptiveTimeout = 500;  // 500ms başla, öğren
+    
+    // Load saved devices from EEPROM on boot
+    loadDevicesFromEEPROM();
   }
   
   ~NetworkScanner() {
@@ -228,11 +251,21 @@ public:
       scanTaskHandle = NULL;
     }
     
-    // Worker task'ları temizle
+    // Worker task'ları ve HTTP client'ları temizle
     for (int i = 0; i < NUM_PARALLEL_TASKS; i++) {
       if (workerTasks[i] != NULL) {
         vTaskDelete(workerTasks[i]);
         workerTasks[i] = NULL;
+      }
+      if (workerHTTPClients[i] != nullptr) {
+        workerHTTPClients[i]->end();
+        delete workerHTTPClients[i];
+        workerHTTPClients[i] = nullptr;
+      }
+      if (workerWiFiClients[i] != nullptr) {
+        workerWiFiClients[i]->stop();
+        delete workerWiFiClients[i];
+        workerWiFiClients[i] = nullptr;
       }
     }
     
@@ -254,21 +287,24 @@ public:
       return;
     }
     
-    foundDevices.clear();
+    // Clear temporary scan list for new scan
+    currentScanDevices.clear();
     scanInProgress = true;
     scannedCount = 0;
     totalToScan = 254;
     nextIPToScan = 1;  // İlk IP
     
-    // IP bilgilerini cache'le
+    // IP bilgilerini cache'le (statik buffer - heap fragmentation önleme)
     localIPCache = WiFi.localIP();
     IPAddress gateway = WiFi.gatewayIP();
-    baseIP = gateway.toString();
-    int lastDot = baseIP.lastIndexOf('.');
-    baseIP = baseIP.substring(0, lastDot + 1);
+    String gatewayStr = gateway.toString();
+    int lastDot = gatewayStr.lastIndexOf('.');
+    String baseIPStr = gatewayStr.substring(0, lastDot + 1);
+    strncpy(baseIP, baseIPStr.c_str(), sizeof(baseIP) - 1);
+    baseIP[sizeof(baseIP) - 1] = '\0';  // Null terminate
     
     Serial.printf("[Scanner] Starting PARALLEL network scan with %d workers...\n", NUM_PARALLEL_TASKS);
-    Serial.printf("[Scanner] Scanning: %s1-%s254\n", baseIP.c_str(), baseIP.c_str());
+    Serial.printf("[Scanner] Scanning: %s1-%s254\n", baseIP, baseIP);
     
     // Coordinator task oluştur - 4KB stack, öncelik 1 (düşük), CPU Core 0
     xTaskCreatePinnedToCore(
@@ -280,6 +316,33 @@ public:
       &scanTaskHandle,      // Task handle
       0                     // CPU Core 0 (Core 1 web server için)
     );
+  }
+  
+  // Taramayı durdur
+  void stopScan() {
+    if (!scanInProgress) {
+      Serial.println("[Scanner] No scan in progress");
+      return;
+    }
+    
+    Serial.println("[Scanner] Stopping scan...");
+    
+    // Coordinator task'ı durdur
+    if (scanTaskHandle != NULL) {
+      vTaskDelete(scanTaskHandle);
+      scanTaskHandle = NULL;
+    }
+    
+    // Worker task'ları durdur
+    for (int i = 0; i < NUM_PARALLEL_TASKS; i++) {
+      if (workerTasks[i] != NULL) {
+        vTaskDelete(workerTasks[i]);
+        workerTasks[i] = NULL;
+      }
+    }
+    
+    scanInProgress = false;
+    Serial.printf("[Scanner] Scan stopped. Found %d device(s) so far\n", foundDevices.size());
   }
   
   // Tarama durumunu kontrol et
@@ -318,6 +381,35 @@ public:
     json += "}";
     
     return json;
+  }
+  
+  // Manuel IP ile cihaz ekle (Web UI'den gelen manuel bağlantılar için)
+  bool addManualDevice(const String& ip, const String& type) {
+    Serial.printf("[Scanner] Adding manual device: %s (%s)\n", ip.c_str(), type.c_str());
+    
+    // Check if already exists
+    for (const auto& dev : foundDevices) {
+      if (dev.ip == ip) {
+        Serial.println("[Scanner] Device already in list");
+        return true;  // Zaten listede, başarılı sayalım
+      }
+    }
+    
+    // Create device entry
+    DimmerDevice device;
+    device.ip = ip;
+    device.type = type;
+    device.model = type;  // Tip olarak model'i de set et
+    device.chipID = "manual";  // Manuel eklendi işareti
+    
+    // Add to list
+    foundDevices.push_back(device);
+    Serial.printf("[Scanner] Manual device added. Total devices: %d\n", foundDevices.size());
+    
+    // Save to EEPROM
+    saveDevicesToEEPROM();
+    
+    return true;
   }
 
 private:
@@ -363,11 +455,124 @@ private:
     
     // Tamamlandı
     scanInProgress = false;
-    Serial.printf("[Scanner] Scan complete! Found %d dimmer device(s) in total\n", foundDevices.size());
+    Serial.printf("[Scanner] Current scan found %d dimmer device(s)\n", currentScanDevices.size());
+    
+    // Merge current scan with existing devices
+    mergeDevices();
+    
+    Serial.printf("[Scanner] Total devices after merge: %d\n", foundDevices.size());
+    
+    // Save devices to EEPROM
+    saveDevicesToEEPROM();
     
     // Task'ı sonlandır
     scanTaskHandle = NULL;
     vTaskDelete(NULL);
+  }
+  
+  // ========== EEPROM PERSISTENCE ==========
+  
+  void mergeDevices() {
+    // Merge currentScanDevices into foundDevices
+    // Keep old devices from different networks
+    // Update/add devices from current network
+    
+    IPAddress gateway = WiFi.gatewayIP();
+    String currentBaseIP = gateway.toString();
+    int lastDot = currentBaseIP.lastIndexOf('.');
+    currentBaseIP = currentBaseIP.substring(0, lastDot + 1);
+    
+    // Remove old devices from current network that weren't found
+    auto it = foundDevices.begin();
+    while (it != foundDevices.end()) {
+      if (it->ip.startsWith(currentBaseIP)) {
+        // Check if this device was found in current scan
+        bool foundInScan = false;
+        for (const auto& scanned : currentScanDevices) {
+          if (it->ip == scanned.ip) {
+            foundInScan = true;
+            break;
+          }
+        }
+        
+        if (!foundInScan) {
+          Serial.printf("[Scanner] Removing unreachable device: %s\n", it->ip.c_str());
+          it = foundDevices.erase(it);
+        } else {
+          ++it;
+        }
+      } else {
+        // Keep devices from other networks
+        ++it;
+      }
+    }
+    
+    // Add new devices from current scan
+    for (const auto& scanned : currentScanDevices) {
+      bool exists = false;
+      for (const auto& existing : foundDevices) {
+        if (existing.ip == scanned.ip) {
+          exists = true;
+          break;
+        }
+      }
+      
+      if (!exists) {
+        Serial.printf("[Scanner] Adding new device: %s (%s)\n", scanned.ip.c_str(), scanned.type.c_str());
+        foundDevices.push_back(scanned);
+      }
+    }
+  }
+  
+  // EEPROM operations
+  void saveDevicesToEEPROM() {
+    prefs.begin("scanner", false);
+    
+    // Save device count
+    int count = foundDevices.size();
+    prefs.putInt("deviceCount", count);
+    
+    // Save each device (max 20 to prevent EEPROM overflow)
+    for (int i = 0; i < count && i < 20; i++) {
+      String prefix = "dev" + String(i) + "_";
+      prefs.putString((prefix + "ip").c_str(), foundDevices[i].ip);
+      prefs.putString((prefix + "type").c_str(), foundDevices[i].type);
+      prefs.putString((prefix + "model").c_str(), foundDevices[i].model);
+      prefs.putString((prefix + "chip").c_str(), foundDevices[i].chipID);
+    }
+    
+    prefs.end();
+    Serial.printf("[Scanner] Saved %d devices to EEPROM\n", count);
+  }
+  
+  void loadDevicesFromEEPROM() {
+    prefs.begin("scanner", true);  // Read-only
+    
+    int count = prefs.getInt("deviceCount", 0);
+    
+    if (count > 0) {
+      foundDevices.clear();
+      
+      for (int i = 0; i < count && i < 20; i++) {
+        String prefix = "dev" + String(i) + "_";
+        DimmerDevice dev;
+        dev.ip = prefs.getString((prefix + "ip").c_str(), "");
+        dev.type = prefs.getString((prefix + "type").c_str(), "");
+        dev.model = prefs.getString((prefix + "model").c_str(), "");
+        dev.chipID = prefs.getString((prefix + "chip").c_str(), "");
+        dev.isDimmer = true;  // Saved devices are always dimmers
+        
+        if (dev.ip != "") {
+          foundDevices.push_back(dev);
+        }
+      }
+      
+      Serial.printf("[Scanner] Loaded %d devices from EEPROM\n", foundDevices.size());
+    } else {
+      Serial.println("[Scanner] No saved devices in EEPROM");
+    }
+    
+    prefs.end();
   }
 };
 

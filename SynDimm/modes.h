@@ -1,107 +1,194 @@
 /*
  * SynDimm - Modes Library
- * Dimmer ve Safe modları için yönetim
+ * Dimmer, Shutter, Safe and Panic mode management
+ * Powered by SEU - Emek - SmartKraft
  */
 
 #ifndef MODES_H
 #define MODES_H
 
-#include "ky040.h"
+#include "encoder.h"
 #include <HTTPClient.h>
 #include <Preferences.h>
-#include "safe_lock.h"  // SafeLock sınıfını dahil et
+#include "safe_lock.h"  // Include SafeLock class
+#include "syndimm_buzzer.h"  // For buzzer
+#include "shutter.h"  // Include Shutter class
+
+// Mode enumeration (order matters: Left to Right)
+enum OperationMode {
+  MODE_DIMMER = 1,   // 1 beep
+  MODE_SHUTTER = 2,  // 2 beeps
+  MODE_SAFE = 3,     // 3 beeps
+  MODE_PANIC = 4     // 4 beeps (future implementation)
+};
 
 class ModeManager {
 private:
-  KY040* encoder;
-  SafeLock* safeLock;  // Safe Lock referansı
+  Encoder* encoder;
+  SafeLock* safeLock;  // Safe Lock reference
+  Shutter* shutter;    // Shutter reference
+  SynDimmBuzzer* buzzer;  // Buzzer reference (for mode change beep)
   
-  // Mod ayarları
+  // Current active mode
+  OperationMode currentMode;
+  OperationMode pendingMode;  // Temporary mode during selection
+  
+  // Legacy mode flags (for backward compatibility during transition)
   bool dimmerMode;
   bool safeMode;
-  int dimmRatio;  // 1-5 arası, her encoder tıkında kaç birim değişecek
   
-  // Matematiksel sayaçlar (KY040'dan taşındı)
-  long L_deger;          // Sol yönde ardışık sayaç
-  long R_deger;          // Sağ yönde ardışık sayaç
-  char lastDirection;    // Son yön ('L' veya 'R')
+  int dimmRatio;  // 1-5 range, how many units change per encoder tick
   
-  // ========== DIMMER MODE - CİHAZ ENTEGRASYONU ==========
-  String deviceIP;                    // Bağlı cihaz IP adresi
-  String deviceType;                  // Cihaz tipi (shelly-dimmer, shelly-dali, vb)
-  bool deviceConnected;               // Bağlantı durumu
-  bool deviceIson;                    // Cihaz açık/kapalı durumu
-  int deviceBrightness;               // Cihaz dimm değeri (0-100)
-  unsigned long lastDeviceSync;       // Son senkronizasyon zamanı
-  unsigned long lastDimmChange;       // Son dimm_sayac değişim zamanı
-  int lastSentBrightness;             // Cihaza son gönderilen değer
-  const unsigned long deviceSyncInterval = 1000;  // 1 saniyede bir polling
-  const unsigned long dimmerSendDelay = 150;      // Encoder durduğunda 150ms sonra gönder (daha responsive)
+  // Mathematical counters (moved from encoder)
+  long L_deger;          // Left direction consecutive counter
+  long R_deger;          // Right direction consecutive counter
+  char lastDirection;    // Last direction ('L' or 'R')
+  
+  // Mode change logic (moved from encoder.h)
+  bool modeSelectActive;        // Is mode select active
+  char modeChangeDirection;     // Last direction during mode change
+  bool encoderRotatedDuringPress;  // Did encoder rotate after P event
+  
+  // ========== DIMMER MODE - DEVICE INTEGRATION ==========
+  String deviceIP;                    // Connected device IP address
+  String deviceType;                  // Device type (shelly-dimmer, shelly-dali, etc)
+  bool deviceConnected;               // Connection status
+  bool deviceIson;                    // Device on/off status
+  int deviceBrightness;               // Device dimm value (0-100)
+  unsigned long lastDeviceSync;       // Last synchronization time
+  unsigned long lastDimmChange;       // Last dimm_sayac change time
+  int lastSentBrightness;             // Last value sent to device
+  const unsigned long deviceSyncIntervalActive = 500;    // Active mode: 500ms (fast response)
+  const unsigned long deviceSyncIntervalIdle = 5000;     // Idle mode: 5s (save bandwidth)
+  const unsigned long dimmerSendDelay = 150;             // Send 150ms after encoder stops
+  
+  // Helper: Play buzzer based on mode number
+  void playModeBuzzer(OperationMode mode) {
+    if (!buzzer) return;
+    
+    switch(mode) {
+      case MODE_DIMMER:
+        buzzer->playShort();  // 1 beep
+        break;
+      case MODE_SHUTTER:
+        buzzer->playDouble();  // 2 beeps
+        break;
+      case MODE_SAFE:
+        buzzer->playTriple();  // 3 beeps
+        break;
+      case MODE_PANIC:
+        // Future: 4 beeps
+        break;
+    }
+  }
   
 public:
-  ModeManager(KY040* enc) : encoder(enc), safeLock(nullptr), dimmerMode(true), safeMode(false), dimmRatio(3), 
-                            L_deger(0), R_deger(0), lastDirection(0),
+  ModeManager(Encoder* enc) : encoder(enc), safeLock(nullptr), shutter(nullptr), buzzer(nullptr), 
+                            currentMode(MODE_DIMMER), pendingMode(MODE_DIMMER),
+                            dimmerMode(true), safeMode(false), dimmRatio(3), 
+                            L_deger(0), R_deger(0), lastDirection(0), 
+                            modeSelectActive(false), modeChangeDirection(0), encoderRotatedDuringPress(false),
                             deviceIP(""), deviceType(""), deviceConnected(false), deviceIson(false), 
                             deviceBrightness(0), lastDeviceSync(0), lastDimmChange(0), 
                             lastSentBrightness(-1) {}
   
+  void setBuzzer(SynDimmBuzzer* bz) {
+    buzzer = bz;
+  }
+  
+  void setShutter(Shutter* sh) {
+    shutter = sh;
+  }
+  
   void begin() {
-    // Başlangıç ayarları
+    // Initial settings
     L_deger = 0;
     R_deger = 0;
     lastDirection = 0;
     
-    // Kaydedilmiş ayarları yükle
+    // Load saved settings
     Preferences prefs;
     prefs.begin("syndimm", true);
-    dimmRatio = prefs.getInt("dimmRatio", 1);  // Varsayılan 1
+    dimmRatio = prefs.getInt("dimmRatio", 1);  // Default 1
     
-    // Son aktif modu yükle (elektrik gidip gelse devam etsin)
-    String lastMode = prefs.getString("lastMode", "dimmer");
-    if (lastMode == "safe") {
-      dimmerMode = false;
-      safeMode = true;
-      Serial.println("Son mod yüklendi: Safe Mode");
-    } else {
-      dimmerMode = true;
-      safeMode = false;
-      Serial.println("Son mod yüklendi: Dimmer Mode");
-    }
+    // Load last active mode (continue after power loss)
+    int savedMode = prefs.getInt("currentMode", MODE_DIMMER);
+    currentMode = (OperationMode)savedMode;
+    pendingMode = currentMode;
+    
+    // Update legacy flags for compatibility
+    dimmerMode = (currentMode == MODE_DIMMER);
+    safeMode = (currentMode == MODE_SAFE);
+    
+    // DEBUG REMOVED: Last mode loaded
     
     prefs.end();
     
-    // dimm_sayac başlangıç değerini 100 yap
+    // Set dimm_sayac initial value to 100
     encoder->set_dimm_sayac(100);
     
-    Serial.println("Dimmer başlangıç: 100");
-    Serial.print("Dimm Ratio: ");
-    Serial.println(dimmRatio);
-    Serial.println("Matematiksel sayaçlar sıfırlandı (L_deger, R_deger)");
+    // DEBUG REMOVED: Dimmer start, ratio, counters
     
-    // Kaydedilmiş cihazı yükle
+    // Load saved device
     loadDevice();
   }
   
-  // Mod seçimi
+  // Get mode name as string
+  String getModeName(OperationMode mode) {
+    switch(mode) {
+      case MODE_DIMMER: return "Dimmer";
+      case MODE_SHUTTER: return "Shutter";
+      case MODE_SAFE: return "Safe";
+      case MODE_PANIC: return "Panic";
+      default: return "Unknown";
+    }
+  }
+  
+  // Mode selection (legacy compatibility)
+  // CRITICAL: Mode changes NEVER disconnect the device
+  // Device connection persists across all modes and reboots
   void setDimmerMode(bool enable) {
     if (enable) {
+      currentMode = MODE_DIMMER;
       dimmerMode = true;
       safeMode = false;
-      Serial.println("Mode: Dimmer");
+      // DEBUG REMOVED
       
-      // Mod değişikliğini EEPROM'a kaydet
-      saveModeToEEPROM("dimmer");
+      // Save to EEPROM
+      Preferences prefs;
+      prefs.begin("syndimm", false);
+      prefs.putInt("currentMode", currentMode);
+      prefs.end();
+    }
+  }
+  
+  void setShutterMode(bool enable) {
+    if (enable) {
+      currentMode = MODE_SHUTTER;
+      dimmerMode = false;
+      safeMode = false;
+      // DEBUG REMOVED
+      
+      // Save to EEPROM
+      Preferences prefs;
+      prefs.begin("syndimm", false);
+      prefs.putInt("currentMode", currentMode);
+      prefs.end();
     }
   }
   
   void setSafeMode(bool enable) {
     if (enable) {
+      currentMode = MODE_SAFE;
       safeMode = true;
       dimmerMode = false;
-      Serial.println("Mode: Safe");
+      // DEBUG REMOVED
       
-      // Mod değişikliğini EEPROM'a kaydet
-      saveModeToEEPROM("safe");
+      // Save to EEPROM
+      Preferences prefs;
+      prefs.begin("syndimm", false);
+      prefs.putInt("currentMode", currentMode);
+      prefs.end();
     }
   }
   
@@ -109,10 +196,10 @@ public:
   void toggleMode() {
     if (dimmerMode) {
       setSafeMode(true);
-      Serial.println("[Mode] Dimmer -> Safe (Long Press)");
+      // DEBUG REMOVED
     } else {
       setDimmerMode(true);
-      Serial.println("[Mode] Safe -> Dimmer (Long Press)");
+      // DEBUG REMOVED
     }
   }
   
@@ -135,91 +222,181 @@ public:
       prefs.putInt("dimmRatio", ratio);
       prefs.end();
       
-      Serial.print("Dimm ratio kaydedildi: ");
-      Serial.println(dimmRatio);
+      // DEBUG REMOVED
     }
   }
   
   int getDimmRatio() { return dimmRatio; }
   
-  // Encoder event'lerini işle ve matematiksel işlemleri yap
+  // Process encoder events and perform mathematical operations - SEU
   void processEncoderEvent(char event) {
-    if (event == 0) return;  // Boş event
+    if (event == 0) return;  // Empty event
     
-    // Mod değiştirme eventi (3+ saniye basılı tutup döndür ve bırak)
-    if (event == 'M') {
-      // Hangi yöne çevrildiğini kontrol et
-      char direction = encoder->getModeSelectDirection();
-      
-      if (direction == 'L') {
-        // Sol çevirme: Safe moduna geç (zaten Safe'deysen hiçbir şey yapma)
-        if (!safeMode) {
-          setSafeMode(true);
-          Serial.println("[Mode] Dimmer -> Safe (Left turn)");
-        } else {
-          Serial.println("[Mode] Already in Safe mode (Left turn ignored)");
-        }
-      } else if (direction == 'R') {
-        // Sağ çevirme: Dimmer moduna geç (zaten Dimmer'daysan hiçbir şey yapma)
-        if (!dimmerMode) {
-          setDimmerMode(true);
-          Serial.println("[Mode] Safe -> Dimmer (Right turn)");
-        } else {
-          Serial.println("[Mode] Already in Dimmer mode (Right turn ignored)");
-        }
+    // DEBUG REMOVED: Event received
+    
+    // === NEW MODE CHANGE LOGIC: DIMMER(1) -> SHUTTER(2) -> SAFE(3) -> PANIC(4) ===
+    
+    // 'P' event = Long press (3+ seconds)
+    if (event == 'P') {
+      // If mode select already active, this is CONFIRM
+      if (modeSelectActive && encoderRotatedDuringPress) {
+        Serial.println("[Mode] *** MODE CONFIRMED *** - Switching to: " + getModeName(pendingMode));
+        
+        // Apply the pending mode
+        currentMode = pendingMode;
+        
+        // Update legacy flags
+        dimmerMode = (currentMode == MODE_DIMMER);
+        safeMode = (currentMode == MODE_SAFE);
+        
+        // Save to EEPROM
+        Preferences prefs;
+        prefs.begin("syndimm", false);
+        prefs.putInt("currentMode", currentMode);
+        prefs.end();
+        
+        // Play final buzzer
+        playModeBuzzer(currentMode);
+        
+        // DEBUG REMOVED: Active mode
+        
+        // Exit mode select
+        modeSelectActive = false;
+        encoderRotatedDuringPress = false;
+        return;
       }
+      
+      // First 'P' press - START mode select
+      modeSelectActive = true;
+      pendingMode = currentMode;  // Start from current mode
+      encoderRotatedDuringPress = false;
+      
+      Serial.println("[Mode] *** MODE SELECT ACTIVE ***");
+      Serial.print("[Mode] Current: ");
+      Serial.print(getModeName(currentMode));
+      Serial.println(" - Rotate to select, hold 3s to confirm");
       return;
     }
     
-    // Mod seçme modunda encoder eventlerini yok say
-    if (encoder->isModeSelectActive()) {
-      Serial.println("[Mode] Mode select active - Encoder disabled");
-      return;
+    // In mode select: handle LEFT/RIGHT rotation
+    if (modeSelectActive) {
+      if (event == 'L') {
+        // LEFT: previous mode (with boundary check)
+        OperationMode newMode = pendingMode;
+        
+        if (pendingMode == MODE_SHUTTER) {
+          newMode = MODE_DIMMER;  // 2 -> 1
+        } else if (pendingMode == MODE_SAFE) {
+          newMode = MODE_SHUTTER;  // 3 -> 2
+        } else if (pendingMode == MODE_PANIC) {
+          newMode = MODE_SAFE;  // 4 -> 3
+        }
+        // If MODE_DIMMER, stay at MODE_DIMMER (boundary)
+        
+        if (newMode != pendingMode) {
+          pendingMode = newMode;
+          encoderRotatedDuringPress = true;
+          playModeBuzzer(pendingMode);  // Play beeps for target mode
+          // DEBUG REMOVED: LEFT
+        } else {
+          // DEBUG REMOVED: Boundary
+        }
+        return;
+        
+      } else if (event == 'R') {
+        // RIGHT: next mode (with boundary check)
+        OperationMode newMode = pendingMode;
+        
+        if (pendingMode == MODE_DIMMER) {
+          newMode = MODE_SHUTTER;  // 1 -> 2
+        } else if (pendingMode == MODE_SHUTTER) {
+          newMode = MODE_SAFE;  // 2 -> 3
+        } else if (pendingMode == MODE_SAFE) {
+          newMode = MODE_PANIC;  // 3 -> 4 (not implemented yet)
+        }
+        // If MODE_PANIC or MODE_SAFE (until panic ready), stay at MODE_SAFE
+        
+        // Block transition to PANIC (not implemented)
+        if (newMode == MODE_PANIC) {
+          // DEBUG REMOVED: PANIC not implemented
+          return;
+        }
+        
+        if (newMode != pendingMode) {
+          pendingMode = newMode;
+          encoderRotatedDuringPress = true;
+          playModeBuzzer(pendingMode);  // Play beeps for target mode
+          // DEBUG REMOVED: RIGHT
+        } else {
+          // DEBUG REMOVED: Boundary
+        }
+        return;
+        
+      } else if (event == 'B') {
+        // Short press - CANCEL mode select
+        // DEBUG REMOVED: Cancelled
+        pendingMode = currentMode;  // Reset to current
+        modeSelectActive = false;
+        encoderRotatedDuringPress = false;
+      }
+      return;  // In mode select, don't process normal operations
     }
     
-    // Yön sayaçlarını güncelle (KY040'dan taşındı)
+    // === NORMAL MODE OPERATIONS (based on active mode) ===
+    
+    // Update direction counters (moved from encoder)
     if (event == 'L') {
       if (lastDirection != 'L') {
-        R_deger = 0;  // Yön değişti, karşı sayacı sıfırla
+        R_deger = 0;  // Direction changed, reset opposite counter
       }
       L_deger++;
       lastDirection = 'L';
       
     } else if (event == 'R') {
       if (lastDirection != 'R') {
-        L_deger = 0;  // Yön değişti, karşı sayacı sıfırla
+        L_deger = 0;  // Direction changed, reset opposite counter
       }
       R_deger++;
       lastDirection = 'R';
     }
     
-    // Mod'a göre işlem yap
-    if (dimmerMode) {
-      processDimmerMode(event);
-    } else if (safeMode) {
-      processSafeMode(event);
+    // Process based on current mode
+    switch(currentMode) {
+      case MODE_DIMMER:
+        processDimmerMode(event);
+        break;
+      case MODE_SHUTTER:
+        if (shutter) shutter->processEncoderEvent(event);
+        break;
+      case MODE_SAFE:
+        processSafeMode(event);
+        break;
+      case MODE_PANIC:
+        // Future implementation
+        break;
     }
   }
   
-  // Yön sayaçlarını oku
+  // Direction counters
   long getLeftCount() { return L_deger; }
   long getRightCount() { return R_deger; }
   
+  // Current mode getter
+  OperationMode getCurrentMode() { return currentMode; }
+  String getCurrentModeName() { return getModeName(currentMode); }
+  
 private:
+  // Dimmer mode processing - Emek
   void processDimmerMode(char event) {
     int currentValue = encoder->get_dimm_sayac();
     
     if (event == 'L') {
-      // Sol: azalt
+      // Left: decrease
       int newValue = currentValue - dimmRatio;
       if (newValue < 0) newValue = 0;
       encoder->set_dimm_sayac(newValue);
-      lastDimmChange = millis();  // Değişiklik zamanını kaydet
-      Serial.print("Dimmer: ");
-      Serial.print(newValue);
-      Serial.print(" (L x");
-      Serial.print(dimmRatio);
-      Serial.println(")");
+      lastDimmChange = millis();  // Record change time
+      // DEBUG REMOVED: Dimmer value
       
     } else if (event == 'R') {
       // Sağ: arttır
@@ -227,18 +404,14 @@ private:
       if (newValue > 100) newValue = 100;
       encoder->set_dimm_sayac(newValue);
       lastDimmChange = millis();  // Değişiklik zamanını kaydet
-      Serial.print("Dimmer: ");
-      Serial.print(newValue);
-      Serial.print(" (R x");
-      Serial.print(dimmRatio);
-      Serial.println(")");
+      // DEBUG REMOVED: Dimmer value
       
     } else if (event == 'B') {
       // Buton: Cihaz toggle (açık/kapalı)
       if (deviceConnected) {
         toggleDevice();
       } else {
-        Serial.println("Dimmer Button: Cihaz bagli degil");
+        // DEBUG REMOVED: Device not connected
       }
     }
   }
@@ -246,7 +419,7 @@ private:
   void processSafeMode(char event) {
     // Safe mod: Encoder hareketlerini Safe Lock'a yönlendir
     if (safeLock == nullptr) {
-      Serial.println("Safe Lock not initialized!");
+      Serial.println("[ERROR] Safe Lock not initialized!");
       return;
     }
     
@@ -264,7 +437,7 @@ private:
     } else if (event == 'B') {
       // Buton basıldı - Safe Lock'a bildir
       safeLock->onButtonPress();
-      Serial.println("Safe: Button pressed");
+      // DEBUG REMOVED: Button pressed
     }
   }
 
@@ -281,15 +454,15 @@ public:
     HTTPClient http;
     String url = "http://" + ip + "/light/0";
     http.begin(url);
-    http.setTimeout(2000);  // 3000ms → 2000ms (ilk bağlantıda timeout biraz daha uzun olabilir)
+    http.setTimeout(500);  // CRITICAL: 500ms - fast fail, non-blocking
     
     int httpCode = http.GET();
     
     if (httpCode == 200) {
       String payload = http.getString();
       deviceConnected = true;
-      Serial.println("Cihaz baglandi: " + ip + " (" + type + ")");
-      Serial.println("Response: " + payload);
+      Serial.println("[Device] Connected: " + ip + " (" + type + ")");
+      // DEBUG REMOVED: Response payload
       
       // İlk durumu oku
       parseDeviceStatus(payload);
@@ -300,7 +473,7 @@ public:
       http.end();
       return true;
     } else {
-      Serial.println("Cihaz baglanti hatasi: " + String(httpCode));
+      Serial.println("[ERROR] Connection failed: " + String(httpCode));
       http.end();
       return false;
     }
@@ -311,7 +484,10 @@ public:
     return connectDevice(ip, "shelly-dimmer");
   }
   
-  // Cihaz bağlantısını kes
+  // CRITICAL: Disconnect device connection and remove from EEPROM
+  // WARNING: This should ONLY be called by user action via web UI
+  // NEVER call this on mode change or reboot!
+  // Device connection must persist across all modes and reboots
   void disconnectDevice() {
     deviceConnected = false;
     deviceIP = "";
@@ -319,14 +495,14 @@ public:
     deviceIson = false;
     deviceBrightness = 0;
     
-    // Kaydedilmiş cihaz bilgisini sil
+    // Remove saved device from EEPROM
     Preferences prefs;
     prefs.begin("syndimm", false);
     prefs.remove("deviceIP");
     prefs.remove("deviceType");
     prefs.end();
     
-    Serial.println("Cihaz baglanti kesildi ve kayit silindi");
+    Serial.println("[Modes] *** DEVICE DISCONNECTED BY USER *** - Connection removed from EEPROM");
   }
   
   // Geriye uyumluluk için
@@ -341,7 +517,7 @@ public:
     HTTPClient http;
     String url = "http://" + deviceIP + "/light/0";
     http.begin(url);
-    http.setTimeout(3000);  // 1500ms → 3000ms (daha güvenilir)
+    http.setTimeout(500);  // CRITICAL: 500ms - fast fail, non-blocking
     
     int httpCode = http.GET();
     
@@ -349,7 +525,7 @@ public:
       String payload = http.getString();
       parseDeviceStatus(payload);
     } else {
-      Serial.print("Cihaz okuma hatasi: ");
+      Serial.print("[ERROR] Device read failed: ");
       Serial.print(httpCode);
       Serial.print(" (");
       Serial.print(deviceIP);
@@ -358,7 +534,7 @@ public:
       static int failCount = 0;
       failCount++;
       if (failCount > 3) {
-        Serial.println("3 basarisiz deneme - baglanti kesiliyor");
+        Serial.println("[ERROR] 3 failed attempts - disconnecting");
         disconnectDevice();
         failCount = 0;
       }
@@ -390,7 +566,7 @@ public:
       url = "http://" + deviceIP + "/light/0?turn=off&transition=0";
       if (deviceIson) {  // Sadece açıksa kapat
         deviceIson = false;
-        Serial.println("Cihaz kapatiliyor (brightness=0)");
+        // DEBUG REMOVED: Device turning off
       } else {
         http.end();
         return;  // Zaten kapalı, istek gönderme
@@ -400,7 +576,7 @@ public:
       if (!deviceIson) {
         url = "http://" + deviceIP + "/light/0?turn=on&brightness=" + String(currentBrightness) + "&transition=0";
         deviceIson = true;
-        Serial.println("Cihaz aciliyor ve brightness ayarlaniyor: " + String(currentBrightness));
+        // DEBUG REMOVED: Device turning on
       } else {
         // Zaten açık, sadece brightness ayarla
         url = "http://" + deviceIP + "/light/0?brightness=" + String(currentBrightness) + "&transition=0";
@@ -408,15 +584,15 @@ public:
     }
     
     http.begin(url);
-    http.setTimeout(1500);
+    http.setTimeout(500);  // CRITICAL: 500ms - fast fail, non-blocking
     
     int httpCode = http.GET();
     
     if (httpCode == 200) {
       lastSentBrightness = currentBrightness;
-      Serial.println("Cihaz brightness gonderildi: " + String(currentBrightness));
+      // DEBUG REMOVED: Brightness sent
     } else {
-      Serial.println("Cihaz brightness gonderme hatasi: " + String(httpCode));
+      Serial.println("[ERROR] Brightness send failed: " + String(httpCode));
     }
     
     http.end();
@@ -443,20 +619,20 @@ public:
     }
     
     http.begin(url);
-    http.setTimeout(1500);  // 2000ms → 1500ms
+    http.setTimeout(500);  // CRITICAL: 500ms - fast fail, non-blocking
     
     int httpCode = http.GET();
     
     if (httpCode == 200) {
       deviceIson = !deviceIson;
-      Serial.println("Cihaz toggle: " + command + " (" + deviceType + ")");
+      Serial.println("[Device] Toggle: " + command + " (" + deviceType + ")");
       
       // Açıldıysa mevcut dimm_sayac'ı gönder (delay yerine flag kullan)
       if (deviceIson) {
         lastDimmChange = millis() - dimmerSendDelay + 100; // 100ms sonra gönderilecek
       }
     } else {
-      Serial.println("Cihaz toggle hatasi: " + String(httpCode));
+      Serial.println("[ERROR] Toggle failed: " + String(httpCode));
     }
     
     http.end();
@@ -491,7 +667,7 @@ public:
       // Encoder'ı SADECE cihazdan farklı bir değer geldiğinde ve encoder durgunken güncelle
       if (newBrightness != encoder->get_dimm_sayac() && deviceIson && lastDimmChange == 0) {
         encoder->set_dimm_sayac(newBrightness);
-        Serial.println("Encoder cihazla senkronize edildi: " + String(newBrightness));
+        // DEBUG REMOVED: Encoder synced
       }
     }
   }
@@ -501,48 +677,67 @@ public:
     parseDeviceStatus(json);
   }
   
-  // Loop içinde çağrılacak (senkronizasyon)
+  // CRITICAL: Device synchronization - called every loop()
+  // This ensures persistent connection across all modes and reboots
+  // Auto-reconnect mechanism: retries every 5 seconds if connection lost
   void updateDevice() {
-    if (!deviceConnected) {
-      // Eğer IP var ama bağlı değilse, otomatik bağlanmayı dene
+    // If device not connected but IP exists, auto-reconnect
+    if (!deviceConnected && deviceIP != "") {
       static unsigned long lastConnectAttempt = 0;
-      if (deviceIP != "" && millis() - lastConnectAttempt > 5000) {
-        Serial.println("Kaydedilmis cihaza baglaniyor: " + deviceIP);
+      unsigned long now = millis();
+      
+      // İlk deneme için özel durum (lastConnectAttempt == 0)
+      // veya 5 saniye geçmişse tekrar dene
+      if (lastConnectAttempt == 0 || (now - lastConnectAttempt > 5000)) {
+        Serial.println("[Modes] Auto-reconnecting: " + deviceIP);
         connectDevice(deviceIP, deviceType);
-        lastConnectAttempt = millis();
+        lastConnectAttempt = now;
       }
       return;
     }
     
     unsigned long now = millis();
     
-    // Encoder durdu mu? 150ms sonra cihaza gönder
-    if (lastDimmChange > 0 && now - lastDimmChange > dimmerSendDelay) {
-      syncToDevice();
-      lastDimmChange = 0;  // Sıfırla
+    // Only sync in DIMMER mode (encoder controls brightness)
+    if (currentMode != MODE_DIMMER) {
+      // Keep connection alive with periodic polling even in other modes (5s idle)
+      if (now - lastDeviceSync > deviceSyncIntervalIdle * 2) {
+        syncFromDevice();
+        lastDeviceSync = now;
+      }
+      return;
     }
     
-    // Cihazdan durum oku - AMA SADECE ENCODER DURGUNKEN!
-    // (Encoder aktifken cihazdan gelen değer encoder'ı override etmesin)
-    if (lastDimmChange == 0 && now - lastDeviceSync > deviceSyncInterval) {
+    // DIMMER MODE: Active synchronization
+    // If encoder stopped rotating, send value to device after 150ms
+    if (lastDimmChange > 0 && now - lastDimmChange > dimmerSendDelay) {
+      syncToDevice();
+      lastDimmChange = 0;  // Reset
+    }
+    
+    // Poll device status - Event-driven interval
+    // Active: 500ms (encoder moving), Idle: 5s (encoder idle)
+    unsigned long dynamicInterval = (lastDimmChange > 0) ? deviceSyncIntervalActive : deviceSyncIntervalIdle;
+    
+    if (lastDimmChange == 0 && now - lastDeviceSync > dynamicInterval) {
       syncFromDevice();
       lastDeviceSync = now;
     }
   }
   
-  // Geriye uyumluluk için
+  // For backward compatibility - SmartKraft
   void updateShelly() {
     updateDevice();
   }
   
-  // Getter'lar
+  // Getters
   bool isDeviceConnected() { return deviceConnected; }
   String getDeviceIP() { return deviceIP; }
   String getDeviceType() { return deviceType; }
   bool getDeviceIson() { return deviceIson; }
   int getDeviceBrightness() { return deviceBrightness; }
   
-  // Web arayüzünden değişiklik yapıldığında çağrılacak
+  // Called when changes are made from web interface
   void triggerDimmChange() {
     lastDimmChange = millis();
   }
@@ -552,30 +747,27 @@ public:
   String getShellyIP() { return deviceIP; }
   bool getShellyIson() { return deviceIson; }
   int getShellyBrightness() { return deviceBrightness; }
-
-private:
-  // ========== PREFERENCES FONKSİYONLARI ==========
   
-  // Aktif modu kaydet (elektrik gidip gelse devam etsin)
-  void saveModeToEEPROM(String mode) {
-    Preferences prefs;
-    prefs.begin("syndimm", false);
-    prefs.putString("lastMode", mode);
-    prefs.end();
-    Serial.println("Aktif mod kaydedildi: " + mode);
-  }
-  
-  // Cihaz bilgilerini kaydet
+  // CRITICAL: Save device to EEPROM for persistent connection
+  // This ensures device reconnects after reboot in any mode
+  // Called automatically when device connects successfully
   void saveDevice(String ip, String type) {
     Preferences prefs;
     prefs.begin("syndimm", false);
     prefs.putString("deviceIP", ip);
     prefs.putString("deviceType", type);
     prefs.end();
-    Serial.println("Cihaz kaydedildi: " + ip + " (" + type + ")");
+    Serial.println("[Modes] *** DEVICE SAVED TO EEPROM *** IP: " + ip + " Type: " + type);
+    Serial.println("[Modes] Device will auto-reconnect after reboot in any mode");
   }
+
+private:
+  // ========== PREFERENCES FUNCTIONS ==========
   
   // Kaydedilmiş cihazı yükle (otomatik bağlantı loop'ta yapılacak)
+  // CRITICAL: Load saved device from EEPROM on boot
+  // This ensures device reconnects automatically after reboot
+  // Called once in begin() - updateDevice() handles reconnection
   void loadDevice() {
     Preferences prefs;
     prefs.begin("syndimm", true);  // Read-only
@@ -584,13 +776,13 @@ private:
     prefs.end();
     
     if (savedIP != "") {
-      Serial.println("Kaydedilmis cihaz bulundu: " + savedIP + " (" + savedType + ")");
+      Serial.println("[Modes] *** SAVED DEVICE FOUND *** IP: " + savedIP + " Type: " + savedType);
+      Serial.println("[Modes] Auto-reconnect will start in 5 seconds via updateDevice()");
       deviceIP = savedIP;
       deviceType = savedType;
-      // Otomatik bağlantı için deviceConnected false kalacak
-      // İlk updateDevice() çağrısında bağlanmaya çalışacak
+      deviceConnected = false;  // Will be set to true by updateDevice() auto-reconnect
     } else {
-      Serial.println("Kaydedilmis cihaz yok");
+      Serial.println("[Modes] No saved device - Connect via web UI");
     }
   }
 };

@@ -1,6 +1,10 @@
 /*
  * SynDimm - Smart Dimmer Controller
- * Standart WebServer kullanarak
+ * Using standard WebServer
+ * 
+ * Powered by SEU - Emek - SmartKraft
+ * Author: Smart Engineering Unit
+ * https://github.com/smartkraft
  */
 
 #include <WiFi.h>
@@ -8,12 +12,14 @@
 #include <ESPmDNS.h>
 
 #include "version.h"
-#include "ky040.h"
+#include "encoder.h"
+#include "shutter.h"
 #include "modes.h"
 #include "syndimm_net.h"
 #include "syndimm_buzzer.h"
 #include "syndimm_ota.h"
 #include "syndimm_scanner.h"
+#include "syndimm_wifi_watchdog.h"
 #include "webui.h"
 #include "webstyle.h"
 #include "webscript.h"
@@ -22,21 +28,27 @@
 #include "safe_lock_eeprom.h"
 #include "safe_lock_api.h"
 
-KY040 encoder(19, 20, 18);  // CLK=19, DT=20, SW=18 
+Encoder encoder(19, 20, 18);  // CLK=19, DT=20, SW=18 
+Shutter shutter(&encoder);
 ModeManager modes(&encoder);
 SynDimmNet net;
 SynDimmBuzzer buzzer;
 SynDimmOTA ota;
 NetworkScanner scanner;
+SynDimmWiFiWatchdog wifiWatchdog;
 WebServer server(80);
 
-// mDNS helper fonksiyon
+// 12-hour reboot timer - prevents long-term instability
+const unsigned long REBOOT_INTERVAL = 12UL * 60UL * 60UL * 1000UL;  // 12 hours in ms
+unsigned long bootTime = 0;
+
+// mDNS helper function
 void setupMDNS() {
   String hostname;
   
-  // WiFi bağlıysa ve custom local domain varsa onu kullan
+  // If WiFi is connected and custom local domain exists, use it
   if (WiFi.status() == WL_CONNECTED) {
-    // Aktif WiFi'nin local domain'ini kontrol et
+    // Check active WiFi local domain
     String customDomain = "";
     if (WiFi.SSID() == net.getWiFi1SSID() && net.getWiFi1Local().length() > 0) {
       customDomain = net.getWiFi1Local();
@@ -46,7 +58,7 @@ void setupMDNS() {
     
     if (customDomain.length() > 0) {
       hostname = customDomain;
-      // Eğer kullanıcı .local ile kaydettiyse çıkar
+      // Remove .local if user saved it with extension
       if (hostname.endsWith(".local")) {
         hostname = hostname.substring(0, hostname.length() - 6);
       }
@@ -54,13 +66,13 @@ void setupMDNS() {
       hostname = "syndimm-" + net.getChipID();
     }
   } else {
-    // AP modda default hostname
+    // Default hostname in AP mode
     hostname = "syndimm-" + net.getChipID();
   }
   
   hostname.toLowerCase();
   
-  // mDNS'i yeniden başlat
+  // Restart mDNS
   MDNS.end();
   if (MDNS.begin(hostname.c_str())) {
     MDNS.addService("http", "tcp", 80);
@@ -72,36 +84,36 @@ void setupMDNS() {
   }
 }
 
-// Safe Lock nesneleri
+// Safe Lock objects
 SafeLock safeLock;
 SafeLockEEPROM safeLockEEPROM;
 SafeLockAPI safeLockAPI;
 
-// API trigger flag (non-blocking için)
+// API trigger flag (for non-blocking execution)
 volatile bool pendingApiTrigger = false;
 volatile uint8_t pendingPasswordIndex = 0;
 
-// Safe Lock şifre eşleştiğinde çağrılacak callback
+// Callback triggered when Safe Lock password matches
 void onSafeLockPasswordMatch(uint8_t passwordIndex) {
   Serial.print("[Callback] Password matched: #");
   Serial.println(passwordIndex);
   Serial.flush();
   
-  // API tetikleme flag'ini set et (gerçek tetikleme loop'ta yapılacak)
-  // Buzzer API sonucuna göre çalacak
+  // Set API trigger flag (actual trigger will happen in loop)
+  // Buzzer will sound based on API result
   pendingApiTrigger = true;
   pendingPasswordIndex = passwordIndex;
   
-  Serial.println("[Callback] Flag set edildi");
+  Serial.println("[Callback] Flag set");
   Serial.flush();
   
-  Serial.println("[Callback] Tamamlandi");
+  Serial.println("[Callback] Complete");
   Serial.flush();
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);  // 2000ms -> 1000ms (daha kısa başlangıç)
+  delay(1000);  // 2000ms -> 1000ms (faster startup)
   Serial.println("===============================");
   Serial.print("=== ");
   Serial.print(PROJECT_NAME);
@@ -114,27 +126,36 @@ void setup() {
   Serial.println(BUILD_TIME);
   Serial.println("===============================");
   
-  // WiFi performans ayarları - TAM PERFORMANS
-  WiFi.setSleep(false);  // WiFi uyku modu KAPALI
-  setCpuFrequencyMhz(160);  // CPU 160MHz - tam hız
+  // WiFi performance settings - FULL PERFORMANCE
+  WiFi.setSleep(false);  // WiFi sleep mode OFF
+  setCpuFrequencyMhz(160);  // CPU 160MHz - full speed
   Serial.println("CPU: 160MHz, WiFi sleep: OFF");
   
-  // Buzzer başlat
+  // Initialize buzzer
   buzzer.begin();
   
   encoder.begin();
   Serial.println("Encoder OK");
   
+  // Initialize shutter
+  shutter.begin();
+  Serial.println("Shutter OK");
+  
   modes.begin();
+  modes.setBuzzer(&buzzer);  // Connect buzzer to modes (for mode change beep)
+  modes.setShutter(&shutter);  // Connect shutter to modes
   Serial.println("Modes OK");
   
-  // Safe Lock başlat
+  // Set boot time for 12h reboot timer
+  bootTime = millis();
+  
+  // Initialize Safe Lock
   safeLock.begin();
   safeLockEEPROM.begin();
   safeLockAPI.setSafeLock(&safeLock);
   safeLockEEPROM.loadToSafeLock(safeLock);
   
-  // TEST: Eğer hiç şifre yoksa, test şifresi ekle
+  // TEST: If no password exists, add test password
   bool hasPassword = false;
   for (uint8_t i = 0; i < 5; i++) {
     if (safeLock.isPasswordValid(i)) {
@@ -143,7 +164,7 @@ void setup() {
     }
   }
   
-  // TEST ŞİFRESİ KALDIRILDI - Kullanıcı web'den ekleyecek
+  // TEST PASSWORD REMOVED - User will add via web
   // if (!hasPassword) { ... }
   
   if (hasPassword) {
@@ -155,7 +176,7 @@ void setup() {
         Serial.print(": ");
         Serial.println(safeLock.getPassword(i));
         
-        // API URL'sini de göster
+        // Show API URL as well
         ApiConfig cfg = safeLockEEPROM.getApiConfig(i);
         Serial.print("    API URL: ");
         Serial.println(cfg.url);
@@ -168,94 +189,122 @@ void setup() {
   }
   
   safeLock.setPasswordMatchCallback(onSafeLockPasswordMatch);
-  modes.setSafeLock(&safeLock);  // Safe Lock'u modes'a bağla
+  modes.setSafeLock(&safeLock);  // Connect Safe Lock to modes
   Serial.println("Safe Lock OK");
   
   net.begin();
   net.autoConnect();
   Serial.println("Network OK");
   
-  // OTA sistemi başlat (WiFi'den sonra)
+  // Initialize WiFi watchdog (after WiFi connected)
+  if (net.getWiFi1SSID().length() > 0) {
+    wifiWatchdog.begin(net.getWiFi1SSID().c_str(), net.getWiFi1Pass().c_str());
+  } else if (net.getWiFi2SSID().length() > 0) {
+    wifiWatchdog.begin(net.getWiFi2SSID().c_str(), net.getWiFi2Pass().c_str());
+  }
+  Serial.println("WiFi Watchdog OK");
+  
+  // Initialize OTA system (after WiFi)
   ota.begin();
   Serial.println("OTA OK");
   
-  // mDNS başlat
+  // Initialize mDNS
   setupMDNS();
   
   setupWeb();
   server.begin();
   Serial.println("Web OK");
   Serial.println(net.getStatus());
+  
+  // Kayıtlı cihaz varsa hemen bağlan (WiFi hazır olduğunda)
+  if (modes.getDeviceIP() != "") {
+    Serial.println("[Setup] Attempting immediate connection to saved device...");
+    modes.connectDevice(modes.getDeviceIP(), modes.getDeviceType());
+  }
+  
   Serial.println("===============");
 }
 
 void loop() {
-  // WebServer - en önce
+  // WebServer - first priority
   server.handleClient();
   yield();
   
-  // OTA update check (her 5 dakikada otomatik)
+  // WiFi watchdog - CRITICAL: Check every cycle, auto-reconnect
+  wifiWatchdog.update();
+  
+  // OTA update check (auto every 5 minutes)
   ota.update();
   
   // Buzzer update (non-blocking)
   buzzer.update();
   
-  // Encoder okuma
+  // Shutter update (motor control, position tracking)
+  shutter.update();
+  
+  // Encoder reading
   if (encoder.available()) {
     char ev = encoder.read();
-    
     modes.processEncoderEvent(ev);
-    
-    // Mod değişimi sonrası buzzer (hangi moda geçildiğine göre)
-    if (ev == 'M') {
-      if (modes.isDimmerMode()) {
-        buzzer.playShort();  // 1 kısa bip - Dimmer
-      } else if (modes.isSafeMode()) {
-        buzzer.playDouble();  // 2 kısa bip - Safe
-      }
-    }
   }
   yield();
   
-  // API tetikleme (non-blocking - encoder event'inden ayrı)
+  // API trigger (non-blocking - separate from encoder event)
   if (pendingApiTrigger) {
     pendingApiTrigger = false;
     
-    Serial.println("[Loop] API tetikleniyor...");
-    Serial.flush();
+    // DEBUG REMOVED: Triggering API
     
-    // Watchdog'u besle
+    // Feed watchdog
     yield();
     
     ApiResponseStatus apiResult = SafeLockAPI::onPasswordMatch(&safeLockEEPROM, &safeLockAPI, pendingPasswordIndex);
     
-    Serial.println("[Loop] API tamamlandi");
-    Serial.flush();
+    // DEBUG REMOVED: API completed
     
-    // API sonucuna göre buzzer çal
+    // Play buzzer based on API result
     if (apiResult == API_SUCCESS) {
-      buzzer.playApiSuccess();  // 2 kısa + 1 uzun bip
-      Serial.println("[Buzzer] API Success");
+      buzzer.playApiSuccess();  // 2 short + 1 long beep
+      // DEBUG REMOVED
     } else if (apiResult == API_NO_WIFI || apiResult == API_WIFI_ERROR) {
-      buzzer.playApiFail();  // 5 kısa bip
-      Serial.println("[Buzzer] No WiFi");
+      buzzer.playApiFail();  // 5 short beeps
+      // DEBUG REMOVED
     } else if (apiResult == API_DISABLED) {
-      // API devre dışı - sessiz
-      Serial.println("[Buzzer] API Disabled - Silent");
+      // API disabled - silent
+      // DEBUG REMOVED
     } else {
-      // Diğer hatalar (timeout, error, vb)
-      buzzer.playApiFail();  // 5 kısa bip
-      Serial.println("[Buzzer] API Fail");
+      // Other errors (timeout, error, etc)
+      buzzer.playApiFail();  // 5 short beeps
+      // DEBUG REMOVED
     }
     
-    // Watchdog'u besle
+    // Feed watchdog
     yield();
   }
   
-  // Shelly senkronizasyonu
+  // Shelly synchronization
   modes.updateShelly();
   
-  // Watchdog'u besle
+  // 12-hour graceful reboot - prevents long-term instability
+  if (millis() - bootTime > REBOOT_INTERVAL) {
+    Serial.println("[Reboot] 12h timer expired - graceful restart");
+    
+    // Save device connection to EEPROM (already auto-saved on connect, but ensure it's saved)
+    if (modes.getDeviceIP() != "") {
+      modes.saveDevice(modes.getDeviceIP(), modes.getDeviceType());
+    }
+    delay(100);
+    
+    // Save Safe Lock passwords (already auto-saved, but ensure it's saved)
+    safeLockEEPROM.save();
+    delay(100);
+    
+    Serial.println("[Reboot] EEPROM saved - restarting in 1s...");
+    delay(1000);
+    ESP.restart();
+  }
+  
+  // Feed watchdog
   yield();
 }
 
@@ -403,6 +452,73 @@ void setupWeb() {
     server.send(200, "application/json", scanner.getDevicesJSON());
   });
   
+  // API - Stop scan (taramayı durdur)
+  server.on("/api/devices/scan/stop", HTTP_GET, [](){
+    Serial.println("[API] Stop scan request received");
+    scanner.stopScan();
+    server.send(200, "application/json", scanner.getDevicesJSON());
+  });
+  
+  // API - Manual IP connect (manuel IP ile bağlan)
+  server.on("/api/devices/manual", HTTP_GET, [](){
+    if (server.hasArg("ip")) {
+      String manualIP = server.arg("ip");
+      Serial.println("[API] Manual IP connect: " + manualIP);
+      
+      // Try to connect to device
+      bool success = modes.connectDevice(manualIP, "shelly-dimmer");
+      
+      if (success) {
+        // Başarılı bağlantı - scanner'a ekle
+        scanner.addManualDevice(manualIP, "shelly-dimmer");
+        server.send(200, "application/json", "{\"success\":true,\"message\":\"Connected\"}");
+      } else {
+        server.send(200, "application/json", "{\"success\":false,\"message\":\"Connection failed\"}");
+      }
+    } else {
+      server.send(400, "application/json", "{\"success\":false,\"message\":\"IP parameter required\"}");
+    }
+  });
+  
+  // API - Shutter position
+  server.on("/api/shutter/position", HTTP_GET, [](){
+    if (server.hasArg("value")) {
+      int position = server.arg("value").toInt();
+      if (position >= 0 && position <= 100) {
+        shutter.setPosition(position);
+        server.send(200, "application/json", "{\"success\":true,\"position\":" + String(position) + "}");
+        Serial.print("Shutter position set: ");
+        Serial.println(position);
+      } else {
+        server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid position\"}");
+      }
+    } else {
+      int currentPosition = shutter.getPosition();
+      server.send(200, "application/json", "{\"position\":" + String(currentPosition) + "}");
+    }
+  });
+  
+  // API - Shutter open
+  server.on("/api/shutter/open", HTTP_GET, [](){
+    shutter.open();
+    server.send(200, "application/json", "{\"success\":true}");
+    // DEBUG REMOVED
+  });
+  
+  // API - Shutter close
+  server.on("/api/shutter/close", HTTP_GET, [](){
+    shutter.close();
+    server.send(200, "application/json", "{\"success\":true}");
+    // DEBUG REMOVED
+  });
+  
+  // API - Shutter stop
+  server.on("/api/shutter/stop", HTTP_GET, [](){
+    shutter.stop();
+    server.send(200, "application/json", "{\"success\":true}");
+    // DEBUG REMOVED
+  });
+  
   // API - Set dimm ratio
   server.on("/api/dimmer/ratio", HTTP_GET, [](){
     if (server.hasArg("value")) {
@@ -495,9 +611,15 @@ void setupWeb() {
       if (mode == "dimmer") {
         modes.setDimmerMode(true);
         server.send(200, "application/json", "{\"success\":true,\"mode\":\"dimmer\"}");
+      } else if (mode == "shutter") {
+        modes.setShutterMode(true);
+        server.send(200, "application/json", "{\"success\":true,\"mode\":\"shutter\"}");
       } else if (mode == "safe") {
         modes.setSafeMode(true);
         server.send(200, "application/json", "{\"success\":true,\"mode\":\"safe\"}");
+      } else if (mode == "panic") {
+        // Panic mode not implemented yet
+        server.send(400, "application/json", "{\"success\":false,\"error\":\"Panic mode not implemented\"}");
       } else {
         server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid mode\"}");
       }
@@ -508,7 +630,23 @@ void setupWeb() {
   
   // API - Aktif modu oku
   server.on("/api/mode/get", HTTP_GET, [](){
-    String activeMode = modes.isDimmerMode() ? "dimmer" : "safe";
+    String activeMode;
+    switch(modes.getCurrentMode()) {
+      case MODE_DIMMER:
+        activeMode = "dimmer";
+        break;
+      case MODE_SHUTTER:
+        activeMode = "shutter";
+        break;
+      case MODE_SAFE:
+        activeMode = "safe";
+        break;
+      case MODE_PANIC:
+        activeMode = "panic";
+        break;
+      default:
+        activeMode = "dimmer";
+    }
     server.send(200, "application/json", "{\"mode\":\"" + activeMode + "\"}");
   });
   

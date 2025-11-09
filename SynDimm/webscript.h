@@ -91,6 +91,22 @@ document.querySelectorAll('.nav-link').forEach(link => {
 function toggleAccordion(header) {
     const content = header.nextElementSibling;
     const isCollapsed = content.classList.contains('collapsed');
+    
+    // Check if this accordion is in the "settings" tab (Modes section)
+    const settingsTab = document.getElementById('settings');
+    const clickedAccordionInSettings = settingsTab && settingsTab.contains(header);
+    
+    if (clickedAccordionInSettings) {
+        // Close all other accordions in the settings tab
+        settingsTab.querySelectorAll('.accordion-header').forEach(otherHeader => {
+            if (otherHeader !== header) {
+                const otherContent = otherHeader.nextElementSibling;
+                otherHeader.classList.remove('active');
+                otherContent.classList.add('collapsed');
+            }
+        });
+    }
+    
     // Toggle active state
     header.classList.toggle('active');
     content.classList.toggle('collapsed');
@@ -145,6 +161,58 @@ function updateSliderValue(slider) {
         valueDisplay.textContent = slider.value;
     }
 }
+
+// Shutter Slider Update
+function updateShutterSlider(slider) {
+    updateSliderValue(slider);
+    // Send to device
+    fetch(`/api/shutter/position?value=${slider.value}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                console.log('Shutter position set to:', slider.value);
+            }
+        })
+        .catch(err => console.error('Shutter position error:', err));
+}
+
+// Shutter Control Functions
+function shutterOpen() {
+    fetch('/api/shutter/open')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                console.log('Shutter opening...');
+                document.getElementById('shutter-status').textContent = 'Opening';
+            }
+        })
+        .catch(err => console.error('Shutter open error:', err));
+}
+
+function shutterClose() {
+    fetch('/api/shutter/close')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                console.log('Shutter closing...');
+                document.getElementById('shutter-status').textContent = 'Closing';
+            }
+        })
+        .catch(err => console.error('Shutter close error:', err));
+}
+
+function shutterStop() {
+    fetch('/api/shutter/stop')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                console.log('Shutter stopped');
+                document.getElementById('shutter-status').textContent = 'Stopped';
+            }
+        })
+        .catch(err => console.error('Shutter stop error:', err));
+}
+
 // Device Power Toggle
 function toggleDevicePower(isOn) {
     console.log('Device power:', isOn ? 'ON' : 'OFF');
@@ -247,45 +315,165 @@ if (apToggle) {
         // API call: /api/network/ap?enabled=true/false
     });
 }
-// Scan Devices
+// Scan Devices (Dynamic button - Start/Stop)
+let isScanning = false;
+let connectedDeviceIP = '';  // Track connected device
+
 function scanDevices() {
-    console.log('Scanning devices...');
+    console.log('[Scan] scanDevices() called, isScanning:', isScanning);
+    const scanBtn = document.querySelector('.btn-scan');
+    
+    if (!scanBtn) {
+        console.error('[Scan] ERROR: btn-scan not found!');
+        return;
+    }
+    
+    console.log('[Scan] Button found, current text:', scanBtn.textContent);
+    
+    if (isScanning) {
+        // Stop scanning
+        console.log('[Scan] Stopping scan...');
+        
+        fetch('/api/devices/scan/stop')
+            .then(r => r.json())
+            .then(data => {
+                console.log('[Scan] Scan stopped');
+                isScanning = false;
+                
+                // Update button - get translation properly
+                const scanText = translations?.dimmer?.scanNetwork?.[currentLang] || 'Ag Tara';
+                scanBtn.textContent = scanText;
+                scanBtn.classList.remove('scanning');
+                console.log('[Scan] Button updated to:', scanBtn.textContent);
+                
+                // Show final results
+                displayScanResults(data);
+            })
+            .catch(err => {
+                console.error('[Scan] Stop error:', err);
+            });
+        return;
+    }
+    
+    // Start scanning
+    console.log('[Scan] Starting device scan...');
+    isScanning = true;
+    
+    // Update button - get translation properly
+    const stopText = translations?.dimmer?.stopScanning?.[currentLang] || 'Taramayi Durdur';
+    scanBtn.textContent = stopText;
+    scanBtn.classList.add('scanning');
+    console.log('[Scan] Button updated to:', scanBtn.textContent);
+    
     const deviceList = document.querySelector('.device-list');
+    
+    if (!deviceList) {
+        console.error('[Scan] ERROR: device-list element not found!');
+        return;
+    }
+    
     deviceList.innerHTML = '<div class="empty-state"><p>Scanning network...</p><span>Checking 254 IP addresses</span></div>';
     
     // Start scan
     fetch('/api/devices/scan')
-        .then(r => r.json())
+        .then(r => {
+            console.log('[Scan] API response status:', r.status);
+            return r.json();
+        })
         .then(data => {
+            console.log('[Scan] Initial response:', data);
             displayScanResults(data);
         })
         .catch(err => {
-            console.error('Scan error:', err);
+            console.error('[Scan] ERROR:', err);
             deviceList.innerHTML = '<div class="empty-state"><p>Scan failed</p><span>Check network connection</span></div>';
+            
+            // Reset button on error
+            isScanning = false;
+            const scanText = translations?.dimmer?.scanNetwork?.[currentLang] || 'Ag Tara';
+            scanBtn.textContent = scanText;
+            scanBtn.classList.remove('scanning');
         });
 }
 
 function displayScanResults(data) {
     const deviceList = document.querySelector('.device-list');
+    const scanBtn = document.querySelector('.btn-scan');
+    
+    console.log('[Scan] Data received:', data);
+    console.log('[Scan] Scanning:', data.scanning);
+    console.log('[Scan] Devices count:', data.devices ? data.devices.length : 0);
     
     if (data.scanning) {
-        // Still scanning - show progress
-        deviceList.innerHTML = `<div class="empty-state"><p>Scanning... ${data.progress}%</p><span>Found ${data.devices.length} dimmer(s)</span></div>`;
+        // Tarama devam ediyor - cihazları ve progress'i göster
+        let html = '';
         
-        // Poll for updates
+        // Bulunan cihazları listele
+        if (data.devices && data.devices.length > 0) {
+            data.devices.forEach(device => {
+                console.log('[Scan] Device found:', device.ip, device.type, device.model);
+                
+                // Check if this device is connected
+                const isConnected = (connectedDeviceIP === device.ip);
+                const buttonHTML = isConnected 
+                    ? '<button class="btn-connect btn-disconnect" onclick="disconnectDevice()">Disconnect</button>'
+                    : `<button class="btn-connect" onclick="connectDevice('${device.ip}')">Connect</button>`;
+                
+                html += `
+                    <div class="device-item">
+                        <div class="device-info">
+                            <span class="device-name">${device.type || 'Unknown'}</span>
+                            <span class="device-detail">${device.ip} ${device.model ? '(' + device.model + ')' : ''}</span>
+                        </div>
+                        <div class="device-action">
+                            ${buttonHTML}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        // Progress ekle
+        html += `
+            <div class="scan-progress">
+                <p class="scan-status">Scanning network... ${data.progress}%</p>
+                <span class="scan-info">Found ${data.devices.length} dimmer(s) - Scanning continues...</span>
+            </div>
+        `;
+        
+        deviceList.innerHTML = html;
+        console.log('[Scan] Still scanning, fetching progress in 2s...');
+        
+        // 2 saniyede bir güncelle
         setTimeout(() => {
-            fetch('/api/devices/scan/progress')
-                .then(r => r.json())
-                .then(displayScanResults)
-                .catch(err => console.error('Progress error:', err));
+            if (isScanning) {  // Only continue if still scanning
+                fetch('/api/devices/scan/progress')
+                    .then(r => r.json())
+                    .then(displayScanResults)
+                    .catch(err => console.error('Progress error:', err));
+            }
         }, 2000);
         return;
     }
     
-    // Scan complete - show results
+    // Scan complete - update button and show final results
+    console.log('[Scan] Scan complete! Showing device list...');
+    isScanning = false;
+    const scanText = translations?.dimmer?.scanNetwork?.[currentLang] || 'Ag Tara';
+    scanBtn.textContent = scanText;
+    scanBtn.classList.remove('scanning');
+    
     if (data.devices && data.devices.length > 0) {
         let html = '';
         data.devices.forEach(device => {
+            console.log('[Scan] Device:', device.ip, device.type, device.model);
+            
+            // Check if this device is connected
+            const isConnected = (connectedDeviceIP === device.ip);
+            const buttonHTML = isConnected 
+                ? '<button class="btn-connect btn-disconnect" onclick="disconnectDevice()">Disconnect</button>'
+                : `<button class="btn-connect" onclick="connectDevice('${device.ip}')">Connect</button>`;
+            
             html += `
                 <div class="device-item">
                     <div class="device-info">
@@ -293,54 +481,200 @@ function displayScanResults(data) {
                         <span class="device-detail">${device.ip} ${device.model ? '(' + device.model + ')' : ''}</span>
                     </div>
                     <div class="device-action">
-                        <button class="btn-connect" onclick="connectDevice('${device.ip}')">Connect</button>
+                        ${buttonHTML}
                     </div>
                 </div>
             `;
         });
         deviceList.innerHTML = html;
+        console.log('[Scan] Device list rendered:', data.devices.length, 'devices');
     } else {
         deviceList.innerHTML = '<div class="empty-state"><p>No dimmers found</p><span>Only Shelly Dimmer/DALI devices are detected</span></div>';
+        console.log('[Scan] No devices found');
     }
 }
 
 // Connect to Device
 function connectDevice(ip) {
-    console.log('Connecting to:', ip);
+    console.log('[Connect] Attempting to connect to:', ip);
+    
     // API call
     fetch(`/api/shelly/connect?ip=${ip}`)
-        .then(r => r.json())
+        .then(r => {
+            console.log('[Connect] Response status:', r.status);
+            return r.json();
+        })
         .then(data => {
+            console.log('[Connect] Response data:', data);
             if (data.success) {
-                // Update connection status
+                console.log('[Connect] SUCCESS - Connected to:', ip);
+                connectedDeviceIP = ip;  // Update global variable
+                alert('Connected to ' + ip);
+                
+                // Update connection status WITHOUT page reload
                 updateConnectionStatus();
+                
+                // If scan results are visible, update the buttons
+                const deviceList = document.querySelector('.device-list');
+                if (deviceList && deviceList.querySelector('.device-item')) {
+                    // Re-render device list with updated buttons
+                    const buttons = deviceList.querySelectorAll('.btn-connect');
+                    buttons.forEach(btn => {
+                        const btnIP = btn.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+                        if (btnIP === ip) {
+                            btn.textContent = 'Disconnect';
+                            btn.classList.add('btn-disconnect');
+                            btn.setAttribute('onclick', 'disconnectDevice()');
+                        }
+                    });
+                }
             } else {
-                alert('Failed to connect to device');
+                console.error('[Connect] FAILED:', data.error);
+                alert('Failed to connect: ' + (data.error || 'Unknown error'));
             }
         })
         .catch(err => {
-            console.error('Connect error:', err);
-            alert('Connection error');
+            console.error('[Connect] ERROR:', err);
+            alert('Connection error: ' + err);
         });
 }
+
+// Manual IP Connect Dialog - Modal Version
+function showManualIPDialog() {
+    const modal = document.getElementById('manualIPModal');
+    const input = document.getElementById('manualIP');
+    const error = document.getElementById('manualIPError');
+    
+    // Clear previous state
+    input.value = '';
+    error.textContent = '';
+    
+    // Show modal
+    modal.classList.add('show');
+    modal.style.display = 'flex';
+    
+    // Focus input and add Enter key handler
+    setTimeout(() => {
+        input.focus();
+        input.addEventListener('keypress', handleManualIPKeyPress);
+    }, 100);
+}
+
+function handleManualIPKeyPress(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        connectManualIP();
+    }
+}
+
+function closeManualIPModal() {
+    const modal = document.getElementById('manualIPModal');
+    const input = document.getElementById('manualIP');
+    const error = document.getElementById('manualIPError');
+    
+    // Remove event listener
+    input.removeEventListener('keypress', handleManualIPKeyPress);
+    
+    // Hide modal
+    modal.classList.remove('show');
+    modal.style.display = 'none';
+    
+    // Clear fields
+    input.value = '';
+    error.textContent = '';
+}
+
+function modalBackdropClick(event) {
+    // Close modal if clicking on backdrop (not content)
+    if (event.target.id === 'manualIPModal') {
+        closeManualIPModal();
+    }
+}
+
+function connectManualIP() {
+    const input = document.getElementById('manualIP');
+    const error = document.getElementById('manualIPError');
+    const ip = input.value.trim();
+    
+    // Clear previous error
+    error.textContent = '';
+    
+    // Validate IP format
+    const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipPattern.test(ip)) {
+        error.textContent = 'Invalid IP address format';
+        input.focus();
+        return;
+    }
+    
+    // Validate IP ranges (0-255)
+    const parts = ip.split('.');
+    for (let part of parts) {
+        const num = parseInt(part);
+        if (num < 0 || num > 255) {
+            error.textContent = 'IP address must be between 0.0.0.0 and 255.255.255.255';
+            input.focus();
+            return;
+        }
+    }
+    
+    console.log('[Manual] Connecting to:', ip);
+    error.textContent = 'Connecting...';
+    
+    // Disable input during connection
+    input.disabled = true;
+    
+    // Call manual connect API
+    fetch('/api/devices/manual?ip=' + encodeURIComponent(ip))
+        .then(r => r.json())
+        .then(data => {
+            input.disabled = false;
+            if (data.success) {
+                console.log('[Manual] SUCCESS');
+                closeManualIPModal();
+                updateConnectionStatus();
+            } else {
+                console.error('[Manual] FAILED:', data.message);
+                error.textContent = 'Failed: ' + data.message;
+            }
+        })
+        .catch(err => {
+            input.disabled = false;
+            console.error('[Manual] ERROR:', err);
+            error.textContent = 'Connection error: ' + err;
+        });
+}
+
 // Disconnect Device
 function disconnectDevice() {
-    console.log('Disconnecting device...');
+    console.log('[Disconnect] Disconnecting device...');
+    
     // API call
     fetch('/api/shelly/disconnect')
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                // Update connection status
+                console.log('[Disconnect] SUCCESS');
+                const oldIP = connectedDeviceIP;
+                connectedDeviceIP = '';  // Clear global variable
+                
+                // Update connection status WITHOUT page reload
                 updateConnectionStatus();
-                // Show empty device list
+                
+                // If scan results are visible, update the buttons
                 const deviceList = document.querySelector('.device-list');
-                if (deviceList) {
-                    deviceList.innerHTML = '<div class="empty-state"><p>No devices found</p><span>Click "Scan Network" to discover devices</span></div>';
+                if (deviceList && deviceList.querySelector('.device-item')) {
+                    // Re-render device list with updated buttons
+                    const buttons = deviceList.querySelectorAll('.btn-disconnect');
+                    buttons.forEach(btn => {
+                        btn.textContent = 'Connect';
+                        btn.classList.remove('btn-disconnect');
+                        btn.setAttribute('onclick', `connectDevice('${oldIP}')`);
+                    });
                 }
             }
         })
-        .catch(err => console.error('Disconnect error:', err));
+        .catch(err => console.error('[Disconnect] ERROR:', err));
 }
 // Toggle Device (ON/OFF)
 function toggleDevice() {
@@ -366,6 +700,10 @@ function updateConnectionStatus() {
     fetch('/api/shelly/status', { signal: AbortSignal.timeout(3000) })
         .then(r => r.json())
         .then(data => {
+            // Update global connected device IP
+            connectedDeviceIP = data.connected ? (data.ip || '') : '';
+            console.log('[Status] Connected device IP:', connectedDeviceIP);
+            
             // Update dimmer status grid
             const dimmerConnection = document.getElementById('dimmer-connection');
             const dimmerDevice = document.getElementById('dimmer-device');
@@ -429,24 +767,9 @@ function updateEncoderBrightness() {
 }
 // Update Device List
 function updateDeviceList(connectedIp) {
-    // Bağlı cihaz varsa göster - TARAMA YAPMA (sonsuz döngü önleme)
-    if (connectedIp) {
-        const deviceList = document.querySelector('.device-list');
-        if (deviceList) {
-            deviceList.innerHTML = `
-                <div class="device-item">
-                    <div class="device-info">
-                        <span class="device-name">Connected Device</span>
-                        <span class="device-detail">${connectedIp}</span>
-                    </div>
-                    <div class="device-action">
-                        <button class="btn-disconnect" onclick="disconnectDevice()">Disconnect</button>
-                    </div>
-                </div>
-            `;
-        }
-    }
-    // TARAMA KALDIRILDI - Sadece kullanıcı "Scan Network" butonuna basınca tarama yapılacak
+    // DISABLED: Bu fonksiyon cihaz listesini siliyordu
+    // Artık scan sonuçları kalıcı - sadece butonlar "Connect"/"Disconnect" arasında değişiyor
+    console.log('[DeviceList] Update called for IP:', connectedIp, '(list preserved)');
 }
 // Network Configuration Functions
 function saveNetworkConfig() {
@@ -743,6 +1066,13 @@ function initializePage() {
             langRadio.checked = true;
             langRadio.closest('.option-card')?.classList.add('active');
         }
+        
+        // Fix scan button text after translations loaded
+        const scanBtn = document.querySelector('.btn-scan');
+        if (scanBtn && !isScanning) {
+            const scanText = translations?.dimmer?.scanNetwork?.[currentLang] || 'Ag Tara';
+            scanBtn.textContent = scanText;
+        }
     });
     
     // Load theme from localStorage
@@ -759,7 +1089,7 @@ function initializePage() {
     loadNetworkInfo();
     // Update network status
     updateNetworkStatus();
-    // Update device connection status
+    // Update device connection status (this will set connectedDeviceIP)
     updateConnectionStatus();
     // Load current mode
     loadCurrentMode();
@@ -767,8 +1097,8 @@ function initializePage() {
     loadDimmerSettings();
     // Load encoder values
     loadEncoderValues();
-    // Scan for devices (only once at startup)
-    scanDevices();
+    // REMOVED: Automatic scan on startup - user must manually click "Scan Network"
+    // scanDevices();
     // Load Safe Lock configuration
     loadSafeLockConfig();
     
