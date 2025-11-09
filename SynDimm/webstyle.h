@@ -1307,6 +1307,78 @@ body {
         font-size: 0.75rem;
     }
 }
+
+/* OTA Settings Styles */
+.ota-info-section {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: var(--spacing-lg);
+    margin: var(--spacing-md) auto;
+    max-width: 600px;
+    text-align: center;
+}
+
+.version-display {
+    margin-bottom: var(--spacing-md);
+    font-size: 0.95rem;
+}
+
+.version-display p {
+    margin: var(--spacing-xs) 0;
+    color: var(--text-color);
+}
+
+.version-display strong {
+    color: var(--primary-color);
+}
+
+.ota-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-lg);
+    margin: var(--spacing-md) 0;
+    flex-wrap: wrap;
+}
+
+.ota-button {
+    padding: 10px 24px;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 107, 255, 0.3);
+}
+
+.ota-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 107, 255, 0.4);
+}
+
+.ota-button:active {
+    transform: translateY(0);
+}
+
+.ota-description {
+    margin-top: var(--spacing-md);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+#ota-latest-container {
+    padding: var(--spacing-sm);
+    background: rgba(0, 255, 100, 0.1);
+    border-left: 3px solid var(--primary-color);
+    margin-top: var(--spacing-sm);
+    border-radius: 4px;
+}
+
 )=====";
 
 #endif

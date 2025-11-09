@@ -13,6 +13,7 @@
 #include "syndimm_net.h"
 #include "syndimm_buzzer.h"
 #include "syndimm_ota.h"
+#include "syndimm_scanner.h"
 #include "webui.h"
 #include "webstyle.h"
 #include "webscript.h"
@@ -26,6 +27,7 @@ ModeManager modes(&encoder);
 SynDimmNet net;
 SynDimmBuzzer buzzer;
 SynDimmOTA ota;
+NetworkScanner scanner;
 WebServer server(80);
 
 // mDNS helper fonksiyon
@@ -377,80 +379,28 @@ void setupWeb() {
     server.send(200, "application/json", s);
   });
   
-  // API - Device scan (IoT cihaz arama)
+  // API - Device scan (IP tarama ile gerçek dimmer/dali cihaz arama - ASYNC)
   server.on("/api/devices/scan", HTTP_GET, [](){
-    Serial.println("Device scan started...");
+    Serial.println("[API] Device scan request received");
     
-    String s = "{\"devices\":[";
-    bool first = true;
-    
-    // mDNS ile HTTP servislerini ara
-    int n = MDNS.queryService("http", "tcp");
-    Serial.printf("Found %d HTTP services\n", n);
-    
-    for (int i = 0; i < n; i++) {
-      String hostname = MDNS.hostname(i);
-      IPAddress ip = MDNS.address(i);
-      
-      // Shelly cihazlarını kontrol et (dimmer, dim, dali)
-      // Shelly hostname formatları: 
-      // - shelly-dimmer-XXXXXX
-      // - shellydimmer-XXXXXX
-      // - shelly-dali-XXXXXX
-      // - shellydali-XXXXXX
-      if (hostname.startsWith("shelly") && 
-          (hostname.indexOf("dimmer") != -1 || 
-           hostname.indexOf("dim") != -1 || 
-           hostname.indexOf("dali") != -1)) {
-        
-        if (!first) s += ",";
-        first = false;
-        
-        // Cihaz tipini belirle
-        String deviceType = "Shelly";
-        if (hostname.indexOf("dali") != -1) {
-          deviceType = "Shelly DALI";
-        } else if (hostname.indexOf("dimmer") != -1 || hostname.indexOf("dim") != -1) {
-          deviceType = "Shelly Dimmer";
-        }
-        
-        s += "{\"ip\":\"" + ip.toString() + "\"";
-        s += ",\"hostname\":\"" + hostname + "\"";
-        s += ",\"type\":\"" + deviceType + "\"";
-        
-        // Chip ID'yi hostname'den çıkar (son tire sonrası)
-        int dashPos = hostname.lastIndexOf('-');
-        if (dashPos > 0) {
-          String deviceID = hostname.substring(dashPos + 1);
-          deviceID.toUpperCase();
-          s += ",\"chipID\":\"" + deviceID + "\"";
-        } else {
-          s += ",\"chipID\":\"unknown\"";
-        }
-        
-        // TXT kayıtlarından ek bilgi al
-        int txtCount = MDNS.numTxt(i);
-        for (int j = 0; j < txtCount; j++) {
-          String key = MDNS.txt(i, j);
-          int eqPos = key.indexOf('=');
-          if (eqPos > 0) {
-            String txtKey = key.substring(0, eqPos);
-            String txtVal = key.substring(eqPos + 1);
-            if (txtKey == "version" || txtKey == "fw_id") {
-              s += ",\"version\":\"" + txtVal + "\"";
-            }
-          }
-        }
-        
-        s += ",\"mode\":\"dimmer\"}";
-        
-        Serial.printf("Found %s: %s at %s\n", deviceType.c_str(), hostname.c_str(), ip.toString().c_str());
-      }
+    // Eğer tarama devam ediyorsa mevcut durumu döndür
+    if (scanner.isScanning()) {
+      server.send(200, "application/json", scanner.getDevicesJSON());
+      Serial.println("[API] Scan already in progress");
+      return;
     }
     
-    s += "]}";
-    server.send(200, "application/json", s);
-    Serial.println("Device scan completed");
+    // Yeni tarama başlat (ASYNC - FreeRTOS Task ile arka planda)
+    scanner.startScan();
+    
+    // HEMEN yanıt döndür - tarama arka planda devam eder
+    server.send(200, "application/json", "{\"devices\":[],\"scanning\":true,\"progress\":0}");
+    Serial.println("[API] Scan started in background");
+  });
+  
+  // API - Scan progress (tarama durumunu kontrol et)
+  server.on("/api/devices/scan/progress", HTTP_GET, [](){
+    server.send(200, "application/json", scanner.getDevicesJSON());
   });
   
   // API - Set dimm ratio
@@ -589,6 +539,25 @@ void setupWeb() {
       server.send(200, "application/json", "{\"success\":true,\"message\":\"Update started\"}");
     } else {
       server.send(200, "application/json", "{\"success\":false,\"message\":\"No update available or check failed\"}");
+    }
+  });
+  
+  // API - OTA ayarları GET
+  server.on("/api/ota/settings", HTTP_GET, [](){
+    String json = "{";
+    json += "\"autoUpdate\":" + String(ota.getAutoUpdate() ? "true" : "false");
+    json += "}";
+    server.send(200, "application/json", json);
+  });
+  
+  // API - OTA ayarları POST
+  server.on("/api/ota/settings", HTTP_POST, [](){
+    if (server.hasArg("autoUpdate")) {
+      bool enabled = server.arg("autoUpdate") == "true";
+      ota.setAutoUpdate(enabled);
+      server.send(200, "application/json", "{\"success\":true}");
+    } else {
+      server.send(400, "application/json", "{\"success\":false,\"error\":\"Missing autoUpdate parameter\"}");
     }
   });
   

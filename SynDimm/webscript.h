@@ -251,36 +251,59 @@ if (apToggle) {
 function scanDevices() {
     console.log('Scanning devices...');
     const deviceList = document.querySelector('.device-list');
-    deviceList.innerHTML = '<div class="empty-state"><p>Scanning...</p><span>Please wait</span></div>';
-    // Real API call
+    deviceList.innerHTML = '<div class="empty-state"><p>Scanning network...</p><span>Checking 254 IP addresses</span></div>';
+    
+    // Start scan
     fetch('/api/devices/scan')
         .then(r => r.json())
         .then(data => {
-            if (data.devices && data.devices.length > 0) {
-                let html = '';
-                data.devices.forEach(device => {
-                    html += `
-                        <div class="device-item">
-                            <div class="device-info">
-                                <span class="device-name">${device.type || 'Unknown'}</span>
-                                <span class="device-detail">${device.ip}</span>
-                            </div>
-                            <div class="device-action">
-                                <button class="btn-connect" onclick="connectDevice('${device.ip}')">Connect</button>
-                            </div>
-                        </div>
-                    `;
-                });
-                deviceList.innerHTML = html;
-            } else {
-                deviceList.innerHTML = '<div class="empty-state"><p>No devices found</p><span>Try scanning again</span></div>';
-            }
+            displayScanResults(data);
         })
         .catch(err => {
             console.error('Scan error:', err);
             deviceList.innerHTML = '<div class="empty-state"><p>Scan failed</p><span>Check network connection</span></div>';
         });
 }
+
+function displayScanResults(data) {
+    const deviceList = document.querySelector('.device-list');
+    
+    if (data.scanning) {
+        // Still scanning - show progress
+        deviceList.innerHTML = `<div class="empty-state"><p>Scanning... ${data.progress}%</p><span>Found ${data.devices.length} dimmer(s)</span></div>`;
+        
+        // Poll for updates
+        setTimeout(() => {
+            fetch('/api/devices/scan/progress')
+                .then(r => r.json())
+                .then(displayScanResults)
+                .catch(err => console.error('Progress error:', err));
+        }, 2000);
+        return;
+    }
+    
+    // Scan complete - show results
+    if (data.devices && data.devices.length > 0) {
+        let html = '';
+        data.devices.forEach(device => {
+            html += `
+                <div class="device-item">
+                    <div class="device-info">
+                        <span class="device-name">${device.type || 'Unknown'}</span>
+                        <span class="device-detail">${device.ip} ${device.model ? '(' + device.model + ')' : ''}</span>
+                    </div>
+                    <div class="device-action">
+                        <button class="btn-connect" onclick="connectDevice('${device.ip}')">Connect</button>
+                    </div>
+                </div>
+            `;
+        });
+        deviceList.innerHTML = html;
+    } else {
+        deviceList.innerHTML = '<div class="empty-state"><p>No dimmers found</p><span>Only Shelly Dimmer/DALI devices are detected</span></div>';
+    }
+}
+
 // Connect to Device
 function connectDevice(ip) {
     console.log('Connecting to:', ip);
@@ -749,12 +772,21 @@ function initializePage() {
     // Load Safe Lock configuration
     loadSafeLockConfig();
     
+    // Load OTA settings and setup listeners
+    loadOTASettings();
+    setupOTAListeners();
+    
     // Start periodic status updates - HIZLI SENKRONIZASYON (her 500ms)
     setInterval(() => {
         updateConnectionStatus();
         updateNetworkStatus();
         loadCurrentMode();  // Poll mode changes from encoder
     }, 500);  // 5000ms -> 500ms (10x daha hızlı)
+    
+    // OTA check - her 5 saniyede bir (Info sekmesindeki versiyon için)
+    setInterval(() => {
+        loadOTASettings();
+    }, 5000);
     
     console.log('SynDimm initialized');
 }
@@ -920,6 +952,107 @@ function saveSafeLockConfig() {
         }
     });
 }
+
+// OTA Settings functions
+function loadOTASettings() {
+    // Load OTA info (versions)
+    fetch('/api/ota/info')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('ota-current-version').textContent = data.current || '-';
+            
+            if (data.updateAvailable) {
+                document.getElementById('ota-latest-version').textContent = data.latest || '-';
+                document.getElementById('ota-latest-container').style.display = 'block';
+            } else {
+                document.getElementById('ota-latest-container').style.display = 'none';
+            }
+            
+            // Update button visibility based on auto-update setting
+            updateOTAButtonVisibility(data.updateAvailable);
+        })
+        .catch(err => console.error('Failed to load OTA info:', err));
+    
+    // Load OTA settings (auto-update toggle)
+    fetch('/api/ota/settings')
+        .then(r => r.json())
+        .then(data => {
+            const autoUpdateCheckbox = document.getElementById('ota-auto-update');
+            autoUpdateCheckbox.checked = data.autoUpdate;
+            
+            // Update button visibility
+            fetch('/api/ota/info')
+                .then(r => r.json())
+                .then(info => updateOTAButtonVisibility(info.updateAvailable));
+        })
+        .catch(err => console.error('Failed to load OTA settings:', err));
+}
+
+function updateOTAButtonVisibility(updateAvailable) {
+    const autoUpdateCheckbox = document.getElementById('ota-auto-update');
+    const updateButton = document.getElementById('ota-update-button');
+    
+    // Show button only if: auto-update OFF AND new version available
+    if (!autoUpdateCheckbox.checked && updateAvailable) {
+        updateButton.style.display = 'inline-block';
+    } else {
+        updateButton.style.display = 'none';
+    }
+}
+
+function setupOTAListeners() {
+    // Auto-update toggle
+    const autoUpdateCheckbox = document.getElementById('ota-auto-update');
+    autoUpdateCheckbox.addEventListener('change', function() {
+        const enabled = this.checked;
+        
+        fetch('/api/ota/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'autoUpdate=' + enabled
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                console.log('Auto-update setting saved:', enabled);
+                
+                // Update button visibility
+                fetch('/api/ota/info')
+                    .then(r => r.json())
+                    .then(info => updateOTAButtonVisibility(info.updateAvailable));
+            }
+        })
+        .catch(err => console.error('Failed to save auto-update setting:', err));
+    });
+    
+    // Manual update button
+    const updateButton = document.getElementById('ota-update-button');
+    updateButton.addEventListener('click', function() {
+        if (confirm('Firmware güncellemesi başlatılsın mı? Cihaz yeniden başlatılacak.')) {
+            this.disabled = true;
+            this.textContent = 'Güncelleniyor...';
+            
+            fetch('/api/ota/update')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Güncelleme başladı. Cihaz yeniden başlatılıyor...');
+                    } else {
+                        alert('Güncelleme başlatılamadı: ' + (data.message || data.error));
+                        this.disabled = false;
+                        this.textContent = 'Şimdi Güncelle';
+                    }
+                })
+                .catch(err => {
+                    console.error('Update failed:', err);
+                    alert('Güncelleme hatası: ' + err);
+                    this.disabled = false;
+                    this.textContent = 'Şimdi Güncelle';
+                });
+        }
+    });
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', initializePage);
 )=====";

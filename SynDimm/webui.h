@@ -686,6 +686,23 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                     <h4 data-i18n="info.networkSettings.title">Ağ Ayarları</h4>
                     <p><strong data-i18n="info.networkSettings.wifiConnection.title">WiFi Bağlantısı:</strong> <span data-i18n="info.networkSettings.wifiConnection.text">Network sekmesinden SSID ve şifre girerek WiFi ağına bağlanın.</span></p>
                     <p><strong data-i18n="info.networkSettings.ipConfiguration.title">IP Yapılandırması:</strong> <span data-i18n="info.networkSettings.ipConfiguration.text">DHCP (otomatik) veya Statik IP seçeneklerini kullanabilirsiniz.</span></p>
+                    
+                    <h4 data-i18n="info.otaSettings.title">Versiyon Güncelleme</h4>
+                    <div class="ota-info-section">
+                        <div class="version-display">
+                            <p><strong data-i18n="info.otaSettings.currentVersion">Cihaz Sürümü:</strong> <span id="ota-current-version">-</span></p>
+                            <p id="ota-latest-container" style="display:none;"><strong data-i18n="info.otaSettings.latestVersion">Yeni Sürüm:</strong> <span id="ota-latest-version">-</span></p>
+                        </div>
+                        <div class="ota-controls">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="ota-auto-update">
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label" data-i18n="info.otaSettings.autoUpdate">Otomatik Güncelleme</span>
+                            </label>
+                            <button id="ota-update-button" class="ota-button" style="display:none;" data-i18n="info.otaSettings.updateNow">Şimdi Güncelle</button>
+                        </div>
+                        <p class="ota-description" data-i18n="info.otaSettings.description">Otomatik güncelleme açık olduğunda cihaz yeni sürümleri kontrol eder ve kendini günceller. Kapalı olduğunda sadece bildirim alırsınız.</p>
+                    </div>
                 </div>
                 <div class="info-documentation">
                     <h3 class="doc-title" data-i18n="info.documentation.title">Destek ve Dokümantasyon</h3>

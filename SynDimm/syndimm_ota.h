@@ -17,6 +17,7 @@
 #include <ArduinoJson.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <Preferences.h>
 #include "version.h"  // Version bilgisi buradan alınır
 
 class SynDimmOTA {
@@ -33,6 +34,7 @@ private:
   bool updateAvailable;
   String latestVersion;
   String downloadUrl;
+  bool autoUpdateEnabled;  // Otomatik güncelleme aktif mi?
   
   // Progress callback için
   typedef void (*ProgressCallback)(int progress);
@@ -186,15 +188,23 @@ private:
   
 public:
   SynDimmOTA() : lastCheckTime(0), updateInProgress(false), updateAvailable(false), 
-                 latestVersion(""), downloadUrl(""), progressCallback(nullptr) {}
+                 latestVersion(""), downloadUrl(""), progressCallback(nullptr), autoUpdateEnabled(true) {}
   
   void begin() {
+    // EEPROM'dan otomatik güncelleme ayarını yükle
+    Preferences prefs;
+    prefs.begin("ota", true);
+    autoUpdateEnabled = prefs.getBool("autoUpdate", true);  // Varsayılan: true
+    prefs.end();
+    
     Serial.println("[OTA] OTA Update System initialized");
     Serial.print("[OTA] Current firmware: v");
     Serial.println(FIRMWARE_VERSION);
     Serial.print("[OTA] Check interval: ");
     Serial.print(checkInterval / 60000);
     Serial.println(" minutes");
+    Serial.print("[OTA] Auto Update: ");
+    Serial.println(autoUpdateEnabled ? "ENABLED" : "DISABLED");
     
     // HTTPUpdate callbacks
     httpUpdate.onProgress(onUpdateProgress);
@@ -206,6 +216,7 @@ public:
   // Loop içinde çağrılacak - otomatik check
   void update() {
     if (updateInProgress) return;
+    if (!autoUpdateEnabled) return;  // Otomatik güncelleme kapalıysa atla
     
     unsigned long now = millis();
     if (now - lastCheckTime >= checkInterval) {
@@ -214,7 +225,7 @@ public:
     }
   }
   
-  // Manuel update kontrolü
+  // Manuel update kontrolü (web'den veya otomatik)
   bool checkAndUpdate() {
     if (updateInProgress) {
       Serial.println("[OTA] Update already in progress");
@@ -233,6 +244,16 @@ public:
     }
     
     return false;
+  }
+  
+  // Sadece version kontrolü yap (güncelleme yapma)
+  bool checkOnly() {
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("[OTA] Cannot check - WiFi not connected");
+      return false;
+    }
+    
+    return fetchLatestRelease();
   }
   
   // OTA güncellemeyi gerçekleştir
@@ -297,6 +318,22 @@ public:
   bool isUpdateAvailable() { return updateAvailable; }
   bool isUpdateInProgress() { return updateInProgress; }
   String getDownloadUrl() { return downloadUrl; }
+  
+  // Auto-update ayarları
+  bool getAutoUpdate() const { return autoUpdateEnabled; }
+  
+  void setAutoUpdate(bool enabled) {
+    autoUpdateEnabled = enabled;
+    
+    // EEPROM'a kaydet
+    Preferences prefs;
+    prefs.begin("ota", false);
+    prefs.putBool("autoUpdate", enabled);
+    prefs.end();
+    
+    Serial.print("[OTA] Auto Update: ");
+    Serial.println(enabled ? "ENABLED" : "DISABLED");
+  }
   
   // Progress callback set et
   void setProgressCallback(ProgressCallback cb) {

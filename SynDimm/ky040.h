@@ -66,6 +66,14 @@ private:
       return;
     }
     
+    // Önce buton durumunu kontrol et (3+ saniye basılı mı?)
+    if (buttonWasPressed && !modeSelectActive) {
+      if (currentTime - buttonPressTime >= longPressTime) {
+        modeSelectActive = true;
+        Serial.println("[Encoder] Mode select ACTIVE (interrupt check)");
+      }
+    }
+    
     // CLK (A) ve DT (B) pinlerini oku
     aState = digitalRead(clkPin);
     bool bState = digitalRead(dtPin);

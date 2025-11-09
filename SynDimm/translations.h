@@ -655,6 +655,38 @@ const char TRANSLATIONS_JSON[] PROGMEM = R"=====(
         }
       }
     },
+    "otaSettings": {
+      "title": {
+        "en": "Version Update",
+        "de": "Versions-Update",
+        "tr": "Versiyon Güncelleme"
+      },
+      "currentVersion": {
+        "en": "Device Version:",
+        "de": "Geräteversion:",
+        "tr": "Cihaz Sürümü:"
+      },
+      "latestVersion": {
+        "en": "New Version:",
+        "de": "Neue Version:",
+        "tr": "Yeni Sürüm:"
+      },
+      "autoUpdate": {
+        "en": "Auto Update",
+        "de": "Automatisches Update",
+        "tr": "Otomatik Güncelleme"
+      },
+      "updateNow": {
+        "en": "Update Now",
+        "de": "Jetzt aktualisieren",
+        "tr": "Simdi Güncelle"
+      },
+      "description": {
+        "en": "When auto-update is enabled, the device checks for new versions and updates itself. When disabled, you only receive notifications.",
+        "de": "Wenn das automatische Update aktiviert ist, überprüft das Gerät auf neue Versionen und aktualisiert sich selbst. Wenn deaktiviert, erhalten Sie nur Benachrichtigungen.",
+        "tr": "Otomatik güncelleme acik oldugunda cihaz yeni sürümleri kontrol eder ve kendini günceller. Kapali oldugunda sadece bildirim alirsiniz."
+      }
+    },
     "documentation": {
       "title": {
         "en": "Support and Documentation",
