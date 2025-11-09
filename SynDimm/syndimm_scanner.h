@@ -61,7 +61,8 @@ private:
   
   // Her worker'ın işi
   void workerTask(int workerId) {
-    // DEBUG REMOVED: Worker started log
+    Serial.printf("[Scanner] Worker %d started\n", workerId);
+    int devicesFound = 0;
     
     while (true) {
       // Mutex ile sonraki IP'yi al
@@ -90,6 +91,9 @@ private:
       // Cihazı kontrol et (worker ID ile persistent HTTP client)
       DimmerDevice device;
       if (checkIfDimmer(targetIPStr, device, workerId)) {
+        devicesFound++;
+        Serial.printf("[Scanner] Worker %d FOUND DEVICE: %s (%s)\n", workerId, device.ip.c_str(), device.type.c_str());
+        
         // Mutex ile geçici tarama listesine ekle
         if (xSemaphoreTake(devicesMutex, portMAX_DELAY) == pdTRUE) {
           currentScanDevices.push_back(device);
@@ -101,7 +105,10 @@ private:
       if (xSemaphoreTake(devicesMutex, portMAX_DELAY) == pdTRUE) {
         scannedCount++;
         
-        // DEBUG REMOVED: Progress log every 25 IPs (reduces overhead)
+        // Her 50 IP'de progress göster
+        if (scannedCount % 50 == 0) {
+          Serial.printf("[Scanner] Progress: %d/%d IPs scanned\n", scannedCount, totalToScan);
+        }
         
         xSemaphoreGive(devicesMutex);
       }
@@ -111,7 +118,7 @@ private:
       yield();
     }
     
-    // DEBUG REMOVED: Worker finished log
+    Serial.printf("[Scanner] Worker %d finished. Found %d device(s)\n", workerId, devicesFound);
   }
   
   // Task için static wrapper (coordinator)
@@ -283,7 +290,7 @@ public:
     }
     
     if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("[Scanner] WiFi not connected");
+      Serial.println("[Scanner] ERROR: WiFi not connected!");
       return;
     }
     
@@ -304,7 +311,10 @@ public:
     baseIP[sizeof(baseIP) - 1] = '\0';  // Null terminate
     
     Serial.printf("[Scanner] Starting PARALLEL network scan with %d workers...\n", NUM_PARALLEL_TASKS);
+    Serial.printf("[Scanner] Local IP: %s\n", localIPCache.toString().c_str());
+    Serial.printf("[Scanner] Gateway: %s\n", gatewayStr.c_str());
     Serial.printf("[Scanner] Scanning: %s1-%s254\n", baseIP, baseIP);
+    Serial.printf("[Scanner] Current device list has %d device(s)\n", foundDevices.size());
     
     // Coordinator task oluştur - 4KB stack, öncelik 1 (düşük), CPU Core 0
     xTaskCreatePinnedToCore(

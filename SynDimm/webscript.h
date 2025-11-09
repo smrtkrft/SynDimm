@@ -630,9 +630,16 @@ function connectManualIP() {
         .then(data => {
             input.disabled = false;
             if (data.success) {
-                console.log('[Manual] SUCCESS');
+                console.log('[Manual] SUCCESS - Device added');
                 closeManualIPModal();
+                
+                // Update connection status
                 updateConnectionStatus();
+                
+                // Refresh device list to show the newly added device
+                setTimeout(() => {
+                    fetchDevices();
+                }, 500);
             } else {
                 console.error('[Manual] FAILED:', data.message);
                 error.textContent = 'Failed: ' + data.message;

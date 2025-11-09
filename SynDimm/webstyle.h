@@ -1445,8 +1445,8 @@ body {
     top: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    animation: fadeIn 0.3s ease;
+    background-color: rgba(0, 0, 0, 0.8);
+    animation: fadeIn 0.2s ease;
 }
 
 .modal.show {
@@ -1456,98 +1456,154 @@ body {
 }
 
 .modal-content {
-    background-color: var(--bg-secondary);
-    border-radius: 12px;
+    background-color: #2c2c2c;
+    border-radius: 16px;
     width: 90%;
-    max-width: 450px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    max-width: 500px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
     animation: slideUp 0.3s ease;
+    border: 1px solid #404040;
 }
 
 .modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-bottom: 1px solid var(--border);
+    padding: 20px 24px;
+    border-bottom: 1px solid #404040;
 }
 
 .modal-header h3 {
     margin: 0;
-    font-size: 1.25rem;
-    color: var(--text);
+    font-size: 1.1rem;
+    color: #ffffff;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .modal-close {
-    font-size: 28px;
-    color: var(--text-secondary);
+    font-size: 32px;
+    color: #888;
     cursor: pointer;
     transition: color 0.2s;
     line-height: 1;
+    font-weight: 300;
 }
 
 .modal-close:hover {
-    color: var(--text);
+    color: #ffffff;
 }
 
 .modal-body {
-    padding: var(--spacing-lg);
+    padding: 24px;
 }
 
 .modal-body label {
     display: block;
-    margin-bottom: var(--spacing-sm);
-    color: var(--text);
-    font-weight: 500;
+    margin-bottom: 12px;
+    color: #cccccc;
+    font-weight: 400;
+    font-size: 0.9rem;
 }
 
 .modal-input {
     width: 100%;
-    padding: 12px 16px;
-    border: 1px solid var(--border);
+    padding: 14px 18px;
+    border: 1px solid #505050;
     border-radius: 8px;
-    background-color: var(--bg-primary);
-    color: var(--text);
-    font-size: 1rem;
+    background-color: #1a1a1a;
+    color: #ffffff;
+    font-size: 1.1rem;
     font-family: 'Courier New', monospace;
     transition: all 0.3s ease;
+    box-sizing: border-box;
+    letter-spacing: 1px;
 }
 
 .modal-input:focus {
     outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(0, 107, 255, 0.1);
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
+    background-color: #252525;
+}
+
+.modal-input::placeholder {
+    color: #666;
 }
 
 .modal-error {
-    margin-top: var(--spacing-sm);
-    color: #dc3545;
+    margin-top: 12px;
+    color: #ff4444;
     font-size: 0.875rem;
     min-height: 20px;
 }
 
 .modal-footer {
     display: flex;
-    justify-content: flex-end;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-top: 1px solid var(--border);
+    justify-content: space-between;
+    gap: 12px;
+    padding: 20px 24px;
+    border-top: 1px solid #404040;
 }
 
-.btn-secondary {
-    background-color: var(--bg-tertiary);
-    border-color: var(--border);
-    color: var(--text);
+.btn-cancel {
+    flex: 1;
+    background-color: #3a3a3a;
+    border: 1px solid #505050;
+    color: #cccccc;
+    padding: 14px 24px;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
 }
 
-.btn-secondary:hover {
-    background-color: var(--bg-secondary);
+.btn-cancel:hover {
+    background-color: #454545;
+    color: #ffffff;
+}
+
+.btn-connect {
+    flex: 1;
+    background-color: #000000;
+    border: 1px solid #000000;
+    color: #ffffff;
+    padding: 14px 24px;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 600;
+}
+
+.btn-connect:hover {
+    background-color: #1a1a1a;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.btn-connect:active {
+    transform: translateY(0);
 }
 
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
 }
+
+@keyframes slideUp {
+    from {
+        transform: translateY(40px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
 
 @keyframes slideUp {
     from {

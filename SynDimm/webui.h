@@ -768,17 +768,17 @@ const char HTML_PAGE[] PROGMEM = R"=====(
     <div id="manualIPModal" class="modal" onclick="modalBackdropClick(event)">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 data-i18n="settings.dimmer.manualIPTitle">Connect to Device</h3>
+                <h3 data-i18n="settings.dimmer.manualIPTitle">Manuel IP</h3>
                 <span class="modal-close" onclick="closeManualIPModal()">&times;</span>
             </div>
             <div class="modal-body">
-                <label for="manualIP" data-i18n="settings.dimmer.enterIP">Enter IP Address:</label>
-                <input type="text" id="manualIP" class="modal-input" placeholder="192.168.1.100" pattern="\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}">
+                <label for="manualIP" data-i18n="settings.dimmer.enterIP">IP Adresi:</label>
+                <input type="text" id="manualIP" class="modal-input" placeholder="192.168.1.100" pattern="\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}" autocomplete="off">
                 <div class="modal-error" id="manualIPError"></div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeManualIPModal()" data-i18n="common.cancel">Cancel</button>
-                <button class="btn btn-primary" onclick="connectManualIP()" data-i18n="common.connect">Connect</button>
+                <button class="btn btn-cancel" onclick="closeManualIPModal()" data-i18n="common.cancel">Iptal</button>
+                <button class="btn btn-connect" onclick="connectManualIP()" data-i18n="common.connect">Baglan</button>
             </div>
         </div>
     </div>
