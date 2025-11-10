@@ -1,6 +1,6 @@
 /*
  * SynDimm - Modes Library
- * Mode management: Dimmer, Shutter, Safe and Panic modes
+ * Mode management: Dimmer, Shutter, Safe and Alarm modes
  * Powered by SEU - Emek - SmartKraft
  */
 
@@ -18,7 +18,7 @@ enum OperationMode {
   MODE_DIMMER = 1,   // 1 beep
   MODE_SHUTTER = 2,  // 2 beeps
   MODE_SAFE = 3,     // 3 beeps
-  MODE_PANIC = 4     // 4 beeps (future implementation)
+  MODE_ALARM = 4     // 4 beeps (future implementation)
 };
 
 class ModeManager {
@@ -60,7 +60,7 @@ private:
       case MODE_SAFE:
         buzzer->playTriple();  // 3 beeps
         break;
-      case MODE_PANIC:
+      case MODE_ALARM:
         // Future: 4 beeps
         break;
     }
@@ -109,7 +109,7 @@ public:
       case MODE_DIMMER: return "Dimmer";
       case MODE_SHUTTER: return "Shutter";
       case MODE_SAFE: return "Safe";
-      case MODE_PANIC: return "Panic";
+      case MODE_ALARM: return "Alarm";
       default: return "Unknown";
     }
   }
@@ -187,7 +187,7 @@ public:
     
     // DEBUG REMOVED: Event received
     
-    // === NEW MODE CHANGE LOGIC: DIMMER(1) -> SHUTTER(2) -> SAFE(3) -> PANIC(4) ===
+    // === NEW MODE CHANGE LOGIC: DIMMER(1) -> SHUTTER(2) -> SAFE(3) -> ALARM(4) ===
     
     // 'P' event = Long press (3+ seconds)
     if (event == 'P') {
@@ -241,7 +241,7 @@ public:
           newMode = MODE_DIMMER;  // 2 -> 1
         } else if (pendingMode == MODE_SAFE) {
           newMode = MODE_SHUTTER;  // 3 -> 2
-        } else if (pendingMode == MODE_PANIC) {
+        } else if (pendingMode == MODE_ALARM) {
           newMode = MODE_SAFE;  // 4 -> 3
         }
         // If MODE_DIMMER, stay at MODE_DIMMER (boundary)
@@ -265,13 +265,13 @@ public:
         } else if (pendingMode == MODE_SHUTTER) {
           newMode = MODE_SAFE;  // 2 -> 3
         } else if (pendingMode == MODE_SAFE) {
-          newMode = MODE_PANIC;  // 3 -> 4 (not implemented yet)
+          newMode = MODE_ALARM;  // 3 -> 4 (not implemented yet)
         }
-        // If MODE_PANIC or MODE_SAFE (until panic ready), stay at MODE_SAFE
+        // If MODE_ALARM or MODE_SAFE (until alarm ready), stay at MODE_SAFE
         
-        // Block transition to PANIC (not implemented)
-        if (newMode == MODE_PANIC) {
-          // DEBUG REMOVED: PANIC not implemented
+        // Block transition to ALARM (not implemented)
+        if (newMode == MODE_ALARM) {
+          // DEBUG REMOVED: ALARM not implemented
           return;
         }
         
@@ -325,7 +325,7 @@ public:
       case MODE_SAFE:
         processSafeMode(event);
         break;
-      case MODE_PANIC:
+      case MODE_ALARM:
         // Future implementation
         break;
     }

@@ -76,17 +76,6 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                             </div>
                             <div class="mode-check"></div>
                         </label>
-                        <label class="mode-card">
-                            <input type="radio" name="mode" value="panic" disabled>
-                            <div class="mode-content">
-                                <div class="mode-name" data-i18n="control.mode.panic.name">Panic</div>
-                                <div class="mode-desc">
-                                    <span data-i18n="control.mode.panic.desc">Emergency mode</span>
-                                    <br><em style="font-size: 0.85em; color: var(--text-muted);">(Coming Soon)</em>
-                                </div>
-                            </div>
-                            <div class="mode-check"></div>
-                        </label>
                     </div>
                     
                     <div class="section-divider"></div>
@@ -574,14 +563,14 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                     </div>
                 </div>
                 
-                <!-- Panic Mode Accordion -->
+                <!-- Alarm Mode Accordion -->
                 <div class="accordion-panel">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title" data-i18n="settings.panic.title">Panic</span>
+                        <span class="accordion-title" data-i18n="settings.alarm.title">Alarm</span>
                         <span class="accordion-arrow">▼</span>
                     </div>
                     <div class="accordion-content collapsed">
-                        <p class="panel-text" data-i18n="settings.panic.description">Panik butonu acil durumlarda sevdiklerinize haber vermek veya yardım istemek için tasarlanmaktadır. Encoder'a dokunduğunuzda veya çevirdiğinizde (yön ve miktar fark etmeksizin), API üzerinden mobil uygulamaya sinyal gönderilerek telefonun zil sesi tetiklenir ve mesaj metni iletilir. Sistem şu anda geliştirilme aşamasındadır.</p>
+                        <p class="panel-text" data-i18n="settings.alarm.description">Alarm butonu acil durumlarda sevdiklerinize haber vermek veya yardım istemek için tasarlanmaktadır. Encoder'a dokunduğunuzda veya çevirdiğinizde (yön ve miktar fark etmeksizin), API üzerinden mobil uygulamaya sinyal gönderilerek telefonun zil sesi tetiklenir ve mesaj metni iletilir. Sistem şu anda geliştirilme aşamasındadır.</p>
                     </div>
                 </div>
                 
@@ -718,10 +707,10 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                     <p><strong data-i18n="info.safeMode.triggering.title">Tetikleme:</strong> <span data-i18n="info.safeMode.triggering.text">Doğru şifre girildiğinde, o şifreye kayıtlı API otomatik olarak çağrılır (HTTP GET/POST).</span></p>
                     <p><strong data-i18n="info.safeMode.useCases.title">Kullanım Alanları:</strong> <span data-i18n="info.safeMode.useCases.text">Akıllı kilit açma, garaj kapısı kontrolü, özel otomasyon senaryoları.</span></p>
                     
-                    <h4 data-i18n="info.panicMode.title">Panik Modu</h4>
-                    <p><strong data-i18n="info.panicMode.emergencyNotification.title">Acil Bildirim:</strong> <span data-i18n="info.panicMode.emergencyNotification.text">Encoder'a dokunduğunuzda veya çevirdiğinizde (yön/miktar önemsiz) API üzerinden mobil uygulamaya sinyal gönderilir.</span></p>
-                    <p><strong data-i18n="info.panicMode.function.title">İşlev:</strong> <span data-i18n="info.panicMode.function.text">Hedef telefonda zil sesi tetiklenir ve acil durum mesajı iletilir.</span></p>
-                    <p class="warning-text" data-i18n="info.panicMode.warning">Panik modu geliştirme aşamasındadır.</p>
+                    <h4 data-i18n="info.alarmMode.title">Alarm Modu</h4>
+                    <p><strong data-i18n="info.alarmMode.emergencyNotification.title">Acil Bildirim:</strong> <span data-i18n="info.alarmMode.emergencyNotification.text">Encoder'a dokunduğunuzda veya çevirdiğinizde (yön/miktar önemsiz) API üzerinden mobil uygulamaya sinyal gönderilir.</span></p>
+                    <p><strong data-i18n="info.alarmMode.function.title">İşlev:</strong> <span data-i18n="info.alarmMode.function.text">Hedef telefonda zil sesi tetiklenir ve acil durum mesajı iletilir.</span></p>
+                    <p class="warning-text" data-i18n="info.alarmMode.warning">Alarm modu geliştirme aşamasındadır.</p>
                     
                     <h4 data-i18n="info.networkSettings.title">Ağ Ayarları</h4>
                     <p><strong data-i18n="info.networkSettings.wifiConnection.title">WiFi Bağlantısı:</strong> <span data-i18n="info.networkSettings.wifiConnection.text">Network sekmesinden SSID ve şifre girerek WiFi ağına bağlanın.</span></p>

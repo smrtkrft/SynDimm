@@ -240,9 +240,6 @@ void loop() {
   // Shutter update (motor control, position tracking)
   shutter.update();
   
-  // Dimmer update (device synchronization)
-  dimmer.update();
-  
   // Encoder reading
   if (encoder.available()) {
     char ev = encoder.read();
@@ -255,6 +252,12 @@ void loop() {
       dimmer.processEncoderEvent(ev);
     }
   }
+  
+  // Dimmer update (device synchronization) - Only in DIMMER mode
+  if (modes.getCurrentMode() == MODE_DIMMER) {
+    dimmer.update();
+  }
+  
   yield();
   
   // API trigger (non-blocking - separate from encoder event)
@@ -319,6 +322,11 @@ void setupWeb() {
   
   server.on("/script.js", HTTP_GET, [](){
     server.send_P(200, "application/javascript", JS_SCRIPT);
+  });
+  
+  // Favicon - return 204 No Content to suppress 404 errors
+  server.on("/favicon.ico", HTTP_GET, [](){
+    server.send(204);  // No Content
   });
   
   // API - Translations
@@ -509,11 +517,20 @@ void setupWeb() {
   server.on("/api/shelly/connect", HTTP_GET, [](){
     if (server.hasArg("ip")) {
       String ip = server.arg("ip");
+      
+      // Flush serial before API response
+      Serial.flush();
+      
       bool success = dimmer.connectShelly(ip);
+      
+      // Build JSON response in a String first
+      String response;
       if (success) {
-        server.send(200, "application/json", "{\"success\":true,\"ip\":\"" + ip + "\"}");
+        response = "{\"success\":true,\"ip\":\"" + ip + "\"}";
+        server.send(200, "application/json", response);
       } else {
-        server.send(500, "application/json", "{\"success\":false,\"error\":\"Connection failed\"}");
+        response = "{\"success\":false,\"error\":\"Connection failed\"}";
+        server.send(500, "application/json", response);
       }
     } else {
       server.send(400, "application/json", "{\"success\":false,\"error\":\"Missing ip\"}");
@@ -528,6 +545,12 @@ void setupWeb() {
   
   // API - Shelly durumunu oku
   server.on("/api/shelly/status", HTTP_GET, [](){
+    // CRITICAL: Read fresh status from device before sending to web
+    if (dimmer.isShellyConnected()) {
+      dimmer.syncFromShelly();  // Force read device status
+      delay(50);  // Wait for HTTP response
+    }
+    
     String s = "{\"connected\":" + String(dimmer.isShellyConnected() ? "true" : "false");
     if (dimmer.isShellyConnected()) {
       s += ",\"ip\":\"" + dimmer.getShellyIP() + "\"";
@@ -564,9 +587,9 @@ void setupWeb() {
       } else if (mode == "safe") {
         modes.setSafeMode(true);
         server.send(200, "application/json", "{\"success\":true,\"mode\":\"safe\"}");
-      } else if (mode == "panic") {
-        // Panic mode not implemented yet
-        server.send(400, "application/json", "{\"success\":false,\"error\":\"Panic mode not implemented\"}");
+      } else if (mode == "alarm") {
+        // Alarm mode not implemented yet
+        server.send(400, "application/json", "{\"success\":false,\"error\":\"Alarm mode not implemented\"}");
       } else {
         server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid mode\"}");
       }
@@ -588,8 +611,8 @@ void setupWeb() {
       case MODE_SAFE:
         activeMode = "safe";
         break;
-      case MODE_PANIC:
-        activeMode = "panic";
+      case MODE_ALARM:
+        activeMode = "alarm";
         break;
       default:
         activeMode = "dimmer";

@@ -90,11 +90,11 @@ const char TRANSLATIONS_JSON[] PROGMEM = R"=====(
           "tr": "Sayac gösterim modu"
         }
       },
-      "panic": {
+      "alarm": {
         "name": {
-          "en": "Panic",
-          "de": "Panik",
-          "tr": "Panik"
+          "en": "Alarm",
+          "de": "Alarm",
+          "tr": "Alarm"
         },
         "desc": {
           "en": "Emergency mode",
@@ -179,6 +179,16 @@ const char TRANSLATIONS_JSON[] PROGMEM = R"=====(
         "en": "Manual IP",
         "de": "Manuelle IP",
         "tr": "Manuel IP"
+      },
+      "manualIPTitle": {
+        "en": "Enter Device IP",
+        "de": "Geräte-IP eingeben",
+        "tr": "Cihaz IP Girin"
+      },
+      "enterIP": {
+        "en": "IP Address:",
+        "de": "IP-Adresse:",
+        "tr": "IP Adresi:"
       },
       "stopScanning": {
         "en": "Stop Scanning",
@@ -350,16 +360,16 @@ const char TRANSLATIONS_JSON[] PROGMEM = R"=====(
         "tr": "Sadece POST istekleri icin"
       }
     },
-    "panic": {
+    "alarm": {
       "title": {
-        "en": "Panic",
-        "de": "Panik",
-        "tr": "Panik"
+        "en": "Alarm",
+        "de": "Alarm",
+        "tr": "Alarm"
       },
       "description": {
-        "en": "The panic button is designed to notify your loved ones or request help in emergencies. When you touch or turn the encoder (regardless of direction or amount), a signal is sent via API to the mobile app, triggering the phone's ringtone and delivering the message text. The system is currently under development.",
-        "de": "Die Paniktaste ist so konzipiert, dass sie Ihre Angehörigen benachrichtigt oder in Notfällen Hilfe anfordert. Wenn Sie den Encoder berühren oder drehen (unabhängig von Richtung oder Menge), wird ein Signal über die API an die mobile App gesendet, wodurch der Klingelton des Telefons ausgelöst und der Nachrichtentext übermittelt wird. Das System befindet sich derzeit in der Entwicklung.",
-        "tr": "Panik butonu acil durumlarda sevdiklerinize haber vermek veya yardim istemek icin tasarlanmaktadir. Encoder'a dokundugunuzda veya cevirdiginizde (yön ve miktar fark etmeksizin), API üzerinden mobil uygulamaya sinyal gönderilerek telefonun zil sesi tetiklenir ve mesaj metni iletilir. Sistem su anda gelistirilme asamasindadir."
+        "en": "Alarm mode is a security feature designed to instantly notify your loved ones or request help in emergencies. When you touch or turn the encoder (regardless of direction or amount), a signal is sent via API to the mobile application. This signal triggers the ringtone on phones with the app installed and displays your predefined message on the screen.\n\nExample Use Case:\n\nWhen your SynDimm device is in Alarm mode and you interact with the encoder, an emergency request is automatically sent to the SynDimm mobile app on Android or iOS devices. Phones with the app installed will ring loudly and display your custom emergency message on the screen. This provides you with an intelligent solution that you can use as a panic button for your personal safety.\n\nNote: The system is currently under development and will be available soon.",
+        "de": "Der Alarm-Modus ist eine Sicherheitsfunktion, die entwickelt wurde, um Ihre Angehörigen sofort zu benachrichtigen oder in Notfällen Hilfe anzufordern. Wenn Sie den Encoder berühren oder drehen (unabhängig von Richtung oder Menge), wird ein Signal über die API an die mobile Anwendung gesendet. Dieses Signal löst den Klingelton auf Telefonen mit installierter App aus und zeigt Ihre vordefinierte Nachricht auf dem Bildschirm an.\n\nBeispiel-Anwendungsszenario:\n\nWenn sich Ihr SynDimm-Gerät im Alarm-Modus befindet und Sie mit dem Encoder interagieren, wird automatisch eine Notfallanfrage an die SynDimm-Mobile-App auf Android- oder iOS-Geräten gesendet. Telefone mit installierter App klingeln laut und zeigen Ihre benutzerdefinierte Notfallnachricht auf dem Bildschirm an. Dies bietet Ihnen eine intelligente Lösung, die Sie als Panik-Button für Ihre persönliche Sicherheit verwenden können.\n\nHinweis: Das System befindet sich derzeit in der Entwicklung und wird in Kürze verfügbar sein.",
+        "tr": "Alarm modu, acil durumlarda sevdiklerinize anında haber vermek veya yardım istemek için tasarlanmış bir güvenlik özelliğidir. Encoder'a dokunduğunuzda veya çevirdiğinizde (yön ve miktar fark etmeksizin), API üzerinden mobil uygulamaya sinyal gönderilir. Bu sinyal uygulamanın yüklü olduğu telefonların zil sesini tetikleyerek önceden belirlediğiniz mesajı ekranda gösterir.\n\nÖrnek Kullanım Senaryosu:\n\nSynDimm cihazınız Alarm modundayken encoder ile herhangi bir etkileşime girdiğinizde, Android veya iOS cihazlarınızdaki SynDimm mobil uygulamasına otomatik olarak acil durum isteği gönderilir. Uygulamanın yüklü olduğu telefonlar yüksek sesle çalmaya başlar ve önceden ayarladığınız özel acil durum mesajını ekranda görüntüler. Bu sayede, kişisel güvenliğiniz için bir panik butonu olarak kullanabileceğiniz akıllı bir çözüm sunar.\n\nNot: Sistem şu anda geliştirme aşamasındadır ve yakında kullanıma sunulacaktır."
       }
     },
     "saveConfig": {
@@ -667,11 +677,11 @@ const char TRANSLATIONS_JSON[] PROGMEM = R"=====(
         }
       }
     },
-    "panicMode": {
+    "alarmMode": {
       "title": {
-        "en": "Panic Mode",
-        "de": "Panik-Modus",
-        "tr": "Panik Modu"
+        "en": "Alarm Mode",
+        "de": "Alarm-Modus",
+        "tr": "Alarm Modu"
       },
       "emergencyNotification": {
         "title": {
@@ -698,9 +708,9 @@ const char TRANSLATIONS_JSON[] PROGMEM = R"=====(
         }
       },
       "warning": {
-        "en": "Panic mode is under development.",
-        "de": "Der Panik-Modus befindet sich in der Entwicklung.",
-        "tr": "Panik modu gelistirme asmasindadir."
+        "en": "Alarm mode is under development.",
+        "de": "Der Alarm-Modus befindet sich in der Entwicklung.",
+        "tr": "Alarm modu gelistirme asmasindadir."
       }
     },
     "networkSettings": {

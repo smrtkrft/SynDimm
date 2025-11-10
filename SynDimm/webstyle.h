@@ -353,13 +353,6 @@ body {
     gap: var(--spacing-md);
 }
 
-/* Panic card - full width on second row, centered */
-.mode-card:nth-child(4) {
-    grid-column: 2 / 3;
-    width: 150%;
-    margin-left: -25%;
-}
-
 .mode-card {
     position: relative;
     display: block;
@@ -1200,13 +1193,6 @@ body {
     
     .mode-grid {
         grid-template-columns: 1fr;
-    }
-    
-    /* Mobile: panic card normal width */
-    .mode-card:nth-child(4) {
-        width: 100%;
-        margin-left: 0;
-        grid-column: auto;
     }
     
     .preferences-row {

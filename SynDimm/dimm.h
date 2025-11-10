@@ -24,11 +24,18 @@ private:
   unsigned long lastDeviceSync;       // Last synchronization time
   unsigned long lastDimmChange;       // Last dimm_sayac change time
   int lastSentBrightness;             // Last value sent to device
+  int failCount;                      // Connection fail counter (was static - BUG FIX)
+  bool httpRequestInProgress;         // HTTP request lock to prevent race condition
+  
+  // Extra turn=on protection (Shelly turns off during fast brightness changes)
+  unsigned long lastBrightnessChangeTime;  // Last brightness change timestamp
+  bool needsExtraTurnOn;                   // Flag: needs extra turn=on command
   
   // Sync intervals
-  const unsigned long deviceSyncIntervalActive = 500;    // Active mode: 500ms (fast response)
-  const unsigned long deviceSyncIntervalIdle = 5000;     // Idle mode: 5s (save bandwidth)
-  const unsigned long dimmerSendDelay = 150;             // Send 150ms after encoder stops
+  const unsigned long deviceSyncIntervalActive = 500;     // Active mode: 500ms (encoder değişimi hemen gönder)
+  const unsigned long deviceSyncIntervalIdle = 2000;      // Idle mode: 2s (Shelly işleme süresi + güvenlik marjini)
+  const unsigned long dimmerSendDelay = 150;              // Send 150ms after encoder stops
+  const unsigned long extraTurnOnDelay = 200;             // Wait 200ms after brightness, then send turn=on
   
   // Dimm ratio (sensitivity)
   int dimmRatio;  // 1-5 range, how many units change per encoder tick
@@ -38,7 +45,9 @@ public:
                                deviceIP(""), deviceType(""), deviceConnected(false), 
                                deviceIson(false), deviceBrightness(0), 
                                lastDeviceSync(0), lastDimmChange(0), 
-                               lastSentBrightness(-1), dimmRatio(1) {}
+                               lastSentBrightness(-1), dimmRatio(1), 
+                               failCount(0), httpRequestInProgress(false),
+                               lastBrightnessChangeTime(0), needsExtraTurnOn(false) {}
   
   void begin() {
     // Load saved settings
@@ -120,7 +129,7 @@ public:
     HTTPClient http;
     String url = "http://" + ip + "/light/0";
     http.begin(url);
-    http.setTimeout(500);  // CRITICAL: 500ms - fast fail, non-blocking
+    http.setTimeout(300);  // CRITICAL: 300ms - very fast fail, non-blocking
     
     int httpCode = http.GET();
     
@@ -180,16 +189,21 @@ public:
   void syncFromDevice() {
     if (!deviceConnected || deviceIP == "") return;
     
+    // Prevent multiple simultaneous HTTP requests
+    if (httpRequestInProgress) return;
+    httpRequestInProgress = true;
+    
     HTTPClient http;
     String url = "http://" + deviceIP + "/light/0";
     http.begin(url);
-    http.setTimeout(500);  // CRITICAL: 500ms - fast fail, non-blocking
+    http.setTimeout(300);  // CRITICAL: 300ms - very fast fail, non-blocking
     
     int httpCode = http.GET();
     
     if (httpCode == 200) {
       String payload = http.getString();
       parseDeviceStatus(payload);
+      failCount = 0;  // Reset fail counter on success
     } else {
       Serial.print("[ERROR] Device read failed: ");
       Serial.print(httpCode);
@@ -198,7 +212,6 @@ public:
       Serial.println(")");
       
       // Disconnect after 3 failed attempts
-      static int failCount = 0;
       failCount++;
       if (failCount > 3) {
         Serial.println("[ERROR] 3 failed attempts - disconnecting");
@@ -208,6 +221,7 @@ public:
     }
     
     http.end();
+    httpRequestInProgress = false;
   }
   
   // Backward compatibility
@@ -219,50 +233,104 @@ public:
   void syncToDevice() {
     if (!deviceConnected || deviceIP == "") return;
     
+    // CRITICAL: Prevent multiple simultaneous HTTP requests during fast encoder rotation
+    if (httpRequestInProgress) {
+      Serial.println("[WARN] HTTP request in progress - skipping sync");
+      return;
+    }
+    
     int currentBrightness = encoder->get_dimm_sayac();
     
     // Don't send if no change
     if (currentBrightness == lastSentBrightness) return;
     
+    httpRequestInProgress = true;
+    
     HTTPClient http;
     String url;
+    bool willTurnOff = false;
     
     // If brightness = 0, turn off device; otherwise send brightness
     if (currentBrightness == 0) {
       // Shelly doesn't accept brightness=0, use turn=off
       url = "http://" + deviceIP + "/light/0?turn=off&transition=0";
-      if (deviceIson) {  // Only turn off if currently on
-        deviceIson = false;
-        Serial.println("[Dimm] Turning off device");
-      } else {
-        http.end();
-        return;  // Already off, don't send request
-      }
-    } else {
-      // If device is off, turn on first, then set brightness
       if (!deviceIson) {
-        url = "http://" + deviceIP + "/light/0?turn=on&brightness=" + String(currentBrightness) + "&transition=0";
-        deviceIson = true;
+        // Already off, don't send request
+        httpRequestInProgress = false;
+        return;
+      }
+      willTurnOff = true;
+      Serial.println("[Dimm] Turning off device");
+    } else {
+      // Brightness 1-100: Device must be ON
+      // CRITICAL: Always send turn=on to ensure device stays on during fast rotation
+      url = "http://" + deviceIP + "/light/0?turn=on&brightness=" + String(currentBrightness) + "&transition=0";
+      
+      if (!deviceIson) {
         Serial.println("[Dimm] Turning on device");
-      } else {
-        // Already on, just set brightness
-        url = "http://" + deviceIP + "/light/0?brightness=" + String(currentBrightness) + "&transition=0";
       }
     }
     
     http.begin(url);
-    http.setTimeout(500);  // CRITICAL: 500ms - fast fail, non-blocking
+    http.setTimeout(300);  // CRITICAL: 300ms - very fast fail, non-blocking
     
     int httpCode = http.GET();
     
     if (httpCode == 200) {
       lastSentBrightness = currentBrightness;
-      Serial.println("[Dimm] Brightness sent: " + String(currentBrightness));
+      
+      // CRITICAL: Update deviceIson ONLY after successful HTTP request
+      if (willTurnOff) {
+        deviceIson = false;
+        needsExtraTurnOn = false;  // No extra turn=on for off command
+      } else {
+        deviceIson = true;  // Brightness 1-100 = device should be ON
+        
+        // SHELLY BUG FIX: Shelly turns off during fast brightness changes
+        // Schedule extra turn=on 200ms after brightness command
+        lastBrightnessChangeTime = millis();
+        needsExtraTurnOn = true;
+      }
+      
+      Serial.println("[Dimm] Brightness sent: " + String(currentBrightness) + " (Device: " + (deviceIson ? "ON" : "OFF") + ")");
     } else {
       Serial.println("[ERROR] Brightness send failed: " + String(httpCode));
     }
     
     http.end();
+    httpRequestInProgress = false;
+  }
+  
+  // SHELLY BUG FIX: Send extra turn=on after brightness command
+  // Shelly devices sometimes turn off during fast brightness changes
+  void sendExtraTurnOn() {
+    if (!deviceConnected || deviceIP == "") return;
+    if (httpRequestInProgress) return;  // Don't interfere with ongoing requests
+    
+    int currentBrightness = encoder->get_dimm_sayac();
+    
+    // Only send if brightness > 0 (device should be on)
+    if (currentBrightness == 0) return;
+    
+    httpRequestInProgress = true;
+    
+    HTTPClient http;
+    String url = "http://" + deviceIP + "/light/0?turn=on&transition=0";
+    
+    http.begin(url);
+    http.setTimeout(300);
+    
+    int httpCode = http.GET();
+    
+    if (httpCode == 200) {
+      deviceIson = true;
+      Serial.println("[Dimm] Extra turn=on sent (Shelly protection)");
+    } else {
+      Serial.println("[WARN] Extra turn=on failed: " + String(httpCode));
+    }
+    
+    http.end();
+    httpRequestInProgress = false;
   }
   
   // Backward compatibility
@@ -273,6 +341,13 @@ public:
   // Toggle device on/off
   void toggleDevice() {
     if (!deviceConnected || deviceIP == "") return;
+    
+    // CRITICAL: Prevent race condition during fast button presses
+    if (httpRequestInProgress) {
+      Serial.println("[WARN] HTTP request in progress - skipping toggle");
+      return;
+    }
+    httpRequestInProgress = true;
     
     String command = deviceIson ? "off" : "on";
     
@@ -286,7 +361,7 @@ public:
     }
     
     http.begin(url);
-    http.setTimeout(500);  // CRITICAL: 500ms - fast fail, non-blocking
+    http.setTimeout(300);  // CRITICAL: 300ms - very fast fail, non-blocking
     
     int httpCode = http.GET();
     
@@ -303,6 +378,7 @@ public:
     }
     
     http.end();
+    httpRequestInProgress = false;
   }
   
   // Backward compatibility
@@ -316,7 +392,9 @@ public:
     int isonIndex = json.indexOf("\"ison\":");
     int brightnessIndex = json.indexOf("\"brightness\":");
     
-    if (isonIndex > 0) {
+    // CRITICAL: Don't update deviceIson during active encoder rotation
+    // This prevents race condition where Shelly returns old state during fast changes
+    if (isonIndex > 0 && lastDimmChange == 0) {
       String isonStr = json.substring(isonIndex + 7, isonIndex + 12);
       deviceIson = (isonStr.indexOf("true") >= 0);
     }
@@ -370,12 +448,21 @@ public:
     // If encoder stopped rotating, send value to device after 150ms
     if (lastDimmChange > 0 && now - lastDimmChange > dimmerSendDelay) {
       syncToDevice();
-      lastDimmChange = 0;  // Reset
+      lastDimmChange = 0;  // Reset - mark encoder as idle
+      lastDeviceSync = now;  // CRITICAL: Reset sync timer to prevent immediate read
+    }
+    
+    // SHELLY BUG FIX: Send extra turn=on 200ms after brightness change
+    // This prevents Shelly from turning off during fast encoder rotation
+    if (needsExtraTurnOn && (now - lastBrightnessChangeTime > extraTurnOnDelay)) {
+      sendExtraTurnOn();
+      needsExtraTurnOn = false;
     }
     
     // Poll device status - Event-driven interval
-    // Active: 500ms (encoder moving), Idle: 5s (encoder idle)
-    unsigned long dynamicInterval = (lastDimmChange > 0) ? deviceSyncIntervalActive : deviceSyncIntervalIdle;
+    // Active: 500ms (encoder moving), Idle: 3s (encoder idle)
+    // CRITICAL: Wait at least 500ms after encoder stops before reading device
+    unsigned long dynamicInterval = deviceSyncIntervalIdle;  // Use idle interval (3s)
     
     if (lastDimmChange == 0 && now - lastDeviceSync > dynamicInterval) {
       syncFromDevice();

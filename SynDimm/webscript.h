@@ -139,7 +139,7 @@ document.querySelectorAll('.mode-card input[type="radio"]').forEach(radio => {
                             // Match mode to accordion title
                             if ((mode === 'dimmer' && title === 'Dimmer') ||
                                 (mode === 'safe' && title === 'Safe') ||
-                                (mode === 'panic' && title === 'Panic')) {
+                                (mode === 'alarm' && title === 'Alarm')) {
                                 // Open this accordion
                                 if (content.classList.contains('collapsed')) {
                                     header.click();
@@ -345,9 +345,6 @@ function connectDevice(ip) {
         });
 }
 
-        });
-}
-
 // Manual IP Connect Dialog - Modal Version
 function showManualIPDialog() {
     const modal = document.getElementById('manualIPModal');
@@ -433,20 +430,20 @@ function connectManualIP() {
     // Disable input during connection
     input.disabled = true;
     
-    // Call manual connect API
-    fetch('/api/devices/manual?ip=' + encodeURIComponent(ip))
+    // Call connect API (updated endpoint)
+    fetch('/api/shelly/connect?ip=' + encodeURIComponent(ip))
         .then(r => r.json())
         .then(data => {
             input.disabled = false;
             if (data.success) {
-                console.log('[Manual] SUCCESS - Device added');
+                console.log('[Manual] SUCCESS - Connected to:', data.ip);
                 closeManualIPModal();
                 
                 // Update connection status
                 updateConnectionStatus();
             } else {
-                console.error('[Manual] FAILED:', data.message);
-                error.textContent = 'Failed: ' + data.message;
+                console.error('[Manual] FAILED:', data.error);
+                error.textContent = 'Failed: ' + (data.error || 'Connection failed');
             }
         })
         .catch(err => {
@@ -894,17 +891,25 @@ function initializePage() {
     loadOTASettings();
     setupOTAListeners();
     
-    // Start periodic status updates - HIZLI SENKRONIZASYON (her 500ms)
+    // Start periodic status updates - BALANCED (cihaz hızlı, web makul)
     setInterval(() => {
-        updateConnectionStatus();
-        updateNetworkStatus();
-        loadCurrentMode();  // Poll mode changes from encoder
-    }, 500);  // 5000ms -> 500ms (10x daha hızlı)
+        updateConnectionStatus();  // Dimmer connection + brightness (WEB SENKRONIZASYONU)
+    }, 2000);  // 2 saniye - Web arayüzü için yeterli, cihaz encoder ile anında
     
-    // OTA check - her 5 saniyede bir (Info sekmesindeki versiyon için)
+    // Network status - orta hızda (5 saniye, wifi değişimi takibi)
+    setInterval(() => {
+        updateNetworkStatus();
+    }, 5000);
+    
+    // Mode status - orta hızda (5 saniye, mod değişimi takibi)
+    setInterval(() => {
+        loadCurrentMode();
+    }, 5000);
+    
+    // OTA check - seyrek (30 saniye, versiyon bilgisi için)
     setInterval(() => {
         loadOTASettings();
-    }, 5000);
+    }, 30000);
     
     console.log('SynDimm initialized');
 }
