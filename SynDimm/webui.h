@@ -166,15 +166,8 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                                 <input type="range" class="range-slider" min="1" max="5" value="3" id="ratio" oninput="updateSliderValue(this)">
                             </div>
                         </div>
-                        <div class="scan-section">
-                            <button class="btn btn-scan" onclick="scanDevices()" data-i18n="settings.dimmer.scanNetwork">Scan Network</button>
+                        <div class="manual-connect">
                             <button class="btn btn-manual" onclick="showManualIPDialog()" data-i18n="settings.dimmer.manualIP">Manual IP</button>
-                        </div>
-                        <div class="device-list">
-                            <div class="empty-state">
-                                <p data-i18n="settings.dimmer.noDevices">No devices found</p>
-                                <span data-i18n="settings.dimmer.startScanning">Start scanning to discover devices</span>
-                            </div>
                         </div>
                     </div>
                 </div>

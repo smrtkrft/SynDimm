@@ -706,41 +706,22 @@ body {
     width: 100%;
 }
 
-.btn-scan {
-    padding: var(--spacing-sm) var(--spacing-xl);
-    min-width: 200px;
-}
-
-.btn-scan.scanning {
-    background: #dc3545;  /* Red background when stopping */
-    border-color: #dc3545;
-}
-
-.btn-scan.scanning:hover {
-    background: #c82333;  /* Darker red on hover */
-    border-color: #bd2130;
-}
-
-.scan-section {
+.manual-connect {
     text-align: center;
     padding: var(--spacing-md) var(--spacing-lg);
-    display: flex;
-    gap: var(--spacing-sm);
-    justify-content: center;
-    flex-wrap: wrap;
 }
 
 .btn-manual {
     padding: var(--spacing-sm) var(--spacing-xl);
-    min-width: 150px;
-    background: #2c2c2c;
-    border-color: #2c2c2c;
-    color: #ffffff;
+    min-width: 200px;
+    background: var(--text);
+    color: var(--bg);
+    border: 2px solid var(--text);
 }
 
 .btn-manual:hover {
-    background: #1a1a1a;
-    border-color: #1a1a1a;
+    background: var(--bg);
+    color: var(--text);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
@@ -762,137 +743,6 @@ body {
 @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
-}
-
-/* ========== Device List ========== */
-.device-list {
-    margin: var(--spacing-md) var(--spacing-lg);
-}
-
-/* Scan Progress Header */
-.scan-progress {
-    text-align: center;
-    padding: var(--spacing-md);
-    background: var(--bg-secondary);
-    border: 1px solid var(--primary);
-    border-radius: var(--radius);
-    margin-bottom: var(--spacing-md);
-    animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.85; }
-}
-
-.scan-status {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--primary);
-    margin-bottom: 4px;
-}
-
-.scan-info {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    display: block;
-}
-
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-lg);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-}
-
-.empty-state p {
-    font-size: 0.95rem;
-    margin-bottom: 4px;
-}
-
-.empty-state span {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-}
-
-.device-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-md);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    margin-bottom: var(--spacing-xs);
-    transition: all var(--transition);
-}
-
-.device-item:hover {
-    border-color: var(--border-hover);
-}
-
-.device-item:last-child {
-    margin-bottom: 0;
-}
-
-.device-info {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1;
-}
-
-.device-name {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--text);
-}
-
-.device-detail {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-}
-
-.device-action {
-    margin-left: var(--spacing-md);
-}
-
-.btn-connect {
-    padding: 8px 20px;
-    background: var(--text);
-    color: var(--bg);
-    border: none;
-    border-radius: var(--radius);
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all var(--transition);
-}
-
-.btn-connect:hover {
-    opacity: 0.9;
-    transform: translateY(-1px);
-}
-
-.btn-connect:active {
-    transform: translateY(0);
-}
-
-.btn-disconnect {
-    padding: 8px 20px;
-    background: #dc2626;
-    color: #fff;
-    border: none;
-    border-radius: var(--radius);
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all var(--transition);
-}
-
-.btn-disconnect:hover {
-    background: #b91c1c;
 }
 
 /* ========== Network Status ========== */

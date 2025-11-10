@@ -315,186 +315,8 @@ if (apToggle) {
         // API call: /api/network/ap?enabled=true/false
     });
 }
-// Scan Devices (Dynamic button - Start/Stop)
-let isScanning = false;
-let connectedDeviceIP = '';  // Track connected device
 
-function scanDevices() {
-    console.log('[Scan] scanDevices() called, isScanning:', isScanning);
-    const scanBtn = document.querySelector('.btn-scan');
-    
-    if (!scanBtn) {
-        console.error('[Scan] ERROR: btn-scan not found!');
-        return;
-    }
-    
-    console.log('[Scan] Button found, current text:', scanBtn.textContent);
-    
-    if (isScanning) {
-        // Stop scanning
-        console.log('[Scan] Stopping scan...');
-        
-        fetch('/api/devices/scan/stop')
-            .then(r => r.json())
-            .then(data => {
-                console.log('[Scan] Scan stopped');
-                isScanning = false;
-                
-                // Update button - get translation properly
-                const scanText = translations?.dimmer?.scanNetwork?.[currentLang] || 'Ag Tara';
-                scanBtn.textContent = scanText;
-                scanBtn.classList.remove('scanning');
-                console.log('[Scan] Button updated to:', scanBtn.textContent);
-                
-                // Show final results
-                displayScanResults(data);
-            })
-            .catch(err => {
-                console.error('[Scan] Stop error:', err);
-            });
-        return;
-    }
-    
-    // Start scanning
-    console.log('[Scan] Starting device scan...');
-    isScanning = true;
-    
-    // Update button - get translation properly
-    const stopText = translations?.dimmer?.stopScanning?.[currentLang] || 'Taramayi Durdur';
-    scanBtn.textContent = stopText;
-    scanBtn.classList.add('scanning');
-    console.log('[Scan] Button updated to:', scanBtn.textContent);
-    
-    const deviceList = document.querySelector('.device-list');
-    
-    if (!deviceList) {
-        console.error('[Scan] ERROR: device-list element not found!');
-        return;
-    }
-    
-    deviceList.innerHTML = '<div class="empty-state"><p>Scanning network...</p><span>Checking 254 IP addresses</span></div>';
-    
-    // Start scan
-    fetch('/api/devices/scan')
-        .then(r => {
-            console.log('[Scan] API response status:', r.status);
-            return r.json();
-        })
-        .then(data => {
-            console.log('[Scan] Initial response:', data);
-            displayScanResults(data);
-        })
-        .catch(err => {
-            console.error('[Scan] ERROR:', err);
-            deviceList.innerHTML = '<div class="empty-state"><p>Scan failed</p><span>Check network connection</span></div>';
-            
-            // Reset button on error
-            isScanning = false;
-            const scanText = translations?.dimmer?.scanNetwork?.[currentLang] || 'Ag Tara';
-            scanBtn.textContent = scanText;
-            scanBtn.classList.remove('scanning');
-        });
-}
-
-function displayScanResults(data) {
-    const deviceList = document.querySelector('.device-list');
-    const scanBtn = document.querySelector('.btn-scan');
-    
-    console.log('[Scan] Data received:', data);
-    console.log('[Scan] Scanning:', data.scanning);
-    console.log('[Scan] Devices count:', data.devices ? data.devices.length : 0);
-    
-    if (data.scanning) {
-        // Tarama devam ediyor - cihazları ve progress'i göster
-        let html = '';
-        
-        // Bulunan cihazları listele
-        if (data.devices && data.devices.length > 0) {
-            data.devices.forEach(device => {
-                console.log('[Scan] Device found:', device.ip, device.type, device.model);
-                
-                // Check if this device is connected
-                const isConnected = (connectedDeviceIP === device.ip);
-                const buttonHTML = isConnected 
-                    ? '<button class="btn-connect btn-disconnect" onclick="disconnectDevice()">Disconnect</button>'
-                    : `<button class="btn-connect" onclick="connectDevice('${device.ip}')">Connect</button>`;
-                
-                html += `
-                    <div class="device-item">
-                        <div class="device-info">
-                            <span class="device-name">${device.type || 'Unknown'}</span>
-                            <span class="device-detail">${device.ip} ${device.model ? '(' + device.model + ')' : ''}</span>
-                        </div>
-                        <div class="device-action">
-                            ${buttonHTML}
-                        </div>
-                    </div>
-                `;
-            });
-        }
-        
-        // Progress ekle
-        html += `
-            <div class="scan-progress">
-                <p class="scan-status">Scanning network... ${data.progress}%</p>
-                <span class="scan-info">Found ${data.devices.length} dimmer(s) - Scanning continues...</span>
-            </div>
-        `;
-        
-        deviceList.innerHTML = html;
-        console.log('[Scan] Still scanning, fetching progress in 2s...');
-        
-        // 2 saniyede bir güncelle
-        setTimeout(() => {
-            if (isScanning) {  // Only continue if still scanning
-                fetch('/api/devices/scan/progress')
-                    .then(r => r.json())
-                    .then(displayScanResults)
-                    .catch(err => console.error('Progress error:', err));
-            }
-        }, 2000);
-        return;
-    }
-    
-    // Scan complete - update button and show final results
-    console.log('[Scan] Scan complete! Showing device list...');
-    isScanning = false;
-    const scanText = translations?.dimmer?.scanNetwork?.[currentLang] || 'Ag Tara';
-    scanBtn.textContent = scanText;
-    scanBtn.classList.remove('scanning');
-    
-    if (data.devices && data.devices.length > 0) {
-        let html = '';
-        data.devices.forEach(device => {
-            console.log('[Scan] Device:', device.ip, device.type, device.model);
-            
-            // Check if this device is connected
-            const isConnected = (connectedDeviceIP === device.ip);
-            const buttonHTML = isConnected 
-                ? '<button class="btn-connect btn-disconnect" onclick="disconnectDevice()">Disconnect</button>'
-                : `<button class="btn-connect" onclick="connectDevice('${device.ip}')">Connect</button>`;
-            
-            html += `
-                <div class="device-item">
-                    <div class="device-info">
-                        <span class="device-name">${device.type || 'Unknown'}</span>
-                        <span class="device-detail">${device.ip} ${device.model ? '(' + device.model + ')' : ''}</span>
-                    </div>
-                    <div class="device-action">
-                        ${buttonHTML}
-                    </div>
-                </div>
-            `;
-        });
-        deviceList.innerHTML = html;
-        console.log('[Scan] Device list rendered:', data.devices.length, 'devices');
-    } else {
-        deviceList.innerHTML = '<div class="empty-state"><p>No dimmers found</p><span>Only Shelly Dimmer/DALI devices are detected</span></div>';
-        console.log('[Scan] No devices found');
-    }
-}
-
-// Connect to Device
+// Connect to Device (using manual IP input only)
 function connectDevice(ip) {
     console.log('[Connect] Attempting to connect to:', ip);
     
@@ -508,26 +330,10 @@ function connectDevice(ip) {
             console.log('[Connect] Response data:', data);
             if (data.success) {
                 console.log('[Connect] SUCCESS - Connected to:', ip);
-                connectedDeviceIP = ip;  // Update global variable
                 alert('Connected to ' + ip);
                 
                 // Update connection status WITHOUT page reload
                 updateConnectionStatus();
-                
-                // If scan results are visible, update the buttons
-                const deviceList = document.querySelector('.device-list');
-                if (deviceList && deviceList.querySelector('.device-item')) {
-                    // Re-render device list with updated buttons
-                    const buttons = deviceList.querySelectorAll('.btn-connect');
-                    buttons.forEach(btn => {
-                        const btnIP = btn.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
-                        if (btnIP === ip) {
-                            btn.textContent = 'Disconnect';
-                            btn.classList.add('btn-disconnect');
-                            btn.setAttribute('onclick', 'disconnectDevice()');
-                        }
-                    });
-                }
             } else {
                 console.error('[Connect] FAILED:', data.error);
                 alert('Failed to connect: ' + (data.error || 'Unknown error'));
@@ -536,6 +342,9 @@ function connectDevice(ip) {
         .catch(err => {
             console.error('[Connect] ERROR:', err);
             alert('Connection error: ' + err);
+        });
+}
+
         });
 }
 
@@ -635,11 +444,6 @@ function connectManualIP() {
                 
                 // Update connection status
                 updateConnectionStatus();
-                
-                // Refresh device list to show the newly added device
-                setTimeout(() => {
-                    fetchDevices();
-                }, 500);
             } else {
                 console.error('[Manual] FAILED:', data.message);
                 error.textContent = 'Failed: ' + data.message;
@@ -662,23 +466,9 @@ function disconnectDevice() {
         .then(data => {
             if (data.success) {
                 console.log('[Disconnect] SUCCESS');
-                const oldIP = connectedDeviceIP;
-                connectedDeviceIP = '';  // Clear global variable
                 
                 // Update connection status WITHOUT page reload
                 updateConnectionStatus();
-                
-                // If scan results are visible, update the buttons
-                const deviceList = document.querySelector('.device-list');
-                if (deviceList && deviceList.querySelector('.device-item')) {
-                    // Re-render device list with updated buttons
-                    const buttons = deviceList.querySelectorAll('.btn-disconnect');
-                    buttons.forEach(btn => {
-                        btn.textContent = 'Connect';
-                        btn.classList.remove('btn-disconnect');
-                        btn.setAttribute('onclick', `connectDevice('${oldIP}')`);
-                    });
-                }
             }
         })
         .catch(err => console.error('[Disconnect] ERROR:', err));
@@ -1073,13 +863,6 @@ function initializePage() {
             langRadio.checked = true;
             langRadio.closest('.option-card')?.classList.add('active');
         }
-        
-        // Fix scan button text after translations loaded
-        const scanBtn = document.querySelector('.btn-scan');
-        if (scanBtn && !isScanning) {
-            const scanText = translations?.dimmer?.scanNetwork?.[currentLang] || 'Ag Tara';
-            scanBtn.textContent = scanText;
-        }
     });
     
     // Load theme from localStorage
@@ -1104,8 +887,6 @@ function initializePage() {
     loadDimmerSettings();
     // Load encoder values
     loadEncoderValues();
-    // REMOVED: Automatic scan on startup - user must manually click "Scan Network"
-    // scanDevices();
     // Load Safe Lock configuration
     loadSafeLockConfig();
     

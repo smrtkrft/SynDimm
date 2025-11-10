@@ -14,11 +14,11 @@
 #include "version.h"
 #include "encoder.h"
 #include "shutter.h"
+#include "dimm.h"
 #include "modes.h"
 #include "syndimm_net.h"
 #include "syndimm_buzzer.h"
 #include "syndimm_ota.h"
-#include "syndimm_scanner.h"
 #include "syndimm_wifi_watchdog.h"
 #include "webui.h"
 #include "webstyle.h"
@@ -29,12 +29,12 @@
 #include "safe_lock_api.h"
 
 Encoder encoder(19, 20, 18);  // CLK=19, DT=20, SW=18 
+DimmerControl dimmer(&encoder);
 Shutter shutter(&encoder);
 ModeManager modes(&encoder);
 SynDimmNet net;
 SynDimmBuzzer buzzer;
 SynDimmOTA ota;
-NetworkScanner scanner;
 SynDimmWiFiWatchdog wifiWatchdog;
 WebServer server(80);
 
@@ -141,6 +141,10 @@ void setup() {
   shutter.begin();
   Serial.println("Shutter OK");
   
+  // Initialize dimmer
+  dimmer.begin();
+  Serial.println("Dimmer OK");
+  
   modes.begin();
   modes.setBuzzer(&buzzer);  // Connect buzzer to modes (for mode change beep)
   modes.setShutter(&shutter);  // Connect shutter to modes
@@ -216,12 +220,6 @@ void setup() {
   Serial.println("Web OK");
   Serial.println(net.getStatus());
   
-  // Kayıtlı cihaz varsa hemen bağlan (WiFi hazır olduğunda)
-  if (modes.getDeviceIP() != "") {
-    Serial.println("[Setup] Attempting immediate connection to saved device...");
-    modes.connectDevice(modes.getDeviceIP(), modes.getDeviceType());
-  }
-  
   Serial.println("===============");
 }
 
@@ -242,10 +240,20 @@ void loop() {
   // Shutter update (motor control, position tracking)
   shutter.update();
   
+  // Dimmer update (device synchronization)
+  dimmer.update();
+  
   // Encoder reading
   if (encoder.available()) {
     char ev = encoder.read();
+    
+    // Process mode changes (P event)
     modes.processEncoderEvent(ev);
+    
+    // In DIMMER mode, also send events to DimmerControl
+    if (modes.getCurrentMode() == MODE_DIMMER) {
+      dimmer.processEncoderEvent(ev);
+    }
   }
   yield();
   
@@ -282,18 +290,9 @@ void loop() {
     yield();
   }
   
-  // Shelly synchronization
-  modes.updateShelly();
-  
   // 12-hour graceful reboot - prevents long-term instability
   if (millis() - bootTime > REBOOT_INTERVAL) {
     Serial.println("[Reboot] 12h timer expired - graceful restart");
-    
-    // Save device connection to EEPROM (already auto-saved on connect, but ensure it's saved)
-    if (modes.getDeviceIP() != "") {
-      modes.saveDevice(modes.getDeviceIP(), modes.getDeviceType());
-    }
-    delay(100);
     
     // Save Safe Lock passwords (already auto-saved, but ensure it's saved)
     safeLockEEPROM.save();
@@ -428,58 +427,6 @@ void setupWeb() {
     server.send(200, "application/json", s);
   });
   
-  // API - Device scan (IP tarama ile gerçek dimmer/dali cihaz arama - ASYNC)
-  server.on("/api/devices/scan", HTTP_GET, [](){
-    Serial.println("[API] Device scan request received");
-    
-    // Eğer tarama devam ediyorsa mevcut durumu döndür
-    if (scanner.isScanning()) {
-      server.send(200, "application/json", scanner.getDevicesJSON());
-      Serial.println("[API] Scan already in progress");
-      return;
-    }
-    
-    // Yeni tarama başlat (ASYNC - FreeRTOS Task ile arka planda)
-    scanner.startScan();
-    
-    // HEMEN yanıt döndür - tarama arka planda devam eder
-    server.send(200, "application/json", "{\"devices\":[],\"scanning\":true,\"progress\":0}");
-    Serial.println("[API] Scan started in background");
-  });
-  
-  // API - Scan progress (tarama durumunu kontrol et)
-  server.on("/api/devices/scan/progress", HTTP_GET, [](){
-    server.send(200, "application/json", scanner.getDevicesJSON());
-  });
-  
-  // API - Stop scan (taramayı durdur)
-  server.on("/api/devices/scan/stop", HTTP_GET, [](){
-    Serial.println("[API] Stop scan request received");
-    scanner.stopScan();
-    server.send(200, "application/json", scanner.getDevicesJSON());
-  });
-  
-  // API - Manual IP connect (manuel IP ile bağlan)
-  server.on("/api/devices/manual", HTTP_GET, [](){
-    if (server.hasArg("ip")) {
-      String manualIP = server.arg("ip");
-      Serial.println("[API] Manual IP connect: " + manualIP);
-      
-      // Try to connect to device
-      bool success = modes.connectDevice(manualIP, "shelly-dimmer");
-      
-      if (success) {
-        // Başarılı bağlantı - scanner'a ekle
-        scanner.addManualDevice(manualIP, "shelly-dimmer");
-        server.send(200, "application/json", "{\"success\":true,\"message\":\"Connected\"}");
-      } else {
-        server.send(200, "application/json", "{\"success\":false,\"message\":\"Connection failed\"}");
-      }
-    } else {
-      server.send(400, "application/json", "{\"success\":false,\"message\":\"IP parameter required\"}");
-    }
-  });
-  
   // API - Shutter position
   server.on("/api/shutter/position", HTTP_GET, [](){
     if (server.hasArg("value")) {
@@ -524,14 +471,14 @@ void setupWeb() {
     if (server.hasArg("value")) {
       int ratio = server.arg("value").toInt();
       if (ratio >= 1 && ratio <= 5) {
-        modes.setDimmRatio(ratio);
+        dimmer.setDimmRatio(ratio);
         server.send(200, "application/json", "{\"success\":true,\"ratio\":" + String(ratio) + "}");
       } else {
         server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid ratio\"}");
       }
     } else {
       // GET - Mevcut ratio'yu döndür
-      int currentRatio = modes.getDimmRatio();
+      int currentRatio = dimmer.getDimmRatio();
       server.send(200, "application/json", "{\"ratio\":" + String(currentRatio) + "}");
     }
   });
@@ -542,7 +489,7 @@ void setupWeb() {
       int level = server.arg("value").toInt();
       if (level >= 0 && level <= 100) {
         encoder.set_dimm_sayac(level);
-        modes.triggerDimmChange();  // Web'den değişiklik yapıldığını ModeManager'a bildir
+        dimmer.triggerDimmChange();  // Web'den değişiklik yapıldığını DimmerControl'e bildir
         server.send(200, "application/json", "{\"success\":true,\"level\":" + String(level) + "}");
         Serial.print("Dimmer level set (web): ");
         Serial.println(level);
@@ -562,7 +509,7 @@ void setupWeb() {
   server.on("/api/shelly/connect", HTTP_GET, [](){
     if (server.hasArg("ip")) {
       String ip = server.arg("ip");
-      bool success = modes.connectShelly(ip);
+      bool success = dimmer.connectShelly(ip);
       if (success) {
         server.send(200, "application/json", "{\"success\":true,\"ip\":\"" + ip + "\"}");
       } else {
@@ -575,17 +522,17 @@ void setupWeb() {
   
   // API - Shelly bağlantısını kes
   server.on("/api/shelly/disconnect", HTTP_GET, [](){
-    modes.disconnectShelly();
+    dimmer.disconnectShelly();
     server.send(200, "application/json", "{\"success\":true}");
   });
   
   // API - Shelly durumunu oku
   server.on("/api/shelly/status", HTTP_GET, [](){
-    String s = "{\"connected\":" + String(modes.isShellyConnected() ? "true" : "false");
-    if (modes.isShellyConnected()) {
-      s += ",\"ip\":\"" + modes.getShellyIP() + "\"";
-      s += ",\"ison\":" + String(modes.getShellyIson() ? "true" : "false");
-      s += ",\"brightness\":" + String(modes.getShellyBrightness());
+    String s = "{\"connected\":" + String(dimmer.isShellyConnected() ? "true" : "false");
+    if (dimmer.isShellyConnected()) {
+      s += ",\"ip\":\"" + dimmer.getShellyIP() + "\"";
+      s += ",\"ison\":" + String(dimmer.getShellyIson() ? "true" : "false");
+      s += ",\"brightness\":" + String(dimmer.getShellyBrightness());
     } else {
       // Bağlantı yoksa encoder değerini döndür
       s += ",\"brightness\":" + String(encoder.get_dimm_sayac());
@@ -596,8 +543,8 @@ void setupWeb() {
   
   // API - Shelly toggle (açma/kapama)
   server.on("/api/shelly/toggle", HTTP_GET, [](){
-    if (modes.isShellyConnected()) {
-      modes.toggleShelly();
+    if (dimmer.isShellyConnected()) {
+      dimmer.toggleShelly();
       server.send(200, "application/json", "{\"success\":true}");
     } else {
       server.send(400, "application/json", "{\"success\":false,\"error\":\"Not connected\"}");
