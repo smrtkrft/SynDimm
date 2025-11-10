@@ -8,6 +8,7 @@
 #define MODES_H
 
 #include "encoder.h"
+#include <NetworkClient.h>  // ESP32 3.3.x compatibility
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include "safe_lock.h"  // Include SafeLock class

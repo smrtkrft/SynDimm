@@ -12,6 +12,7 @@
 #define SYNDIMM_OTA_H
 
 #include <Arduino.h>
+#include <NetworkClient.h>  // ESP32 3.3.x compatibility
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
 #include <ArduinoJson.h>

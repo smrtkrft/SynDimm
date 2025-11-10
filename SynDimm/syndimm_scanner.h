@@ -6,6 +6,7 @@
 #ifndef SYNDIMM_SCANNER_H
 #define SYNDIMM_SCANNER_H
 
+#include <NetworkClient.h>  // ESP32 3.3.x compatibility
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>

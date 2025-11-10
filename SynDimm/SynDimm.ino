@@ -7,6 +7,7 @@
  * https://github.com/smartkraft
  */
 
+#include <NetworkClient.h>  // ESP32 3.3.x compatibility
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>

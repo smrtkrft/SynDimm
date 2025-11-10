@@ -12,6 +12,7 @@
 #define SAFE_LOCK_API_H
 
 #include <Arduino.h>
+#include <NetworkClient.h>  // ESP32 3.3.x compatibility
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include "safe_lock.h"

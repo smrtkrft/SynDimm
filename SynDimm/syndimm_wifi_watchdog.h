@@ -1,6 +1,7 @@
 #ifndef SYNDIMM_WIFI_WATCHDOG_H
 #define SYNDIMM_WIFI_WATCHDOG_H
 
+#include <NetworkClient.h>  // ESP32 3.3.x compatibility
 #include <WiFi.h>
 
 /**

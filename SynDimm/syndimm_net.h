@@ -6,6 +6,7 @@
 #ifndef SYNDIMM_NET_H
 #define SYNDIMM_NET_H
 
+#include <NetworkClient.h>  // ESP32 3.3.x compatibility
 #include <WiFi.h>
 #include <Preferences.h>
 
