@@ -135,19 +135,12 @@ const char HTML_PAGE[] PROGMEM = R"=====(
                                 <span class="status-label" data-i18n="settings.dimmer.device">Device</span>
                                 <span class="status-value" id="dimmer-device">Shelly (192.168.11.11)</span>
                             </div>
-                            <div class="status-item status-toggle">
-                                <span class="status-label" data-i18n="settings.dimmer.power">Power</span>
-                                <label class="device-toggle">
-                                    <input type="checkbox" id="device-power" checked onchange="toggleDevicePower(this.checked)">
-                                    <span class="device-toggle-slider"></span>
-                                </label>
-                            </div>
                         </div>
                         <div class="slider-controls">
                             <div class="slider-group">
                                 <span class="slider-value" id="brightness-value">50</span>
                                 <label class="slider-label" data-i18n="settings.dimmer.brightness">Brightness</label>
-                                <input type="range" class="range-slider" min="0" max="100" value="50" id="brightness" oninput="updateSliderValue(this)">
+                                <input type="range" class="range-slider" min="0" max="100" value="50" id="brightness" disabled oninput="updateSliderValue(this)">
                             </div>
                             <div class="slider-group">
                                 <span class="slider-value" id="ratio-value">3</span>

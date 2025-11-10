@@ -212,42 +212,10 @@ function shutterStop() {
         })
         .catch(err => console.error('Shutter stop error:', err));
 }
-
-// Device Power Toggle
-function toggleDevicePower(isOn) {
-    console.log('Device power:', isOn ? 'ON' : 'OFF');
-    fetch(`/api/device/power?state=${isOn ? 1 : 0}`)
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                console.log('Device power toggled successfully');
-            } else {
-                alert('Failed to toggle device power');
-            }
-        })
-        .catch(err => console.error('Device power error:', err));
-}
-// Brightness Slider
+// Brightness Slider - READ ONLY (no control from web, only display)
 const brightnessSlider = document.getElementById('brightness');
 if (brightnessSlider) {
-    brightnessSlider.addEventListener('input', (e) => {
-        e.target.setAttribute('value', e.target.value);
-        updateSliderValue(e.target);
-    });
-    brightnessSlider.addEventListener('change', (e) => {
-        const level = e.target.value;
-        console.log('Brightness:', level);
-        // API call
-        fetch(`/api/dimmer/level?value=${level}`)
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    console.log('Brightness set to', level);
-                }
-            })
-            .catch(err => console.error('Brightness error:', err));
-    });
-    // Initialize
+    // Initialize display only
     brightnessSlider.setAttribute('value', brightnessSlider.value);
     updateSliderValue(brightnessSlider);
 }
@@ -314,35 +282,6 @@ if (apToggle) {
         console.log('AP Mode:', e.target.checked);
         // API call: /api/network/ap?enabled=true/false
     });
-}
-
-// Connect to Device (using manual IP input only)
-function connectDevice(ip) {
-    console.log('[Connect] Attempting to connect to:', ip);
-    
-    // API call
-    fetch(`/api/shelly/connect?ip=${ip}`)
-        .then(r => {
-            console.log('[Connect] Response status:', r.status);
-            return r.json();
-        })
-        .then(data => {
-            console.log('[Connect] Response data:', data);
-            if (data.success) {
-                console.log('[Connect] SUCCESS - Connected to:', ip);
-                alert('Connected to ' + ip);
-                
-                // Update connection status WITHOUT page reload
-                updateConnectionStatus();
-            } else {
-                console.error('[Connect] FAILED:', data.error);
-                alert('Failed to connect: ' + (data.error || 'Unknown error'));
-            }
-        })
-        .catch(err => {
-            console.error('[Connect] ERROR:', err);
-            alert('Connection error: ' + err);
-        });
 }
 
 // Manual IP Connect Dialog - Modal Version
@@ -452,44 +391,7 @@ function connectManualIP() {
             error.textContent = 'Connection error: ' + err;
         });
 }
-
-// Disconnect Device
-function disconnectDevice() {
-    console.log('[Disconnect] Disconnecting device...');
-    
-    // API call
-    fetch('/api/shelly/disconnect')
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                console.log('[Disconnect] SUCCESS');
-                
-                // Update connection status WITHOUT page reload
-                updateConnectionStatus();
-            }
-        })
-        .catch(err => console.error('[Disconnect] ERROR:', err));
-}
-// Toggle Device (ON/OFF)
-function toggleDevice() {
-    fetch('/api/shelly/toggle')
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                // Wait a moment then update status
-                setTimeout(() => {
-                    updateConnectionStatus();
-                }, 300);
-            } else {
-                alert('Failed to toggle device');
-            }
-        })
-        .catch(err => {
-            console.error('Toggle error:', err);
-            alert('Error toggling device');
-        });
-}
-// Update Connection Status
+// Update Connection Status (READ ONLY - displays status, no control)
 function updateConnectionStatus() {
     fetch('/api/shelly/status', { signal: AbortSignal.timeout(3000) })
         .then(r => r.json())
@@ -501,12 +403,10 @@ function updateConnectionStatus() {
             // Update dimmer status grid
             const dimmerConnection = document.getElementById('dimmer-connection');
             const dimmerDevice = document.getElementById('dimmer-device');
-            const devicePower = document.getElementById('device-power');
             
             if (data.connected) {
                 if (dimmerConnection) dimmerConnection.textContent = 'Connected';
                 if (dimmerDevice) dimmerDevice.textContent = `${data.type || 'Shelly'} (${data.ip})`;
-                if (devicePower) devicePower.checked = data.ison || false;
                 
                 // Update brightness slider - GERÇEK ZAMANLI SENKRONIZASYON
                 const brightnessSlider = document.getElementById('brightness');
@@ -524,7 +424,6 @@ function updateConnectionStatus() {
             } else {
                 if (dimmerConnection) dimmerConnection.textContent = 'Not Connected';
                 if (dimmerDevice) dimmerDevice.textContent = 'No Device';
-                if (devicePower) devicePower.checked = false;
             }
         })
         .catch(err => {

@@ -14,7 +14,7 @@
 #include "version.h"
 #include "encoder.h"
 #include "shutter.h"
-#include "dimm.h"
+#include "dimm.h"  // NEW: Clean implementation
 #include "modes.h"
 #include "syndimm_net.h"
 #include "syndimm_buzzer.h"
@@ -29,7 +29,7 @@
 #include "safe_lock_api.h"
 
 Encoder encoder(19, 20, 18);  // CLK=19, DT=20, SW=18 
-DimmerControl dimmer(&encoder);
+DimmerControl dimmer(&encoder);  // NEW: Clean implementation
 Shutter shutter(&encoder);
 ModeManager modes(&encoder);
 SynDimmNet net;
@@ -141,7 +141,7 @@ void setup() {
   shutter.begin();
   Serial.println("Shutter OK");
   
-  // Initialize dimmer
+  // Initialize dimmer (NEW: Clean implementation)
   dimmer.begin();
   Serial.println("Dimmer OK");
   
@@ -247,13 +247,13 @@ void loop() {
     // Process mode changes (P event)
     modes.processEncoderEvent(ev);
     
-    // In DIMMER mode, also send events to DimmerControl
+    // In DIMMER mode, send events to DimmerControl (NEW: Simple debounce)
     if (modes.getCurrentMode() == MODE_DIMMER) {
       dimmer.processEncoderEvent(ev);
     }
   }
   
-  // Dimmer update (device synchronization) - Only in DIMMER mode
+  // Dimmer update (300ms debounce, single send) - Only in DIMMER mode
   if (modes.getCurrentMode() == MODE_DIMMER) {
     dimmer.update();
   }
@@ -474,7 +474,7 @@ void setupWeb() {
     // DEBUG REMOVED
   });
   
-  // API - Set dimm ratio
+  // API - Set dimm ratio (NEW: Clean implementation)
   server.on("/api/dimmer/ratio", HTTP_GET, [](){
     if (server.hasArg("value")) {
       int ratio = server.arg("value").toInt();
@@ -485,93 +485,48 @@ void setupWeb() {
         server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid ratio\"}");
       }
     } else {
-      // GET - Mevcut ratio'yu döndür
       int currentRatio = dimmer.getDimmRatio();
       server.send(200, "application/json", "{\"ratio\":" + String(currentRatio) + "}");
     }
   });
   
-  // API - Set dimmer level (dimm_sayac)
+  // API - Get dimmer level (READ ONLY - no web control, only encoder can change)
   server.on("/api/dimmer/level", HTTP_GET, [](){
-    if (server.hasArg("value")) {
-      int level = server.arg("value").toInt();
-      if (level >= 0 && level <= 100) {
-        encoder.set_dimm_sayac(level);
-        dimmer.triggerDimmChange();  // Web'den değişiklik yapıldığını DimmerControl'e bildir
-        server.send(200, "application/json", "{\"success\":true,\"level\":" + String(level) + "}");
-        Serial.print("Dimmer level set (web): ");
-        Serial.println(level);
-      } else {
-        server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid level\"}");
-      }
-    } else {
-      // GET - Mevcut level'ı döndür
-      int currentLevel = encoder.get_dimm_sayac();
-      server.send(200, "application/json", "{\"level\":" + String(currentLevel) + "}");
-    }
+    // Only GET supported - return current brightness from encoder
+    int currentLevel = encoder.get_dimm_sayac();
+    server.send(200, "application/json", "{\"level\":" + String(currentLevel) + "}");
   });
   
-  // ========== SHELLY API ENDPOINT'LERİ ==========
+  // ========== SHELLY API ENDPOINT'LERİ (NEW: Clean implementation) ==========
   
-  // API - Shelly'ye bağlan
+  // API - Shelly'ye bağlan (initial setup only)
   server.on("/api/shelly/connect", HTTP_GET, [](){
     if (server.hasArg("ip")) {
       String ip = server.arg("ip");
-      
-      // Flush serial before API response
-      Serial.flush();
-      
       bool success = dimmer.connectShelly(ip);
       
-      // Build JSON response in a String first
-      String response;
       if (success) {
-        response = "{\"success\":true,\"ip\":\"" + ip + "\"}";
-        server.send(200, "application/json", response);
+        server.send(200, "application/json", "{\"success\":true,\"ip\":\"" + ip + "\"}");
       } else {
-        response = "{\"success\":false,\"error\":\"Connection failed\"}";
-        server.send(500, "application/json", response);
+        server.send(500, "application/json", "{\"success\":false,\"error\":\"Connection failed\"}");
       }
     } else {
       server.send(400, "application/json", "{\"success\":false,\"error\":\"Missing ip\"}");
     }
   });
   
-  // API - Shelly bağlantısını kes
-  server.on("/api/shelly/disconnect", HTTP_GET, [](){
-    dimmer.disconnectShelly();
-    server.send(200, "application/json", "{\"success\":true}");
-  });
-  
-  // API - Shelly durumunu oku
+  // API - Shelly status (READ ONLY - returns encoder value, NO Shelly read!)
   server.on("/api/shelly/status", HTTP_GET, [](){
-    // CRITICAL: Read fresh status from device before sending to web
-    if (dimmer.isShellyConnected()) {
-      dimmer.syncFromShelly();  // Force read device status
-      delay(50);  // Wait for HTTP response
-    }
-    
     String s = "{\"connected\":" + String(dimmer.isShellyConnected() ? "true" : "false");
     if (dimmer.isShellyConnected()) {
       s += ",\"ip\":\"" + dimmer.getShellyIP() + "\"";
       s += ",\"ison\":" + String(dimmer.getShellyIson() ? "true" : "false");
       s += ",\"brightness\":" + String(dimmer.getShellyBrightness());
     } else {
-      // Bağlantı yoksa encoder değerini döndür
       s += ",\"brightness\":" + String(encoder.get_dimm_sayac());
     }
     s += "}";
     server.send(200, "application/json", s);
-  });
-  
-  // API - Shelly toggle (açma/kapama)
-  server.on("/api/shelly/toggle", HTTP_GET, [](){
-    if (dimmer.isShellyConnected()) {
-      dimmer.toggleShelly();
-      server.send(200, "application/json", "{\"success\":true}");
-    } else {
-      server.send(400, "application/json", "{\"success\":false,\"error\":\"Not connected\"}");
-    }
   });
   
   // API - Mod değiştir (dimmer/safe)
