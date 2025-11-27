@@ -44,21 +44,21 @@ private:
     
     // Scan for available networks and check if saved networks exist
     bool scanForSavedNetworks(String& foundSSID, bool& isPrimary) {
-        Serial.println("\n=== Scanning WiFi Networks ===");
+        DEBUG_PRINTLN("\n=== Scanning WiFi Networks ===");
         int networksFound = WiFi.scanNetworks();
         
         if (networksFound == 0) {
-            Serial.println("No networks found");
+            DEBUG_PRINTLN("No networks found");
             return false;
         }
         
-        Serial.println("Networks found: " + String(networksFound));
+        DEBUG_PRINTLN("Networks found: " + String(networksFound));
         
         // Check if Primary network is available
         if (primaryNetwork.enabled && primaryNetwork.ssid.length() > 0) {
             for (int i = 0; i < networksFound; i++) {
                 if (WiFi.SSID(i) == primaryNetwork.ssid) {
-                    Serial.println("[OK] Found Primary WiFi: " + primaryNetwork.ssid);
+                    DEBUG_PRINTLN("[OK] Found Primary WiFi: " + primaryNetwork.ssid);
                     foundSSID = primaryNetwork.ssid;
                     isPrimary = true;
                     WiFi.scanDelete();
@@ -71,7 +71,7 @@ private:
         if (backupNetwork.enabled && backupNetwork.ssid.length() > 0) {
             for (int i = 0; i < networksFound; i++) {
                 if (WiFi.SSID(i) == backupNetwork.ssid) {
-                    Serial.println("[OK] Found Backup WiFi: " + backupNetwork.ssid);
+                    DEBUG_PRINTLN("[OK] Found Backup WiFi: " + backupNetwork.ssid);
                     foundSSID = backupNetwork.ssid;
                     isPrimary = false;
                     WiFi.scanDelete();
@@ -80,7 +80,7 @@ private:
             }
         }
         
-        Serial.println("No saved networks found in scan");
+        DEBUG_PRINTLN("No saved networks found in scan");
         WiFi.scanDelete();
         return false;
     }
@@ -102,7 +102,7 @@ public:
             sprintf(chipIDStr, "%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
             String fullID = String(chipIDStr);
             chipID = fullID.substring(fullID.length() - 6);  // Son 6 hane
-            Serial.println("Full Chip ID length: " + String(fullID.length()) + " - Full ID: " + fullID);
+            DEBUG_PRINTLN("Full Chip ID length: " + String(fullID.length()) + " - Full ID: " + fullID);
         }
         return chipID;
     }
@@ -111,27 +111,27 @@ public:
     void setupAP() {
         apSSID = "SynDimm-SK" + getChipID();
         
-        Serial.println("\n=== WiFi Access Point ===");
-        Serial.println("Starting Access Point...");
-        Serial.println("SSID: " + apSSID);
-        Serial.println("Password: None (Open Network)");
+        DEBUG_PRINTLN("\n=== WiFi Access Point ===");
+        DEBUG_PRINTLN("Starting Access Point...");
+        DEBUG_PRINTLN("SSID: " + apSSID);
+        DEBUG_PRINTLN("Password: None (Open Network)");
         
         WiFi.mode(WIFI_AP);
         WiFi.softAP(apSSID.c_str()); // No password - open network
         
         IPAddress IP = WiFi.softAPIP();
-        Serial.print("AP IP address: ");
-        Serial.println(IP);
+        DEBUG_PRINT("AP IP address: ");
+        DEBUG_PRINTLN(IP);
         
         // Start mDNS for AP Mode
         if (MDNS.begin("dimm")) {
-            Serial.println("[OK] mDNS started: dimm.local");
+            DEBUG_PRINTLN("[OK] mDNS started: dimm.local");
             MDNS.addService("http", "tcp", 80);
         } else {
-            Serial.println("[ERROR] mDNS failed to start");
+            DEBUG_PRINTLN("[ERROR] mDNS failed to start");
         }
         
-        Serial.println("========================\n");
+        DEBUG_PRINTLN("========================\n");
         
         apModeActive = true;
         connectedToWiFi = false;
@@ -172,12 +172,12 @@ public:
         
         prefs.end();
         
-        Serial.println("Network settings loaded from memory");
+        DEBUG_PRINTLN("Network settings loaded from memory");
         if (primaryNetwork.enabled) {
-            Serial.println("Primary WiFi: " + primaryNetwork.ssid);
+            DEBUG_PRINTLN("Primary WiFi: " + primaryNetwork.ssid);
         }
         if (backupNetwork.enabled) {
-            Serial.println("Backup WiFi: " + backupNetwork.ssid);
+            DEBUG_PRINTLN("Backup WiFi: " + backupNetwork.ssid);
         }
     }
     
@@ -200,7 +200,7 @@ public:
         
         prefs.end();
         
-        Serial.println("Network settings saved to memory");
+        DEBUG_PRINTLN("Network settings saved to memory");
         
         // Reload settings
         loadNetworkSettings();
@@ -214,7 +214,7 @@ public:
             return false;
         }
         
-        Serial.println("\nConnecting to: " + network.ssid);
+        DEBUG_PRINTLN("\nConnecting to: " + network.ssid);
         
         WiFi.mode(WIFI_STA);
         
@@ -234,15 +234,15 @@ public:
                 dns2.fromString("8.8.4.4");
                 
                 if (WiFi.config(ip, gateway, subnet, dns1, dns2)) {
-                    Serial.println("Static IP configured: " + network.staticIP);
+                    DEBUG_PRINTLN("Static IP configured: " + network.staticIP);
                 } else {
-                    Serial.println("Failed to configure static IP");
+                    DEBUG_PRINTLN("Failed to configure static IP");
                 }
             } else {
-                Serial.println("Invalid static IP format: " + network.staticIP);
+                DEBUG_PRINTLN("Invalid static IP format: " + network.staticIP);
             }
         } else {
-            Serial.println("Using DHCP");
+            DEBUG_PRINTLN("Using DHCP");
         }
         
         WiFi.begin(network.ssid.c_str(), network.password.c_str());
@@ -250,26 +250,26 @@ public:
         unsigned long startTime = millis();
         while (WiFi.status() != WL_CONNECTED && (millis() - startTime) < timeout) {
             delay(500);
-            Serial.print(".");
+            DEBUG_PRINT(".");
         }
         
         if (WiFi.status() == WL_CONNECTED) {
-            Serial.println("\n[OK] Connected to WiFi!");
-            Serial.print("IP Address: ");
-            Serial.println(WiFi.localIP());
+            DEBUG_PRINTLN("\n[OK] Connected to WiFi!");
+            DEBUG_PRINT("IP Address: ");
+            DEBUG_PRINTLN(WiFi.localIP());
             
             // Start mDNS if configured
             if (network.mdns.length() > 0) {
                 if (MDNS.begin(network.mdns.c_str())) {
-                    Serial.println("[OK] mDNS started: " + network.mdns + ".local");
+                    DEBUG_PRINTLN("[OK] mDNS started: " + network.mdns + ".local");
                     MDNS.addService("http", "tcp", 80);
                 } else {
-                    Serial.println("[ERROR] mDNS failed to start");
+                    DEBUG_PRINTLN("[ERROR] mDNS failed to start");
                 }
             } else {
-                Serial.println("[INFO] mDNS not configured (using default: dimm.local)");
+                DEBUG_PRINTLN("[INFO] mDNS not configured (using default: dimm.local)");
                 if (MDNS.begin("dimm")) {
-                    Serial.println("[OK] mDNS started with default: dimm.local");
+                    DEBUG_PRINTLN("[OK] mDNS started with default: dimm.local");
                     MDNS.addService("http", "tcp", 80);
                 }
             }
@@ -279,7 +279,7 @@ public:
             return true;
         }
         
-        Serial.println("\n[ERROR] Failed to connect to: " + network.ssid);
+        DEBUG_PRINTLN("\n[ERROR] Failed to connect to: " + network.ssid);
         return false;
     }
     
@@ -289,7 +289,7 @@ public:
         
         // Check if any network is configured
         if (!primaryNetwork.enabled && !backupNetwork.enabled) {
-            Serial.println("\nNo saved networks found - Starting AP Mode");
+            DEBUG_PRINTLN("\nNo saved networks found - Starting AP Mode");
             setupAP();
             lastScanTime = millis();
             return;
@@ -304,13 +304,13 @@ public:
             NetworkConfig& network = isPrimary ? primaryNetwork : backupNetwork;
             
             if (connectToWiFi(network)) {
-                Serial.println("Using " + String(isPrimary ? "Primary" : "Backup") + " WiFi");
+                DEBUG_PRINTLN("Using " + String(isPrimary ? "Primary" : "Backup") + " WiFi");
                 return;
             }
         }
         
         // No saved networks found or connection failed - Start AP Mode
-        Serial.println("\nNo available saved networks - Starting AP Mode");
+        DEBUG_PRINTLN("\nNo available saved networks - Starting AP Mode");
         setupAP();
         lastScanTime = millis();
     }
@@ -320,25 +320,25 @@ public:
         // If connected to WiFi, check if still connected
         if (connectedToWiFi && !apModeActive) {
             if (WiFi.status() != WL_CONNECTED) {
-                Serial.println("\n⚠ WiFi connection lost!");
+                DEBUG_PRINTLN("\n⚠ WiFi connection lost!");
                 connectedToWiFi = false;
                 
                 // Try to scan and reconnect before starting AP
                 String foundSSID;
                 bool isPrimary;
                 
-                Serial.println("Attempting to reconnect...");
+                DEBUG_PRINTLN("Attempting to reconnect...");
                 if (scanForSavedNetworks(foundSSID, isPrimary)) {
                     NetworkConfig& network = isPrimary ? primaryNetwork : backupNetwork;
                     
                     if (connectToWiFi(network)) {
-                        Serial.println("[OK] Reconnected to " + foundSSID);
+                        DEBUG_PRINTLN("[OK] Reconnected to " + foundSSID);
                         return;
                     }
                 }
                 
                 // Could not reconnect - Start AP Mode
-                Serial.println("Could not reconnect - Starting AP Mode");
+                DEBUG_PRINTLN("Could not reconnect - Starting AP Mode");
                 setupAP();
                 lastScanTime = millis();
             }
@@ -348,7 +348,7 @@ public:
         // If in AP Mode, periodically scan for saved networks
         if (apModeActive) {
             if (millis() - lastScanTime >= WIFI_SCAN_INTERVAL_MS) {
-                Serial.println("\n[AP Mode] Checking for saved networks...");
+                DEBUG_PRINTLN("\n[AP Mode] Checking for saved networks...");
                 lastScanTime = millis();
                 
                 String foundSSID;
@@ -358,7 +358,7 @@ public:
                     NetworkConfig& network = isPrimary ? primaryNetwork : backupNetwork;
                     
                     if (connectToWiFi(network)) {
-                        Serial.println("[OK] Connected to WiFi - Closing AP Mode");
+                        DEBUG_PRINTLN("[OK] Connected to WiFi - Closing AP Mode");
                         WiFi.softAPdisconnect(true);
                         apModeActive = false;
                         return;

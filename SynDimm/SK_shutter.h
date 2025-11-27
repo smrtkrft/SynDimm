@@ -36,13 +36,14 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
+#include "SK_config.h"
 #include "SK_scan.h"
 
 // Shutter Settings
 #define SHUTTER_MIN_POSITION 0
 #define SHUTTER_MAX_POSITION 100
 #define SHUTTER_DEFAULT_STEP 3        // Encoder step: 1-5 (% per tick)
-#define SHUTTER_REQUEST_TIMEOUT 5000
+#define SHUTTER_REQUEST_TIMEOUT 3000
 #define SHUTTER_STATUS_UPDATE_INTERVAL 1000
 
 // Anonymous namespace to prevent multiple definition
@@ -86,6 +87,7 @@ struct ShutterDevice {
     ShutterType type;
     int generation;             // 1, 2, or 3
     bool isConnected;
+    bool isCalibrated;          // Whether device is calibrated
     ShutterStatus status;
     int currentPosition;        // 0-100%
     ShutterDirection lastDirection;
@@ -162,9 +164,9 @@ ShutterType detectShutterType(String ip);
 
 // Initialize Shutter System
 void initShutter() {
-    Serial.println("\n[SHUTTER] ========================================");
-    Serial.println("[SHUTTER] Initializing Shutter Control System");
-    Serial.println("[SHUTTER] ========================================");
+    DEBUG_PRINTLN("\n[SHUTTER] ========================================");
+    DEBUG_PRINTLN("[SHUTTER] Initializing Shutter Control System");
+    DEBUG_PRINTLN("[SHUTTER] ========================================");
     
     // Initialize preferences
     shutterPrefs.begin("shutter", false);
@@ -184,11 +186,11 @@ void initShutter() {
     shutterDevice.lastDirection = DIRECTION_NONE;
     shutterDevice.isMoving = false;
     
-    Serial.printf("[SHUTTER] Encoder Step: %d%% per tick\n", shutterConfig.encoderStep);
-    Serial.printf("[SHUTTER] Last Direction: %s\n", 
+    DEBUG_PRINTF("[SHUTTER] Encoder Step: %d%% per tick\n", shutterConfig.encoderStep);
+    DEBUG_PRINTF("[SHUTTER] Last Direction: %s\n", 
                   shutterConfig.lastDirection == DIRECTION_UP ? "UP" : 
                   shutterConfig.lastDirection == DIRECTION_DOWN ? "DOWN" : "NONE");
-    Serial.println("[SHUTTER] Initialization complete");
+    DEBUG_PRINTLN("[SHUTTER] Initialization complete");
 }
 
 // Load Configuration from Preferences
@@ -208,7 +210,7 @@ void saveShutterConfig() {
     shutterPrefs.putInt("encoder_step", shutterConfig.encoderStep);
     shutterPrefs.putInt("last_dir", shutterConfig.lastDirection);
     shutterPrefs.putInt("last_pos", shutterDevice.currentPosition);
-    Serial.printf("[SHUTTER] Config saved: Step=%d, Dir=%d, Pos=%d\n", 
+    DEBUG_PRINTF("[SHUTTER] Config saved: Step=%d, Dir=%d, Pos=%d\n", 
                   shutterConfig.encoderStep, shutterConfig.lastDirection, shutterDevice.currentPosition);
 }
 
@@ -217,7 +219,7 @@ void setEncoderStep(int step) {
     if (step >= 1 && step <= 5) {
         shutterConfig.encoderStep = step;
         saveShutterConfig();
-        Serial.printf("[SHUTTER] Encoder step set to: %d%%\n", step);
+        DEBUG_PRINTF("[SHUTTER] Encoder step set to: %d%%\n", step);
     }
 }
 
@@ -247,7 +249,7 @@ ShutterType detectShutterType(String ip) {
             
             // Shelly 2.5 (SHSW-25)
             if (type.indexOf("SHSW-25") >= 0) {
-                Serial.println("[SHUTTER] Detected: Shelly 2.5 Gen1");
+                DEBUG_PRINTLN("[SHUTTER] Detected: Shelly 2.5 Gen1");
                 return SHUTTER_SHELLY_25_GEN1;
             }
         }
@@ -274,7 +276,7 @@ ShutterType detectShutterType(String ip) {
             // Shelly Plus 2PM in Cover mode
             if ((model.indexOf("Plus 2PM") >= 0 || model.indexOf("SNSW-002P16EU") >= 0) && 
                 app.indexOf("Cover") >= 0) {
-                Serial.println("[SHUTTER] Detected: Shelly Plus 2PM (Cover mode)");
+                DEBUG_PRINTLN("[SHUTTER] Detected: Shelly Plus 2PM (Cover mode)");
                 return SHUTTER_SHELLY_PLUS_2PM_GEN2;
             }
         }
@@ -286,33 +288,33 @@ ShutterType detectShutterType(String ip) {
 
 // Connect to Shutter Device
 bool connectToShutter(String ip) {
-    Serial.printf("[SHUTTER] ========================================\n");
-    Serial.printf("[SHUTTER] Attempting connection to: %s\n", ip.c_str());
-    Serial.printf("[SHUTTER] ========================================\n");
+    DEBUG_PRINTF("[SHUTTER] ========================================\n");
+    DEBUG_PRINTF("[SHUTTER] Attempting connection to: %s\n", ip.c_str());
+    DEBUG_PRINTF("[SHUTTER] ========================================\n");
     
     // Use unified scanner for device detection
     DiscoveredDevice device = detectDevice(ip);
     
-    Serial.printf("[SHUTTER] Detection results:\n");
-    Serial.printf("  - Found: %s\n", device.isValid ? "YES" : "NO");
-    Serial.printf("  - Model: %s\n", device.modelName.c_str());
-    Serial.printf("  - Display: %s\n", device.displayName.c_str());
-    Serial.printf("  - Generation: %d\n", device.generation);
-    Serial.printf("  - Type: %s\n", device.deviceType.c_str());
-    Serial.printf("  - Mode: %s\n", device.mode.c_str());
-    Serial.printf("  - Supports Shutter: %s\n", device.supportsShutter ? "YES" : "NO");
-    Serial.printf("  - Supports Dimming: %s\n", device.supportsDimming ? "YES" : "NO");
+    DEBUG_PRINTF("[SHUTTER] Detection results:\n");
+    DEBUG_PRINTF("  - Found: %s\n", device.isValid ? "YES" : "NO");
+    DEBUG_PRINTF("  - Model: %s\n", device.modelName.c_str());
+    DEBUG_PRINTF("  - Display: %s\n", device.displayName.c_str());
+    DEBUG_PRINTF("  - Generation: %d\n", device.generation);
+    DEBUG_PRINTF("  - Type: %s\n", device.deviceType.c_str());
+    DEBUG_PRINTF("  - Mode: %s\n", device.mode.c_str());
+    DEBUG_PRINTF("  - Supports Shutter: %s\n", device.supportsShutter ? "YES" : "NO");
+    DEBUG_PRINTF("  - Supports Dimming: %s\n", device.supportsDimming ? "YES" : "NO");
     
     if (!device.isValid) {
-        Serial.println("[SHUTTER] ERROR: Device not responding or invalid");
+        DEBUG_PRINTLN("[SHUTTER] ERROR: Device not responding or invalid");
         return false;
     }
     
     if (!device.supportsShutter) {
-        Serial.println("[SHUTTER] ERROR: Device doesn't support shutter/roller mode");
-        Serial.printf("[SHUTTER] Current mode: %s\n", device.mode.c_str());
-        Serial.println("[SHUTTER] HINT: If this is Shelly 2.5, check if it's in 'roller' mode in Shelly app");
-        Serial.println("[SHUTTER] HINT: If dimmer is connected, it may be blocking roller mode");
+        DEBUG_PRINTLN("[SHUTTER] ERROR: Device doesn't support shutter/roller mode");
+        DEBUG_PRINTF("[SHUTTER] Current mode: %s\n", device.mode.c_str());
+        DEBUG_PRINTLN("[SHUTTER] HINT: If this is Shelly 2.5, check if it's in 'roller' mode in Shelly app");
+        DEBUG_PRINTLN("[SHUTTER] HINT: If dimmer is connected, it may be blocking roller mode");
         return false;
     }
     
@@ -348,7 +350,7 @@ bool connectToShutter(String ip) {
         ShutterType type = detectShutterType(ip);
         
         if (type == SHUTTER_UNKNOWN) {
-            Serial.println("[SHUTTER] ERROR: Device type unknown");
+            DEBUG_PRINTLN("[SHUTTER] ERROR: Device type unknown");
             return false;
         }
         
@@ -379,13 +381,13 @@ bool connectToShutter(String ip) {
     // Get initial status
     getShutterStatus();
     
-    Serial.printf("[SHUTTER] ✓ Connected: %s (Gen%d)\n", shutterDevice.displayName.c_str(), shutterDevice.generation);
+    DEBUG_PRINTF("[SHUTTER] ✓ Connected: %s (Gen%d)\n", shutterDevice.displayName.c_str(), shutterDevice.generation);
     return true;
 }
 
 // Disconnect Shutter
 void disconnectShutter() {
-    Serial.println("[SHUTTER] Disconnecting...");
+    DEBUG_PRINTLN("[SHUTTER] Disconnecting...");
     shutterDevice.isConnected = false;
     shutterDevice.status = SHUTTER_DISCONNECTED;
     shutterDevice.ip = "";
@@ -420,7 +422,11 @@ void getShutterStatus() {
                 // Gen1 REST API response
                 // {"state":"open/close/stop", "current_pos":60, "power":0, "is_valid":true}
                 String state = doc["state"] | "stop";
-                shutterDevice.currentPosition = doc["current_pos"] | 0;
+                int pos = doc["current_pos"] | 0;
+                shutterDevice.currentPosition = constrain(pos, 0, 100);
+                
+                // Check calibration status - is_valid indicates if device is calibrated
+                shutterDevice.isCalibrated = doc["is_valid"] | false;
                 
                 if (state == "open") {
                     shutterDevice.status = SHUTTER_MOVING_UP;
@@ -443,9 +449,13 @@ void getShutterStatus() {
             } 
             else if (shutterDevice.generation == 2) {
                 // Gen2/Gen3 RPC API response
-                // {"state":"open/opening/closed/closing/stopped", "current_pos":60}
+                // {"state":"open/opening/closed/closing/stopped", "current_pos":60, "pos_control":true}
                 String state = doc["state"] | "stopped";
-                shutterDevice.currentPosition = doc["current_pos"] | 0;
+                int pos = doc["current_pos"] | 0;
+                shutterDevice.currentPosition = constrain(pos, 0, 100);
+                
+                // Check calibration status - pos_control indicates if device is calibrated
+                shutterDevice.isCalibrated = doc["pos_control"] | false;
                 
                 if (state == "opening") {
                     shutterDevice.status = SHUTTER_MOVING_UP;
@@ -472,7 +482,7 @@ void getShutterStatus() {
             shutterConfig.lastPosition = shutterDevice.currentPosition;
         }
     } else {
-        Serial.printf("[SHUTTER] Status request failed: %d\n", httpCode);
+        DEBUG_PRINTF("[SHUTTER] Status request failed: %d\n", httpCode);
         shutterDevice.status = SHUTTER_ERROR;
     }
     
@@ -489,6 +499,7 @@ String getShutterStatusJSON() {
     doc["position"] = shutterDevice.currentPosition;
     doc["encoderStep"] = shutterConfig.encoderStep;
     doc["isMoving"] = shutterDevice.isMoving;
+    doc["isCalibrated"] = shutterDevice.isCalibrated;
     
     // Status string
     String statusStr = "Disconnected";
@@ -514,7 +525,7 @@ String getShutterStatusJSON() {
 // Move Shutter Up (Open)
 bool moveShutterUp(int steps) {
     if (!shutterDevice.isConnected) {
-        Serial.println("[SHUTTER] Not connected");
+        DEBUG_PRINTLN("[SHUTTER] Not connected");
         return false;
     }
     
@@ -525,40 +536,44 @@ bool moveShutterUp(int steps) {
         // Move by steps (position control)
         int targetPos = min(shutterDevice.currentPosition + steps, SHUTTER_MAX_POSITION);
         url = "http://" + shutterDevice.ip + shutterDevice.endpoints.goToPosition + String(targetPos);
-        Serial.printf("[SHUTTER] Moving to position: %d%%\n", targetPos);
+        DEBUG_PRINTF("[SHUTTER] Moving to position: %d%% (current: %d%%)\n", targetPos, shutterDevice.currentPosition);
+        DEBUG_PRINTF("[SHUTTER] Full URL: %s\n", url.c_str());
     } else {
         // Continuous open
         url = "http://" + shutterDevice.ip + shutterDevice.endpoints.open;
-        Serial.println("[SHUTTER] Opening...");
+        DEBUG_PRINTLN("[SHUTTER] Opening...");
+        DEBUG_PRINTF("[SHUTTER] Full URL: %s\n", url.c_str());
     }
     
     http.begin(url);
     http.setTimeout(SHUTTER_REQUEST_TIMEOUT);
     
     int httpCode = http.GET();
-    http.end();
     
     if (httpCode == HTTP_CODE_OK) {
+        String response = http.getString();
+        DEBUG_PRINTF("[SHUTTER] Response: %s\n", response.c_str());
+        http.end();
+        
         shutterDevice.status = SHUTTER_MOVING_UP;
         shutterDevice.lastDirection = DIRECTION_UP;
         shutterDevice.isMoving = true;
         shutterConfig.lastDirection = DIRECTION_UP;
         saveShutterConfig();
-        
-        // Update status after short delay
-        delay(100);
-        getShutterStatus();
         return true;
     }
     
-    Serial.printf("[SHUTTER] Move Up failed: %d\n", httpCode);
+    String errorResponse = http.getString();
+    http.end();
+    DEBUG_PRINTF("[SHUTTER] Move Up failed: %d\n", httpCode);
+    DEBUG_PRINTF("[SHUTTER] Error response: %s\n", errorResponse.c_str());
     return false;
 }
 
 // Move Shutter Down (Close)
 bool moveShutterDown(int steps) {
     if (!shutterDevice.isConnected) {
-        Serial.println("[SHUTTER] Not connected");
+        DEBUG_PRINTLN("[SHUTTER] Not connected");
         return false;
     }
     
@@ -569,47 +584,51 @@ bool moveShutterDown(int steps) {
         // Move by steps (position control)
         int targetPos = max(shutterDevice.currentPosition - steps, SHUTTER_MIN_POSITION);
         url = "http://" + shutterDevice.ip + shutterDevice.endpoints.goToPosition + String(targetPos);
-        Serial.printf("[SHUTTER] Moving to position: %d%%\n", targetPos);
+        DEBUG_PRINTF("[SHUTTER] Moving to position: %d%% (current: %d%%)\n", targetPos, shutterDevice.currentPosition);
+        DEBUG_PRINTF("[SHUTTER] Full URL: %s\n", url.c_str());
     } else {
         // Continuous close
         url = "http://" + shutterDevice.ip + shutterDevice.endpoints.close;
-        Serial.println("[SHUTTER] Closing...");
+        DEBUG_PRINTLN("[SHUTTER] Closing...");
+        DEBUG_PRINTF("[SHUTTER] Full URL: %s\n", url.c_str());
     }
     
     http.begin(url);
     http.setTimeout(SHUTTER_REQUEST_TIMEOUT);
     
     int httpCode = http.GET();
-    http.end();
     
     if (httpCode == HTTP_CODE_OK) {
+        String response = http.getString();
+        DEBUG_PRINTF("[SHUTTER] Response: %s\n", response.c_str());
+        http.end();
+        
         shutterDevice.status = SHUTTER_MOVING_DOWN;
         shutterDevice.lastDirection = DIRECTION_DOWN;
         shutterDevice.isMoving = true;
         shutterConfig.lastDirection = DIRECTION_DOWN;
         saveShutterConfig();
-        
-        // Update status after short delay
-        delay(100);
-        getShutterStatus();
         return true;
     }
     
-    Serial.printf("[SHUTTER] Move Down failed: %d\n", httpCode);
+    String errorResponse = http.getString();
+    http.end();
+    DEBUG_PRINTF("[SHUTTER] Move Down failed: %d\n", httpCode);
+    DEBUG_PRINTF("[SHUTTER] Error response: %s\n", errorResponse.c_str());
     return false;
 }
 
 // Stop Shutter
 bool stopShutter() {
     if (!shutterDevice.isConnected) {
-        Serial.println("[SHUTTER] Not connected");
+        DEBUG_PRINTLN("[SHUTTER] Not connected");
         return false;
     }
     
     HTTPClient http;
     String url = "http://" + shutterDevice.ip + shutterDevice.endpoints.stop;
     
-    Serial.println("[SHUTTER] Stopping...");
+    DEBUG_PRINTLN("[SHUTTER] Stopping...");
     
     http.begin(url);
     http.setTimeout(SHUTTER_REQUEST_TIMEOUT);
@@ -620,15 +639,11 @@ bool stopShutter() {
     if (httpCode == HTTP_CODE_OK) {
         shutterDevice.isMoving = false;
         shutterDevice.status = SHUTTER_STOPPED;
-        
-        // Update status
-        delay(100);
-        getShutterStatus();
         saveShutterConfig();
         return true;
     }
     
-    Serial.printf("[SHUTTER] Stop failed: %d\n", httpCode);
+    DEBUG_PRINTF("[SHUTTER] Stop failed: %d\n", httpCode);
     return false;
 }
 
@@ -643,7 +658,7 @@ bool setShutterPosition(int position) {
     HTTPClient http;
     String url = "http://" + shutterDevice.ip + shutterDevice.endpoints.goToPosition + String(position);
     
-    Serial.printf("[SHUTTER] Going to position: %d%%\n", position);
+    DEBUG_PRINTF("[SHUTTER] Going to position: %d%%\n", position);
     
     http.begin(url);
     http.setTimeout(SHUTTER_REQUEST_TIMEOUT);
@@ -664,9 +679,6 @@ bool setShutterPosition(int position) {
         shutterDevice.isMoving = true;
         shutterConfig.lastDirection = shutterDevice.lastDirection;
         saveShutterConfig();
-        
-        delay(100);
-        getShutterStatus();
         return true;
     }
     
@@ -714,40 +726,52 @@ void updateShutter() {
 
 // Handle Encoder Rotation (from SK_encoder.h)
 void handleShutterEncoderRotate(int direction) {
+    DEBUG_PRINTF("[SHUTTER] handleShutterEncoderRotate called with direction: %d\n", direction);
+    
     if (!shutterDevice.isConnected) {
-        Serial.println("[SHUTTER] No device connected");
+        DEBUG_PRINTLN("[SHUTTER] No device connected - cannot move");
+        return;
+    }
+    
+    // Check if device is calibrated - encoder rotation disabled if not calibrated
+    if (!shutterDevice.isCalibrated) {
+        DEBUG_PRINTLN("[SHUTTER] Device not calibrated - encoder rotation disabled");
+        DEBUG_PRINTLN("[SHUTTER] Use button for full open/close/stop instead");
         return;
     }
     
     int step = shutterConfig.encoderStep;
+    DEBUG_PRINTF("[SHUTTER] Current encoder step: %d%%\n", step);
     
     if (direction > 0) {
         // Right = Down (close)
-        Serial.printf("[SHUTTER] Encoder Right: Moving DOWN %d%%\n", step);
+        DEBUG_PRINTF("[SHUTTER] Encoder Right: Moving DOWN %d%%\n", step);
         moveShutterDown(step);
     } else if (direction < 0) {
         // Left = Up (open)
-        Serial.printf("[SHUTTER] Encoder Left: Moving UP %d%%\n", step);
+        DEBUG_PRINTF("[SHUTTER] Encoder Left: Moving UP %d%%\n", step);
         moveShutterUp(step);
+    } else {
+        DEBUG_PRINTLN("[SHUTTER] Warning: direction is 0, no action taken");
     }
 }
 
 // Handle Encoder Button (Stop or Toggle)
 void handleShutterEncoderButton() {
     if (!shutterDevice.isConnected) {
-        Serial.println("[SHUTTER] No device connected");
+        DEBUG_PRINTLN("[SHUTTER] No device connected");
         return;
     }
     
-    Serial.println("[SHUTTER] Encoder button pressed");
+    DEBUG_PRINTLN("[SHUTTER] Encoder button pressed");
     
     if (shutterDevice.isMoving) {
         // If moving, STOP
-        Serial.println("[SHUTTER] → Stopping movement");
+        DEBUG_PRINTLN("[SHUTTER] → Stopping movement");
         stopShutter();
     } else {
         // If stopped, toggle direction (move opposite of last direction)
-        Serial.printf("[SHUTTER] → Toggling (last dir: %s)\n", 
+        DEBUG_PRINTF("[SHUTTER] → Toggling (last dir: %s)\n", 
                      shutterConfig.lastDirection == DIRECTION_UP ? "UP" : "DOWN");
         toggleShutterDirection();
     }

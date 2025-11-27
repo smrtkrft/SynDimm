@@ -1,26 +1,7 @@
 /**
- * SK_scan.h
- * SmartKraft SynDimm - Unified Network Scanner
- * Version: v0.9.1
- * 
- * ========================================
- * UNIFIED NETWORK DISCOVERY ENGINE
- * ========================================
- * Tüm modlar için tek scan sistemi:
- * - Dimmer devices (Shelly Dimmer serisi)
- * - Shutter devices (Shelly 2.5, Plus 2PM Cover)
- * - Future: RGB, Switch, Relay...
- * 
- * Features:
- * - Bitwise filter system
- * - Parallel scanning (10 threads)
- * - Fast TCP Port 80 check
- * - Comprehensive Shelly detection (Gen1/2/3)
- * - Callback-based architecture
- * - FreeRTOS task-based (non-blocking)
- * ========================================
+ * SK_scan.h - Unified Network Scanner v0.9.1
+ * Dimmer/Shutter/Switch device discovery with FreeRTOS
  */
-
 #ifndef SK_SCAN_H
 #define SK_SCAN_H
 
@@ -30,30 +11,24 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <vector>
+#include "SK_config.h"
 
-// ========================================
-// DEVICE TYPE FILTERS (Bitwise)
-// ========================================
+// Device Type Filters (Bitwise)
 #define FILTER_NONE        0
-#define FILTER_DIMMERS     1    // Shelly Dimmer 1/2/L/Gen3, 0-10V, 1-10V, DALI
-#define FILTER_SHUTTERS    2    // Shelly 2.5, Plus 2PM (Cover mode)
-#define FILTER_SWITCHES    4    // Future: Shelly 1/1PM/Plus 1PM
-#define FILTER_RGBW        8    // Future: Shelly RGBW2, Duo RGBW
-#define FILTER_RELAYS      16   // Future: Shelly 4Pro
-#define FILTER_ALL         255  // All devices
+#define FILTER_DIMMERS     1
+#define FILTER_SHUTTERS    2
+#define FILTER_SWITCHES    4
+#define FILTER_RGBW        8
+#define FILTER_RELAYS      16
+#define FILTER_ALL         255
 
-// ========================================
-// SCAN CONFIGURATION
-// ========================================
-#define SCAN_TCP_TIMEOUT_MS     500    // TCP Port 80 check
-#define SCAN_HTTP_TIMEOUT_MS    3000   // HTTP device info
-#define SCAN_PARALLEL_THREADS   10     // Parallel IP scanning
-#define SCAN_TASK_STACK_SIZE    8192   // FreeRTOS stack
-#define SCAN_TASK_PRIORITY      1      // Background priority
+// Scan Configuration
+#define SCAN_TCP_TIMEOUT_MS     500
+#define SCAN_HTTP_TIMEOUT_MS    3000
+#define SCAN_PARALLEL_THREADS   10
+#define SCAN_TASK_STACK_SIZE    8192
+#define SCAN_TASK_PRIORITY      1
 
-// ========================================
-// DEVICE TYPE ENUMS
-// ========================================
 enum DeviceCategory {
     CATEGORY_UNKNOWN = 0,
     CATEGORY_DIMMER = 1,
@@ -63,40 +38,14 @@ enum DeviceCategory {
     CATEGORY_RELAY = 5
 };
 
-// ========================================
-// DISCOVERED DEVICE STRUCTURE
-// ========================================
 struct DiscoveredDevice {
-    String ip;
-    String modelName;        // e.g., "SHDM-2", "SHSW-25", "SNSW-001P16EU"
-    String displayName;      // e.g., "Shelly Dimmer 2", "Shelly 2.5"
-    String macAddress;
-    String firmwareVersion;
-    String mode;             // e.g., "roller", "relay", "white", "color" (for Shelly 2.5/RGBW2)
-    String deviceType;       // Raw device type string
-    
+    String ip, modelName, displayName, macAddress, firmwareVersion, mode, deviceType;
     DeviceCategory category;
-    int specificType;        // DIMMER_SHELLY_DIMMER_2, SHUTTER_SHELLY_25, etc.
-    int generation;          // 1, 2, 3
+    int specificType, generation, maxChannels;
+    bool supportsDimming, supportsShutter, supportsSwitch, supportsRGBW, isValid;
     
-    // Capabilities
-    bool supportsDimming;
-    bool supportsShutter;
-    bool supportsSwitch;
-    bool supportsRGBW;
-    bool isValid;            // Device responded correctly
-    
-    int maxChannels;
-    
-    // Constructor
     DiscoveredDevice() {
-        ip = "";
-        modelName = "";
-        displayName = "";
-        macAddress = "";
-        firmwareVersion = "";
-        mode = "";
-        deviceType = "";
+        ip = ""; modelName = ""; displayName = ""; macAddress = ""; firmwareVersion = ""; mode = ""; deviceType = "";
         category = CATEGORY_UNKNOWN;
         specificType = 0;
         generation = 0;
@@ -109,9 +58,6 @@ struct DiscoveredDevice {
     }
 };
 
-// ========================================
-// SCAN PROGRESS TRACKING
-// ========================================
 struct ScanProgress {
     bool isScanning;
     int totalIPs;
@@ -122,9 +68,6 @@ struct ScanProgress {
     unsigned long endTime;
 };
 
-// ========================================
-// SCAN CONFIGURATION
-// ========================================
 struct ScanConfig {
     int filters;              // Bitwise: FILTER_DIMMERS | FILTER_SHUTTERS
     int parallelCount;        // Number of parallel scans
@@ -142,9 +85,6 @@ struct ScanConfig {
     }
 };
 
-// ========================================
-// CALLBACK TYPES
-// ========================================
 typedef std::function<void(DiscoveredDevice)> OnDeviceFoundCallback;
 typedef std::function<void(int progress, int total)> OnProgressCallback;
 typedef std::function<void(bool success, String message)> OnCompleteCallback;
@@ -166,10 +106,6 @@ namespace {
     ScanConfig currentScanConfig;
 }
 
-// ========================================
-// FUNCTION DECLARATIONS
-// ========================================
-
 // Main API
 void startNetworkScan(ScanConfig config, 
                      OnDeviceFoundCallback onFound = nullptr,
@@ -189,11 +125,7 @@ bool isIPAlive(String ip);
 // FreeRTOS scan task
 void networkScanTask(void* parameter);
 
-// ========================================
-// IMPLEMENTATION
-// ========================================
-
-// Check TCP Port (Fast alive check)
+// Check TCP Port
 bool checkTCPPort(String ip, int port, int timeout) {
     WiFiClient client;
     client.setTimeout(timeout);
@@ -217,9 +149,7 @@ DiscoveredDevice detectDevice(String ip) {
     
     HTTPClient http;
     
-    // ========================================
-    // Try Gen2/Gen3 Device Info (RPC API)
-    // ========================================
+    // Try Gen2/Gen3 (RPC API)
     String url = "http://" + ip + "/rpc/Shelly.GetDeviceInfo";
     http.begin(url);
     http.setTimeout(SCAN_HTTP_TIMEOUT_MS);
@@ -243,8 +173,6 @@ DiscoveredDevice detectDevice(String ip) {
             device.generation = 3;
             device.isValid = true;
             device.deviceType = app;
-            
-            // ========== DIMMER DEVICES ==========
             
             // Shelly Dimmer 2 Gen3 (SNSW-001P16EU)
             if (model.indexOf("SNSW-001P16EU") >= 0 || (app.indexOf("Dimmer") >= 0 && model.indexOf("Gen3") >= 0)) {
@@ -321,8 +249,6 @@ DiscoveredDevice detectDevice(String ip) {
                 device.maxChannels = 1;
             }
             
-            // ========== SHUTTER DEVICES ==========
-            
             // Shelly Plus 2PM in Cover mode
             else if ((model.indexOf("Plus 2PM") >= 0 || model.indexOf("SNSW-002P16EU") >= 0) && app.indexOf("Cover") >= 0) {
                 device.displayName = "Shelly Plus 2PM (Cover)";
@@ -349,9 +275,7 @@ DiscoveredDevice detectDevice(String ip) {
     
     http.end();
     
-    // ========================================
-    // Try Gen1 Device Info (REST API)
-    // ========================================
+    // Try Gen1 (REST API)
     url = "http://" + ip + "/shelly";
     http.begin(url);
     http.setTimeout(SCAN_HTTP_TIMEOUT_MS);
@@ -374,8 +298,6 @@ DiscoveredDevice detectDevice(String ip) {
             device.generation = 1;
             device.isValid = true;
             device.deviceType = type;
-            
-            // ========== DIMMER DEVICES (Gen1) ==========
             
             // Shelly Dimmer 2 (Gen1)
             if (type == "SHDM-2" || type.indexOf("Dimmer2") >= 0) {
@@ -414,9 +336,7 @@ DiscoveredDevice detectDevice(String ip) {
                 device.mode = "white";
             }
             
-            // ========== SHUTTER DEVICES (Gen1) ==========
-            
-            // Shelly 2.5 (SHSW-25) - KRITIK: Mode kontrolü yapmalıyız!
+            // Shelly 2.5 - Mode kontrolü
             else if (type.indexOf("SHSW-25") >= 0 || type.indexOf("Shelly2.5") >= 0) {
                 // Shelly 2.5 bulundu - şimdi mode'unu kontrol et
                 String settingsUrl = "http://" + ip + "/settings";
@@ -440,7 +360,7 @@ DiscoveredDevice detectDevice(String ip) {
                             device.specificType = 100; // SHUTTER_SHELLY_25_GEN1
                             device.supportsShutter = true;
                             device.maxChannels = 1;
-                            Serial.printf("[SCAN] Shelly 2.5 detected in ROLLER mode: %s\n", ip.c_str());
+                            DEBUG_PRINTF("[SCAN] Shelly 2.5 detected in ROLLER mode: %s\n", ip.c_str());
                         } else if (mode == "relay") {
                             // RELAY MODE - Switch olarak kullanılıyor
                             device.displayName = "Shelly 2.5 (Relay Mode)";
@@ -448,12 +368,12 @@ DiscoveredDevice detectDevice(String ip) {
                             device.specificType = 101;
                             device.supportsSwitch = true;
                             device.maxChannels = 2;
-                            Serial.printf("[SCAN] Shelly 2.5 detected in RELAY mode: %s (not suitable for shutter)\n", ip.c_str());
+                            DEBUG_PRINTF("[SCAN] Shelly 2.5 detected in RELAY mode: %s (not suitable for shutter)\n", ip.c_str());
                         } else {
                             // Bilinmeyen mode
                             device.displayName = "Shelly 2.5 (Unknown Mode)";
                             device.category = CATEGORY_UNKNOWN;
-                            Serial.printf("[SCAN] Shelly 2.5 detected with UNKNOWN mode '%s': %s\n", mode.c_str(), ip.c_str());
+                            DEBUG_PRINTF("[SCAN] Shelly 2.5 detected with UNKNOWN mode '%s': %s\n", mode.c_str(), ip.c_str());
                         }
                     } else {
                         // Settings parse edilemedi - varsayılan roller
@@ -463,7 +383,7 @@ DiscoveredDevice detectDevice(String ip) {
                         device.supportsShutter = true;
                         device.maxChannels = 1;
                         device.mode = "unknown";
-                        Serial.printf("[SCAN] Shelly 2.5 detected but mode check failed: %s\n", ip.c_str());
+                        DEBUG_PRINTF("[SCAN] Shelly 2.5 detected but mode check failed: %s\n", ip.c_str());
                     }
                 } else {
                     // Settings endpoint'e erişilemedi
@@ -473,7 +393,7 @@ DiscoveredDevice detectDevice(String ip) {
                     device.supportsShutter = true;
                     device.maxChannels = 1;
                     device.mode = "unknown";
-                    Serial.printf("[SCAN] Shelly 2.5 detected but /settings unreachable: %s\n", ip.c_str());
+                    DEBUG_PRINTF("[SCAN] Shelly 2.5 detected but /settings unreachable: %s\n", ip.c_str());
                 }
                 
                 httpSettings.end();
@@ -491,19 +411,9 @@ DiscoveredDevice detectDevice(String ip) {
 
 // FreeRTOS Network Scan Task
 void networkScanTask(void* parameter) {
-    Serial.println("[SCAN] ========================================");
-    Serial.println("[SCAN] Starting unified network scan...");
-    Serial.println("[SCAN] ========================================");
-    
-    // Get local IP
     IPAddress localIP = WiFi.localIP();
     String subnet = String(localIP[0]) + "." + String(localIP[1]) + "." + String(localIP[2]) + ".";
     
-    Serial.printf("[SCAN] Subnet: %s0/24\n", subnet.c_str());
-    Serial.printf("[SCAN] Filters: 0x%02X\n", currentScanConfig.filters);
-    Serial.printf("[SCAN] Parallel threads: %d\n", currentScanConfig.parallelCount);
-    
-    // Clear previous results
     if (xSemaphoreTake(scanMutex, portMAX_DELAY)) {
         discoveredDevices.clear();
         scanProgress.totalIPs = 254;
@@ -513,18 +423,13 @@ void networkScanTask(void* parameter) {
         xSemaphoreGive(scanMutex);
     }
     
-    // Phase 1: Fast TCP Port 80 check (parallel)
-    Serial.println("[SCAN] Phase 1: TCP Port 80 scanning...");
     std::vector<String> aliveIPs;
     
     for (int batch = 1; batch <= 254; batch += currentScanConfig.parallelCount) {
-        // Check if scan was stopped
         if (!scanProgress.isScanning) {
-            Serial.println("[SCAN] Scan stopped by user");
             break;
         }
         
-        // Parallel check
         for (int i = 0; i < currentScanConfig.parallelCount && (batch + i) <= 254; i++) {
             int ipSuffix = batch + i;
             String testIP = subnet + String(ipSuffix);
@@ -535,7 +440,6 @@ void networkScanTask(void* parameter) {
                     scanProgress.aliveIPs++;
                     xSemaphoreGive(scanMutex);
                 }
-                Serial.printf("[SCAN] ✓ Alive: %s\n", testIP.c_str());
             }
             
             // Update progress
@@ -553,19 +457,19 @@ void networkScanTask(void* parameter) {
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
     
-    Serial.printf("[SCAN] Phase 1 Complete: %d alive IPs found\n", aliveIPs.size());
+    DEBUG_PRINTF("[SCAN] Phase 1 Complete: %d alive IPs found\n", aliveIPs.size());
     
     // Phase 2: Device detection and filtering
-    Serial.println("[SCAN] Phase 2: Detecting devices...");
+    DEBUG_PRINTLN("[SCAN] Phase 2: Detecting devices...");
     
     for (const String& ip : aliveIPs) {
         // Check if scan was stopped
         if (!scanProgress.isScanning) {
-            Serial.println("[SCAN] Scan stopped by user");
+            DEBUG_PRINTLN("[SCAN] Scan stopped by user");
             break;
         }
         
-        Serial.printf("[SCAN] Detecting: %s\n", ip.c_str());
+        DEBUG_PRINTF("[SCAN] Detecting: %s\n", ip.c_str());
         
         DiscoveredDevice device = detectDevice(ip);
         
@@ -598,7 +502,7 @@ void networkScanTask(void* parameter) {
                 xSemaphoreGive(scanMutex);
             }
             
-            Serial.printf("[SCAN] ✓✓ FOUND: %s - %s (Gen%d, Category: %d)\n", 
+            DEBUG_PRINTF("[SCAN] ✓✓ FOUND: %s - %s (Gen%d, Category: %d)\n", 
                          ip.c_str(), 
                          device.displayName.c_str(),
                          device.generation,
@@ -609,7 +513,7 @@ void networkScanTask(void* parameter) {
                 deviceFoundCallback(device);
             }
         } else if (device.category != CATEGORY_UNKNOWN) {
-            Serial.printf("[SCAN] ⊗ Skipped (filtered out): %s - %s\n", ip.c_str(), device.displayName.c_str());
+            DEBUG_PRINTF("[SCAN] ⊗ Skipped (filtered out): %s - %s\n", ip.c_str(), device.displayName.c_str());
         }
         
         vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -623,10 +527,7 @@ void networkScanTask(void* parameter) {
     }
     
     unsigned long duration = (scanProgress.endTime - scanProgress.startTime) / 1000;
-    Serial.println("[SCAN] ========================================");
-    Serial.printf("[SCAN] Scan complete in %lu seconds\n", duration);
-    Serial.printf("[SCAN] Devices found: %d\n", scanProgress.devicesFound);
-    Serial.println("[SCAN] ========================================");
+    DEBUG_PRINTF("[SCAN] Complete: %d devices in %lu sec\n", scanProgress.devicesFound, duration);
     
     // Callback complete
     if (completeCallback) {
@@ -647,7 +548,7 @@ void startNetworkScan(ScanConfig config,
     
     // Check if already scanning
     if (scanProgress.isScanning) {
-        Serial.println("[SCAN] Scan already in progress");
+        DEBUG_PRINTLN("[SCAN] Scan already in progress");
         if (onComplete) {
             onComplete(false, "Scan already in progress");
         }
@@ -686,24 +587,24 @@ void startNetworkScan(ScanConfig config,
         &scanTaskHandle
     );
     
-    Serial.println("[SCAN] Network scan started (background task)");
+    DEBUG_PRINTLN("[SCAN] Network scan started (background task)");
 }
 
 // Stop Network Scan
 void stopNetworkScan() {
     if (!scanProgress.isScanning) {
-        Serial.println("[SCAN] No scan in progress");
+        DEBUG_PRINTLN("[SCAN] No scan in progress");
         return;
     }
     
-    Serial.println("[SCAN] Stopping network scan...");
+    DEBUG_PRINTLN("[SCAN] Stopping network scan...");
     
     if (xSemaphoreTake(scanMutex, portMAX_DELAY)) {
         scanProgress.isScanning = false;
         xSemaphoreGive(scanMutex);
     }
     
-    Serial.println("[SCAN] Scan stop requested");
+    DEBUG_PRINTLN("[SCAN] Scan stop requested");
 }
 
 // Check if scanning

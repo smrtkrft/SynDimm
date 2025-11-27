@@ -1,17 +1,6 @@
 /**
- * SK_webserver.h
- * SmartKraft SynDimm - Web Server Management
- * Version: v0.9.1
- * 
- * ========================================
- * KRITIK KURAL - ASLA DEĞİŞTİRME!
- * ========================================
- * Web arayüzü SADECE ESP32-C6 içindir!
- * - Kullanıcı sadece cihazın kendisinden erişebilir
- * - Dışarıdan internet erişimi YOK
- * - Sadece bilgilendirme ve basit ayarlar için
- * - Hiçbir kritik kontrol web'den yapılmaz
- * ========================================
+ * SK_webserver.h - Web Server Management v0.9.1
+ * KRITIK: Web arayüzü SADECE ESP32-C6 local erişim içindir!
  */
 
 #ifndef SK_WEBSERVER_H
@@ -25,6 +14,8 @@
 #include "SK_scan.h"
 #include "SK_dimmer.h"
 #include "SK_shutter.h"
+#include "SK_mode_safe.h"
+#include "SK_mode_safe_api.h"
 #include "SK_ota.h"
 
 class SKWebServer {
@@ -77,20 +68,20 @@ private:
     }
     
     void handleSaveNetwork() {
-        Serial.println("\n=== /saveNetwork endpoint called ===");
+        DEBUG_PRINTLN("\n=== /saveNetwork endpoint called ===");
         
         if (server->method() != HTTP_POST) {
-            Serial.println("ERROR: Not a POST request");
+            DEBUG_PRINTLN("ERROR: Not a POST request");
             server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
             return;
         }
         
         String body = server->arg("plain");
-        Serial.println("Request body length: " + String(body.length()));
-        Serial.println("Request body: " + body);
+        DEBUG_PRINTLN("Request body length: " + String(body.length()));
+        DEBUG_PRINTLN("Request body: " + body);
         
         if (body.length() == 0) {
-            Serial.println("ERROR: Empty body");
+            DEBUG_PRINTLN("ERROR: Empty body");
             server->send(400, "application/json", "{\"success\":false,\"message\":\"Boş veri gönderildi\"}");
             return;
         }
@@ -99,8 +90,8 @@ private:
         DeserializationError error = deserializeJson(doc, body);
         
         if (error) {
-            Serial.print("ERROR: JSON parse error: ");
-            Serial.println(error.c_str());
+            DEBUG_PRINT("ERROR: JSON parse error: ");
+            DEBUG_PRINTLN(error.c_str());
             String errorMsg = "{\"success\":false,\"message\":\"JSON hatası: ";
             errorMsg += error.c_str();
             errorMsg += "\"}";
@@ -108,7 +99,7 @@ private:
             return;
         }
         
-        Serial.println("JSON parsed successfully");
+        DEBUG_PRINTLN("JSON parsed successfully");
         
         // Extract Primary Network settings
         String p_ssid = doc["primary"]["ssid"] | "";
@@ -122,9 +113,9 @@ private:
         String b_ip = doc["backup"]["staticIP"] | "";
         String b_mdns = doc["backup"]["mdns"] | "dimm";
         
-        Serial.println("Extracted data:");
-        Serial.println("  Primary SSID: " + p_ssid);
-        Serial.println("  Backup SSID: " + b_ssid);
+        DEBUG_PRINTLN("Extracted data:");
+        DEBUG_PRINTLN("  Primary SSID: " + p_ssid);
+        DEBUG_PRINTLN("  Backup SSID: " + b_ssid);
         
         // Backend validation
         if (p_ssid.length() == 0 && b_ssid.length() == 0) {
@@ -158,28 +149,28 @@ private:
         
         // Save to preferences (WiFi manager will handle this)
         if (wifiManager) {
-            Serial.println("\n=== Saving Network Settings ===");
-            Serial.println("Primary SSID: " + p_ssid);
-            Serial.println("Backup SSID: " + b_ssid);
+            DEBUG_PRINTLN("\n=== Saving Network Settings ===");
+            DEBUG_PRINTLN("Primary SSID: " + p_ssid);
+            DEBUG_PRINTLN("Backup SSID: " + b_ssid);
             
             bool saved = wifiManager->saveNetworkSettings(p_ssid, p_pass, p_ip, p_mdns,
                                                          b_ssid, b_pass, b_ip, b_mdns);
             
             if (saved) {
-                Serial.println("Settings saved successfully!");
+                DEBUG_PRINTLN("Settings saved successfully!");
                 server->send(200, "application/json", "{\"success\":true,\"message\":\"Ayarlar kaydedildi! Cihaz yeniden başlatılıyor...\"}");
                 
                 // Schedule restart after response is sent
                 delay(500);
-                Serial.println("Restarting ESP32...\n");
+                DEBUG_PRINTLN("Restarting ESP32...\n");
                 delay(500);
                 ESP.restart();
             } else {
-                Serial.println("Failed to save settings!");
+                DEBUG_PRINTLN("Failed to save settings!");
                 server->send(500, "application/json", "{\"success\":false,\"message\":\"Ayarlar kaydedilemedi - bellek hatası\"}");
             }
         } else {
-            Serial.println("ERROR: WiFi manager not found!");
+            DEBUG_PRINTLN("ERROR: WiFi manager not found!");
             server->send(500, "application/json", "{\"success\":false,\"message\":\"WiFi yöneticisi bulunamadı\"}");
         }
     }
@@ -202,10 +193,7 @@ private:
         }
     }
     
-    // ========================================
-    // OTA ENDPOINTS
-    // ========================================
-    
+    // OTA Endpoints
     void handleGetOTASettings() {
         String json = getOTASettingsJSON();
         server->send(200, "application/json", json);
@@ -240,10 +228,7 @@ private:
         performOTAUpdate();
     }
     
-    // ========================================
-    // DIMMER ENDPOINTS
-    // ========================================
-    
+    // Dimmer Endpoints
     void handleConnectDimmer() {
         if (server->method() != HTTP_POST) {
             server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
@@ -318,7 +303,7 @@ private:
     }
     
     void handleScanNetwork() {
-        Serial.println("[WEB] /scanNetwork called");
+        DEBUG_PRINTLN("[WEB] /scanNetwork called");
         
         if (server->method() != HTTP_POST) {
             server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
@@ -341,7 +326,7 @@ private:
     }
     
     void handleStopScan() {
-        Serial.println("[WEB] /stopScan called");
+        DEBUG_PRINTLN("[WEB] /stopScan called");
         
         if (server->method() != HTTP_POST) {
             server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
@@ -356,7 +341,7 @@ private:
     }
     
     void handleGetScanResults() {
-        Serial.println("[WEB] /getScanResults called");
+        DEBUG_PRINTLN("[WEB] /getScanResults called");
         
         // Get results from unified scanner
         JsonDocument doc;
@@ -383,7 +368,7 @@ private:
     }
     
     void handleGetScanProgress() {
-        Serial.println("[WEB] /getScanProgress called");
+        DEBUG_PRINTLN("[WEB] /getScanProgress called");
         String json = getNetworkScanProgressJSON();
         server->send(200, "application/json", json);
     }
@@ -425,14 +410,7 @@ private:
         }
     }
     
-    // ========================================
-    // END DIMMER ENDPOINTS
-    // ========================================
-    
-    // ========================================
-    // SHUTTER ENDPOINTS
-    // ========================================
-    
+    // Shutter Endpoints
     void handleConnectShutter() {
         if (server->method() != HTTP_POST) {
             server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
@@ -491,7 +469,7 @@ private:
     }
     
     void handleScanShutterNetwork() {
-        Serial.println("[WEB] /scanShutterNetwork called");
+        DEBUG_PRINTLN("[WEB] /scanShutterNetwork called");
         
         if (server->method() != HTTP_POST) {
             server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
@@ -544,14 +522,7 @@ private:
         server->send(200, "application/json", "{\"success\":true}");
     }
     
-    // ========================================
-    // END SHUTTER ENDPOINTS
-    // ========================================
-    
-    // ========================================
-    // MODE MANAGER ENDPOINTS
-    // ========================================
-    
+    // Mode Manager Endpoints
     void handleGetCurrentMode() {
         if (!modeManager) {
             server->send(500, "application/json", "{\"error\":\"Mode manager not initialized\"}");
@@ -583,7 +554,7 @@ private:
             JsonDocument doc;
             DeserializationError error = deserializeJson(doc, body);
             
-            if (!error && doc.containsKey("mode")) {
+            if (!error && doc["mode"].is<JsonVariant>()) {
                 if (doc["mode"].is<int>()) {
                     int modeInt = doc["mode"].as<int>();
                     if (modeInt == 0) modeStr = "DIMMER";
@@ -622,9 +593,126 @@ private:
         }
     }
     
-    // ========================================
-    // END MODE MANAGER ENDPOINTS
-    // ========================================
+    // Safe Mode Endpoints
+    SafeLock* safeLockPtr = nullptr;
+    SafeLockAPIHandler* safeApiHandlerPtr = nullptr;
+    
+    void handleGetSafeStatus() {
+        if (!safeLockPtr) {
+            server->send(500, "application/json", "{\"error\":\"Safe Lock not initialized\"}");
+            return;
+        }
+        
+        JsonDocument doc;
+        JsonArray passwords = doc["passwords"].to<JsonArray>();
+        
+        for (uint8_t i = 0; i < SAFE_MAX_PASSWORDS; i++) {
+            JsonObject pwd = passwords.add<JsonObject>();
+            pwd["index"] = i;
+            pwd["password"] = safeLockPtr->getPassword(i);
+            pwd["active"] = safeLockPtr->isPasswordActive(i);
+            
+            SafeApiConfig apiConfig = safeLockPtr->getApiConfig(i);
+            pwd["apiEnabled"] = apiConfig.enabled;
+            pwd["apiUrl"] = String(apiConfig.url);
+            pwd["apiMethod"] = apiConfig.method == SAFE_HTTP_POST ? "POST" : "GET";
+        }
+        
+        String output;
+        serializeJson(doc, output);
+        server->send(200, "application/json", output);
+    }
+    
+    void handleSetSafePassword() {
+        if (!safeLockPtr) {
+            server->send(500, "application/json", "{\"success\":false,\"message\":\"Safe Lock not initialized\"}");
+            return;
+        }
+        
+        if (server->method() != HTTP_POST) {
+            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
+            return;
+        }
+        
+        String body = server->arg("plain");
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, body);
+        
+        if (error) {
+            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
+            return;
+        }
+        
+        uint8_t index = doc["index"] | 0;
+        String password = doc["password"] | "";
+        bool apiEnabled = doc["apiEnabled"] | false;
+        String apiUrl = doc["apiUrl"] | "";
+        String apiMethod = doc["apiMethod"] | "GET";
+        String apiHeader = doc["apiHeader"] | "";
+        String apiBody = doc["apiBody"] | "";
+        
+        if (index >= SAFE_MAX_PASSWORDS) {
+            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid password index\"}");
+            return;
+        }
+        
+        SafeApiConfig apiConfig;
+        apiUrl.toCharArray(apiConfig.url, SAFE_API_URL_MAX);
+        apiConfig.method = (apiMethod == "POST") ? SAFE_HTTP_POST : SAFE_HTTP_GET;
+        apiHeader.toCharArray(apiConfig.header, SAFE_API_HEADER_MAX);
+        apiBody.toCharArray(apiConfig.body, SAFE_API_BODY_MAX);
+        apiConfig.enabled = apiEnabled;
+        
+        bool success = safeLockPtr->setPassword(index, password, apiConfig);
+        
+        if (success) {
+            server->send(200, "application/json", "{\"success\":true,\"message\":\"Password saved\"}");
+        } else {
+            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid password format\"}");
+        }
+    }
+    
+    void handleTestSafeApi() {
+        // API testi ESP32-C6 tarafindan yapilir, web sadece ayar icin
+        if (!safeApiHandlerPtr) {
+            server->send(500, "application/json", "{\"success\":false,\"message\":\"Safe API Handler not initialized\"}");
+            return;
+        }
+        
+        if (server->method() != HTTP_POST) {
+            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
+            return;
+        }
+        
+        String body = server->arg("plain");
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, body);
+        
+        if (error) {
+            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
+            return;
+        }
+        
+        String url = doc["url"] | "";
+        String methodStr = doc["method"] | "GET";
+        String header = doc["header"] | "";
+        String bodyData = doc["body"] | "";
+        
+        if (url.length() == 0) {
+            server->send(400, "application/json", "{\"success\":false,\"message\":\"URL required\"}");
+            return;
+        }
+        
+        // ESP32-C6 üzerinden API testi yap (SafeLockAPIHandler kullan)
+        SafeHttpMethod method = (methodStr == "POST") ? SAFE_HTTP_POST : SAFE_HTTP_GET;
+        bool success = safeApiHandlerPtr->testApi(url, method, header, bodyData);
+        
+        if (success) {
+            server->send(200, "application/json", "{\"success\":true,\"message\":\"API test basarili (ESP32-C6)\"}");
+        } else {
+            server->send(200, "application/json", "{\"success\":false,\"message\":\"API test basarisiz\"}");
+        }
+    }
     
     // Static wrapper functions for server callbacks
     static SKWebServer* instance;
@@ -801,6 +889,24 @@ private:
         }
     }
     
+    static void handleGetSafeStatusStatic() {
+        if (instance) {
+            instance->handleGetSafeStatus();
+        }
+    }
+    
+    static void handleSetSafePasswordStatic() {
+        if (instance) {
+            instance->handleSetSafePassword();
+        }
+    }
+    
+    static void handleTestSafeApiStatic() {
+        if (instance) {
+            instance->handleTestSafeApi();
+        }
+    }
+    
 public:
     SKWebServer() {
         server = new WebServer(WEB_SERVER_PORT);
@@ -817,6 +923,16 @@ public:
     // Set mode manager reference
     void setModeManager(SKModeManager* manager) {
         modeManager = manager;
+    }
+    
+    // Set Safe Lock reference
+    void setSafeLock(SafeLock* sl) {
+        safeLockPtr = sl;
+    }
+    
+    // Set Safe API Handler reference
+    void setSafeApiHandler(SafeLockAPIHandler* handler) {
+        safeApiHandlerPtr = handler;
     }
     
     // Initialize web server
@@ -860,12 +976,18 @@ public:
         server->on("/getCurrentMode", HTTP_GET, handleGetCurrentModeStatic);
         server->on("/setMode", HTTP_POST, handleSetModeStatic);
         
+        // Safe mode routes
+        server->on("/getSafeStatus", HTTP_GET, handleGetSafeStatusStatic);
+        server->on("/saveSafePassword", HTTP_POST, handleSetSafePasswordStatic);
+        server->on("/setSafePassword", HTTP_POST, handleSetSafePasswordStatic);
+        server->on("/testSafeApi", HTTP_POST, handleTestSafeApiStatic);
+        
         server->onNotFound(handleNotFoundStatic);
         
         // Start server
         server->begin();
         
-        Serial.println("HTTP server started on port " + String(WEB_SERVER_PORT));
+        DEBUG_PRINTLN("HTTP server started on port " + String(WEB_SERVER_PORT));
     }
     
     // Handle client requests

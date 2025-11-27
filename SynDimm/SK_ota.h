@@ -22,6 +22,7 @@
 #include <Update.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
+#include "SK_config.h"
 
 // GitHub Repository Information
 #define GITHUB_REPO_OWNER "smrtkrft"
@@ -73,9 +74,9 @@ void initOTA() {
     otaInfo.progress = 0;
     otaInfo.updateAvailable = false;
     
-    Serial.println("[OTA] System initialized");
-    Serial.printf("[OTA] Current version: %s\n", otaInfo.currentVersion.c_str());
-    Serial.printf("[OTA] Auto-update: %s\n", otaInfo.autoUpdateEnabled ? "Enabled" : "Disabled");
+    DEBUG_PRINTLN("[OTA] System initialized");
+    DEBUG_PRINTF("[OTA] Current version: %s\n", otaInfo.currentVersion.c_str());
+    DEBUG_PRINTF("[OTA] Auto-update: %s\n", otaInfo.autoUpdateEnabled ? "Enabled" : "Disabled");
 }
 
 // Compare version strings (v0.9.1 vs v1.0.0)
@@ -126,7 +127,7 @@ bool checkForUpdates() {
     otaInfo.status = OTA_CHECKING;
     otaInfo.errorMessage = "";
     
-    Serial.println("[OTA] Checking for updates...");
+    DEBUG_PRINTLN("[OTA] Checking for updates...");
     
     HTTPClient http;
     http.begin(GITHUB_API_URL);
@@ -138,7 +139,7 @@ bool checkForUpdates() {
     if (httpCode != HTTP_CODE_OK) {
         otaInfo.status = OTA_ERROR;
         otaInfo.errorMessage = "GitHub API error: " + String(httpCode);
-        Serial.printf("[OTA] Failed to fetch release info: %d\n", httpCode);
+        DEBUG_PRINTF("[OTA] Failed to fetch release info: %d\n", httpCode);
         http.end();
         return false;
     }
@@ -153,7 +154,7 @@ bool checkForUpdates() {
     if (error) {
         otaInfo.status = OTA_ERROR;
         otaInfo.errorMessage = "JSON parse error";
-        Serial.println("[OTA] Failed to parse JSON response");
+        DEBUG_PRINTLN("[OTA] Failed to parse JSON response");
         return false;
     }
     
@@ -179,7 +180,7 @@ bool checkForUpdates() {
     if (!foundBin) {
         otaInfo.status = OTA_ERROR;
         otaInfo.errorMessage = "No firmware binary found in release";
-        Serial.println("[OTA] No .bin file found in release assets");
+        DEBUG_PRINTLN("[OTA] No .bin file found in release assets");
         return false;
     }
     
@@ -188,10 +189,10 @@ bool checkForUpdates() {
     
     if (otaInfo.updateAvailable) {
         otaInfo.status = OTA_UPDATE_AVAILABLE;
-        Serial.printf("[OTA] New version available: %s\n", otaInfo.latestVersion.c_str());
+        DEBUG_PRINTF("[OTA] New version available: %s\n", otaInfo.latestVersion.c_str());
     } else {
         otaInfo.status = OTA_IDLE;
-        Serial.println("[OTA] Already on latest version");
+        DEBUG_PRINTLN("[OTA] Already on latest version");
     }
     
     return otaInfo.updateAvailable;
@@ -208,8 +209,8 @@ bool performOTAUpdate() {
     otaInfo.status = OTA_DOWNLOADING;
     otaInfo.progress = 0;
     
-    Serial.println("[OTA] Starting firmware download...");
-    Serial.printf("[OTA] URL: %s\n", otaInfo.downloadURL.c_str());
+    DEBUG_PRINTLN("[OTA] Starting firmware download...");
+    DEBUG_PRINTF("[OTA] URL: %s\n", otaInfo.downloadURL.c_str());
     
     HTTPClient http;
     http.begin(otaInfo.downloadURL);
@@ -220,7 +221,7 @@ bool performOTAUpdate() {
     if (httpCode != HTTP_CODE_OK && httpCode != HTTP_CODE_MOVED_PERMANENTLY) {
         otaInfo.status = OTA_ERROR;
         otaInfo.errorMessage = "Download failed: " + String(httpCode);
-        Serial.printf("[OTA] Download failed: %d\n", httpCode);
+        DEBUG_PRINTF("[OTA] Download failed: %d\n", httpCode);
         http.end();
         return false;
     }
@@ -230,18 +231,18 @@ bool performOTAUpdate() {
     if (contentLength <= 0) {
         otaInfo.status = OTA_ERROR;
         otaInfo.errorMessage = "Invalid content length";
-        Serial.println("[OTA] Invalid content length");
+        DEBUG_PRINTLN("[OTA] Invalid content length");
         http.end();
         return false;
     }
     
-    Serial.printf("[OTA] Firmware size: %d bytes\n", contentLength);
+    DEBUG_PRINTF("[OTA] Firmware size: %d bytes\n", contentLength);
     
     // Begin OTA update
     if (!Update.begin(contentLength)) {
         otaInfo.status = OTA_ERROR;
         otaInfo.errorMessage = "Not enough space for OTA";
-        Serial.println("[OTA] Not enough space for OTA");
+        DEBUG_PRINTLN("[OTA] Not enough space for OTA");
         http.end();
         return false;
     }
@@ -262,7 +263,7 @@ bool performOTAUpdate() {
             if (Update.write(buff, c) != c) {
                 otaInfo.status = OTA_ERROR;
                 otaInfo.errorMessage = "Write failed";
-                Serial.println("[OTA] Write failed");
+                DEBUG_PRINTLN("[OTA] Write failed");
                 Update.abort();
                 http.end();
                 return false;
@@ -273,7 +274,7 @@ bool performOTAUpdate() {
             
             // Print progress every 10%
             if (otaInfo.progress % 10 == 0) {
-                Serial.printf("[OTA] Progress: %d%%\n", otaInfo.progress);
+                DEBUG_PRINTF("[OTA] Progress: %d%%\n", otaInfo.progress);
             }
         }
         
@@ -287,20 +288,20 @@ bool performOTAUpdate() {
         if (Update.isFinished()) {
             otaInfo.status = OTA_SUCCESS;
             otaInfo.progress = 100;
-            Serial.println("[OTA] Update successful! Rebooting...");
+            DEBUG_PRINTLN("[OTA] Update successful! Rebooting...");
             delay(1000);
             ESP.restart();
             return true;
         } else {
             otaInfo.status = OTA_ERROR;
             otaInfo.errorMessage = "Update not finished";
-            Serial.println("[OTA] Update not finished");
+            DEBUG_PRINTLN("[OTA] Update not finished");
             return false;
         }
     } else {
         otaInfo.status = OTA_ERROR;
         otaInfo.errorMessage = "Update error: " + String(Update.getError());
-        Serial.printf("[OTA] Update error: %d\n", Update.getError());
+        DEBUG_PRINTF("[OTA] Update error: %d\n", Update.getError());
         return false;
     }
 }
@@ -329,7 +330,7 @@ String getOTASettingsJSON() {
 void saveOTASettings(bool autoUpdate) {
     otaInfo.autoUpdateEnabled = autoUpdate;
     otaPrefs.putBool("auto_update", autoUpdate);
-    Serial.printf("[OTA] Auto-update set to: %s\n", autoUpdate ? "Enabled" : "Disabled");
+    DEBUG_PRINTF("[OTA] Auto-update set to: %s\n", autoUpdate ? "Enabled" : "Disabled");
 }
 
 // Auto-update check (called periodically)
@@ -338,10 +339,10 @@ void autoUpdateCheck() {
         return;
     }
     
-    Serial.println("[OTA] Auto-update check...");
+    DEBUG_PRINTLN("[OTA] Auto-update check...");
     
     if (checkForUpdates()) {
-        Serial.println("[OTA] New version found! Starting auto-update...");
+        DEBUG_PRINTLN("[OTA] New version found! Starting auto-update...");
         performOTAUpdate();
     }
 }

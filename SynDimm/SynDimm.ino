@@ -29,6 +29,7 @@
 // Include all modules
 #include <esp_system.h>
 #include <ESPmDNS.h>
+#include <EEPROM.h>
 #include "SK_config.h"
 #include "SKwifi.h"
 #include "SK_encoder.h"
@@ -37,6 +38,8 @@
 #include "SK_webserver.h"
 #include "SK_dimmer.h"
 #include "SK_shutter.h"
+#include "SK_mode_safe.h"
+#include "SK_mode_safe_api.h"
 #include "SK_ota.h"
 
 // Create instances
@@ -45,24 +48,19 @@ SKEncoder encoder;
 SKBuzzer buzzer;
 SKModeManager modeManager(&buzzer);
 SKWebServer webServer;
+SafeLock safeLock;
+SafeLockAPIHandler safeApiHandler;
 
 void setup() {
   // Initialize Serial
   Serial.begin(SERIAL_BAUD_RATE);
   delay(1000);
   
-  // Print startup info
-  Serial.println("\n================================");
-  Serial.println(String(DEVICE_NAME) + " " + String(VERSION));
-  Serial.println("================================");
-  
-  // Get and print full chip ID
+  // Get chip ID
   uint64_t chipid = ESP.getEfuseMac();
   char chipIDStr[13];
   sprintf(chipIDStr, "%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
   String fullChipID = String(chipIDStr);
-  Serial.println("Chip ID (full): " + fullChipID);
-  Serial.println();
   
   // Initialize Encoder
   encoder.begin();
@@ -81,7 +79,15 @@ void setup() {
   
   // Initialize Shutter System
   initShutter();
-  
+
+  // Initialize Safe Lock System
+  EEPROM.begin(4096);  // Initialize EEPROM for Safe Lock
+  safeLock.begin();
+  safeApiHandler.setSafeLock(&safeLock);
+  safeLock.setPasswordMatchCallback([](uint8_t pwdIndex) {
+    SafeLockAPIHandler::onPasswordMatch(pwdIndex, &safeLock, &safeApiHandler);
+  });
+
   // Initialize OTA System
   initOTA();
   
@@ -89,13 +95,17 @@ void setup() {
   webServer.begin(fullChipID);
   webServer.setWiFiManager(&wifi);  // Link WiFi manager to web server
   webServer.setModeManager(&modeManager);  // Link mode manager to web server
+  webServer.setSafeLock(&safeLock);  // Link Safe Lock to web server
+  webServer.setSafeApiHandler(&safeApiHandler);  // Link Safe API Handler (ESP32 handles all HTTP)
   
-  Serial.println("\n================================");
-  Serial.println("System Ready!");
-  Serial.println("Chip ID: " + fullChipID);
-  Serial.println(wifi.getCurrentNetworkInfo());
-  Serial.printf("Active Mode: %s\n", modeManager.getActiveModeName());
-  Serial.println("================================\n");
+  // Auto-reconnect based on active mode
+  SystemMode activeMode = modeManager.getActiveMode();
+  DEBUG_PRINTF("[STARTUP] Mode: %s\n", activeMode == MODE_DIMMER ? "DIMMER" : activeMode == MODE_SHUTTER ? "SHUTTER" : "SAFE");
+  
+  if (activeMode == MODE_DIMMER) {
+    autoReconnect();  // Reconnect to last dimmer
+  }
+  // Shutter reconnection will be manual via web interface
 }
 
 void loop() {
@@ -111,11 +121,22 @@ void loop() {
   // Update mode manager (handle timeout)
   modeManager.update();
   
-  // Update shutter status periodically
-  updateShutter();
+  // ========================================
+  // MOD İZOLASYONU - Sadece aktif mod güncellenir
+  // ========================================
+  SystemMode activeMode = modeManager.getActiveMode();
   
-  // Handle Dimmer operations
-  dimmerLoop();
+  switch(activeMode) {
+    case MODE_DIMMER:
+      dimmerLoop();
+      break;
+    case MODE_SHUTTER:
+      updateShutter();
+      break;
+    case MODE_SAFE:
+      // Safe mod loop gerektirmez, event-driven çalışır
+      break;
+  }
   
   // Encoder event handling
   if (encoder.available()) {
@@ -127,8 +148,6 @@ void loop() {
       modeManager.handleEncoderEvent(event);
     } else {
       // Normal mode - route to active mode
-      SystemMode activeMode = modeManager.getActiveMode();
-      
       switch(activeMode) {
         case MODE_DIMMER:
           handleDimmerEncoderEvent(event);
@@ -137,7 +156,7 @@ void loop() {
           handleShutterEncoderEvent(event);
           break;
         case MODE_SAFE:
-          // Safe mode handler (future implementation)
+          handleSafeEncoderEvent(event);
           break;
       }
     }
@@ -153,15 +172,12 @@ void loop() {
 void handleDimmerEncoderEvent(char event) {
   switch(event) {
     case 'L':
-      Serial.println("[Dimmer] Left rotation");
       adjustBrightness(-1);
       break;
     case 'R':
-      Serial.println("[Dimmer] Right rotation");
       adjustBrightness(1);
       break;
     case 'B':
-      Serial.println("[Dimmer] Button pressed");
       toggleDimmer();
       break;
   }
@@ -170,16 +186,27 @@ void handleDimmerEncoderEvent(char event) {
 void handleShutterEncoderEvent(char event) {
   switch(event) {
     case 'L':
-      Serial.println("[Shutter] Left rotation - Move UP");
       handleShutterEncoderRotate(-1);  // -1 = left = up
       break;
     case 'R':
-      Serial.println("[Shutter] Right rotation - Move DOWN");
       handleShutterEncoderRotate(1);   // +1 = right = down
       break;
     case 'B':
-      Serial.println("[Shutter] Button pressed - Stop/Toggle");
       handleShutterEncoderButton();
+      break;
+  }
+}
+
+void handleSafeEncoderEvent(char event) {
+  switch(event) {
+    case 'L':
+      safeLock.onEncoderMove('L', 1);
+      break;
+    case 'R':
+      safeLock.onEncoderMove('R', 1);
+      break;
+    case 'B':
+      safeLock.onEncoderButton();
       break;
   }
 }
