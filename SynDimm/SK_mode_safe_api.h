@@ -132,23 +132,32 @@ public:
   }
   
   static void onPasswordMatch(uint8_t passwordIndex, SafeLock* safeLock, SafeLockAPIHandler* apiHandler) {
-    DEBUG_PRINTF("[SafeAPI] Sifre #%d eslesti\n", passwordIndex);
+    DEBUG_PRINTF("[SafeAPI] Sifre #%d eslesti, API tetikleniyor...\n", passwordIndex);
     
     SafeApiConfig apiConfig = safeLock->getApiConfig(passwordIndex);
     
+    DEBUG_PRINTF("[SafeAPI] API enabled: %d\n", apiConfig.enabled);
+    DEBUG_PRINTF("[SafeAPI] API URL: %s\n", apiConfig.url);
+    
     if (!apiConfig.enabled) {
+      DEBUG_PRINTLN("[SafeAPI] API devre disi, cikiliyor");
       return;
     }
     
     if (WiFi.status() != WL_CONNECTED) {
+      DEBUG_PRINTLN("[SafeAPI] WiFi bagli degil!");
       return;
     }
     
     String myIP = WiFi.localIP().toString();
+    DEBUG_PRINTF("[SafeAPI] Cihaz IP: %s\n", myIP.c_str());
+    
     if (myIP == "192.168.4.1") {
+      DEBUG_PRINTLN("[SafeAPI] AP modunda, API calismiyor");
       return;
     }
     
+    DEBUG_PRINTLN("[SafeAPI] API istegi gonderiliyor...");
     SafeApiResponseStatus status = apiHandler->trigger(apiConfig);
     DEBUG_PRINTF("[SafeAPI] Sonuc: %d\n", status);
   }

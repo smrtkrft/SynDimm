@@ -765,7 +765,7 @@ String generateHTML(String chipID, String version) {
                     <p>Detaylı kullanım kılavuzu, örnek senaryolar ve güncellemeler için:</p>
                     <div class="button-group">
                         <a href="https://smartkraft.ch/syndimm" target="_blank" class="info-button">SmartKraft.ch</a>
-                        <a href="https://github.com/smartkraft/SynDimm" target="_blank" class="info-button">GitHub</a>
+                        <a href="https://github.com/smrtkrft/SynDimm" target="_blank" class="info-button">GitHub</a>
                     </div>
                 </div>
             </div>

@@ -29,7 +29,7 @@
 #define SAFE_MAX_PASSWORDS 5            // Maksimum 5 şifre
 #define SAFE_MAX_PASSWORD_STEPS 6       // Maksimum 6 adım
 #define SAFE_MIN_PASSWORD_STEPS 3       // Minimum 3 adım
-#define SAFE_MOVEMENT_BUFFER_SIZE 10    // Son 10 hareketi tut
+#define SAFE_MOVEMENT_BUFFER_SIZE 8     // Son 8 hareketi tut (sliding window)
 #define SAFE_MAX_TICKS_PER_STEP 50      // Her adımda maksimum 50 tık
 #define SAFE_MIN_TICKS_PER_STEP 1       // Her adımda minimum 1 tık
 
@@ -38,9 +38,9 @@
 #define SAFE_EEPROM_MAGIC 0x5AFE        // Validasyon için magic number
 
 // API Konfigürasyon Limitleri
-#define SAFE_API_URL_MAX 200            // Maksimum URL uzunluğu
-#define SAFE_API_HEADER_MAX 100         // Maksimum header uzunluğu
-#define SAFE_API_BODY_MAX 200           // Maksimum body uzunluğu
+#define SAFE_API_URL_MAX 128            // Maksimum URL uzunluğu
+#define SAFE_API_HEADER_MAX 64          // Maksimum header uzunluğu
+#define SAFE_API_BODY_MAX 128           // Maksimum body uzunluğu
 
 // ==================== VERI YAPILARI ====================
 
@@ -228,10 +228,9 @@ private:
   SafeEEPROMConfig config;
   bool eepromInitialized;
   
-  // Hareket buffer'ı (circular buffer)
+  // Sliding window buffer - son 8 hareket
   SafeMovement moveBuffer[SAFE_MOVEMENT_BUFFER_SIZE];
-  uint8_t bufferHead;        // Buffer başlangıcı
-  uint8_t bufferCount;       // Buffer'daki eleman sayısı
+  uint8_t bufferCount;       // Buffer'daki eleman sayısı (0-8)
   
   // Geçici hareket sayacı
   char currentDirection;     // Şu anki hareket yönü
@@ -241,35 +240,47 @@ private:
   // Callback fonksiyonu (şifre eşleştiğinde)
   void (*onPasswordMatchCallback)(uint8_t passwordIndex);
   
-  // Buffer'a hareket ekle
+  // Buffer'a hareket ekle (sliding window)
   void addMovementToBuffer(char direction, uint8_t ticks) {
     if (ticks == 0) return;
     
-    moveBuffer[bufferHead] = SafeMovement(direction, ticks);
-    bufferHead = (bufferHead + 1) % SAFE_MOVEMENT_BUFFER_SIZE;
-    
-    if (bufferCount < SAFE_MOVEMENT_BUFFER_SIZE) {
+    // Buffer doluysa, en eskiyi sil (kaydır)
+    if (bufferCount >= SAFE_MOVEMENT_BUFFER_SIZE) {
+      for (uint8_t i = 0; i < SAFE_MOVEMENT_BUFFER_SIZE - 1; i++) {
+        moveBuffer[i] = moveBuffer[i + 1];
+      }
+      moveBuffer[SAFE_MOVEMENT_BUFFER_SIZE - 1] = SafeMovement(direction, ticks);
+    } else {
+      moveBuffer[bufferCount] = SafeMovement(direction, ticks);
       bufferCount++;
     }
+    
+    // Her ekleme sonrası buffer durumunu yazdır
+    printBufferState();
   }
   
-  // Buffer'dan belirli sayıda son hareketi al
-  bool getLastMovements(SafeMovement* output, uint8_t count) {
-    if (count > bufferCount || count > SAFE_MOVEMENT_BUFFER_SIZE) return false;
-    
+  // Buffer durumunu Serial'a yazdır
+  void printBufferState() {
+    DEBUG_PRINT("[SafeLock] ");
+    for (uint8_t i = 0; i < bufferCount; i++) {
+      if (i > 0) DEBUG_PRINT("-");
+      DEBUG_PRINT(moveBuffer[i].direction);
+      DEBUG_PRINT(moveBuffer[i].ticks);
+    }
+    DEBUG_PRINTLN();
+  }
+  
+  // Buffer'dan belirli indeksten başlayarak N hareket al
+  bool getMovementsFromIndex(SafeMovement* output, uint8_t startIdx, uint8_t count) {
+    if (startIdx + count > bufferCount) return false;
     for (uint8_t i = 0; i < count; i++) {
-      int idx = (bufferHead - count + i + SAFE_MOVEMENT_BUFFER_SIZE) % SAFE_MOVEMENT_BUFFER_SIZE;
-      output[i] = moveBuffer[idx];
+      output[i] = moveBuffer[startIdx + i];
     }
     return true;
   }
   
-  // Hareketleri şifre adımları ile karşılaştır
-  bool matchMovements(SafeMovement* movements, uint8_t movCount, const SafePassword& pwd, bool buttonPressed) {
-    // Buton kontrolü
-    if (pwd.requireButton && !buttonPressed) return false;
-    if (!pwd.requireButton && buttonPressed) return false;
-    
+  // Hareketleri şifre adımları ile karşılaştır (B hariç)
+  bool matchMovements(SafeMovement* movements, uint8_t movCount, const SafePassword& pwd) {
     // Adım sayısı kontrolü (B varsa -1)
     uint8_t expectedMoves = pwd.stepCount;
     if (pwd.requireButton) expectedMoves--;
@@ -281,27 +292,52 @@ private:
       if (movements[i].direction != pwd.steps[i].direction) return false;
       if (movements[i].ticks != pwd.steps[i].ticks) return false;
     }
-    
     return true;
   }
   
-  // Tüm şifreleri kontrol et
-  void checkPasswords(bool buttonPressed) {
+  // Tüm şifreleri tüm alt dizilerde ara (sliding window match)
+  // includeCurrentMove: true ise mevcut devam eden hareketi de dahil et
+  void checkAllSubsequences(bool buttonPressed, bool includeCurrentMove = false) {
     SafeMovement tempMoves[SAFE_MAX_PASSWORD_STEPS];
     
     for (uint8_t pwdIdx = 0; pwdIdx < SAFE_MAX_PASSWORDS; pwdIdx++) {
       if (!config.passwords[pwdIdx].isValid()) continue;
       
+      // B ile biten şifre sadece buton basılınca kontrol edilir
+      if (config.passwords[pwdIdx].requireButton && !buttonPressed) continue;
+      
       uint8_t moveCount = config.passwords[pwdIdx].stepCount;
       if (config.passwords[pwdIdx].requireButton) moveCount--;
       
-      // Buffer'da yeterli hareket var mı?
-      if (bufferCount < moveCount) continue;
+      // Mevcut hareketi dahil edecek miyiz?
+      uint8_t effectiveBufferCount = bufferCount;
+      if (includeCurrentMove && movementStarted && currentTicks > 0) {
+        effectiveBufferCount++;
+      }
       
-      // Son N hareketi al
-      if (getLastMovements(tempMoves, moveCount)) {
-        if (matchMovements(tempMoves, moveCount, config.passwords[pwdIdx], buttonPressed)) {
-          // Şifre eşleşti!
+      // Buffer'da yeterli hareket var mı?
+      if (effectiveBufferCount < moveCount) continue;
+      
+      // Tüm olası başlangıç noktalarını dene
+      for (uint8_t startIdx = 0; startIdx <= effectiveBufferCount - moveCount; startIdx++) {
+        // Geçici buffer oluştur
+        uint8_t tempIdx = 0;
+        bool valid = true;
+        
+        for (uint8_t i = 0; i < moveCount && valid; i++) {
+          uint8_t srcIdx = startIdx + i;
+          if (srcIdx < bufferCount) {
+            tempMoves[tempIdx++] = moveBuffer[srcIdx];
+          } else if (includeCurrentMove && movementStarted) {
+            // Son eleman olarak mevcut hareketi kullan
+            tempMoves[tempIdx++] = SafeMovement(currentDirection, currentTicks);
+          } else {
+            valid = false;
+          }
+        }
+        
+        if (valid && matchMovements(tempMoves, moveCount, config.passwords[pwdIdx])) {
+          DEBUG_PRINTF("[SafeLock] >>> SIFRE #%d ESLESTI! <<<\n", pwdIdx);
           onPasswordMatched(pwdIdx);
           return;
         }
@@ -309,54 +345,11 @@ private:
     }
   }
   
-  // Mevcut hareket dahil kontrol et
-  void checkPasswordsWithCurrentMove() {
-    if (!movementStarted || currentTicks == 0) return;
-    
-    SafeMovement tempMoves[SAFE_MAX_PASSWORD_STEPS];
-    
-    for (uint8_t pwdIdx = 0; pwdIdx < SAFE_MAX_PASSWORDS; pwdIdx++) {
-      if (!config.passwords[pwdIdx].isValid()) continue;
-      if (config.passwords[pwdIdx].requireButton) continue;
-      
-      uint8_t moveCount = config.passwords[pwdIdx].stepCount;
-      uint8_t totalMoves = bufferCount + 1;
-      
-      if (totalMoves < moveCount) continue;
-      
-      // Son (N-1) hareketi buffer'dan al
-      if (moveCount > 1) {
-        if (!getLastMovements(tempMoves, moveCount - 1)) continue;
-      }
-      
-      // Son hareket olarak mevcut hareketi ekle
-      tempMoves[moveCount - 1] = SafeMovement(currentDirection, currentTicks);
-      
-      // Eşleştir (buton yok)
-      if (matchMovements(tempMoves, moveCount, config.passwords[pwdIdx], false)) {
-        DEBUG_PRINTLN("[SafeLock] Sifre eslesti!");
-        onPasswordMatched(pwdIdx);
-        return;
-      }
-    }
-  }
-  
   // Şifre eşleştiğinde çağrılır
   void onPasswordMatched(uint8_t passwordIndex) {
-    DEBUG_PRINT("[SafeLock] Sifre #");
-    DEBUG_PRINT(passwordIndex);
-    DEBUG_PRINTLN(" eslesti!");
-    
     // Buffer'ı tamamen temizle
-    bufferHead = 0;
-    bufferCount = 0;
-    currentDirection = 0;
-    currentTicks = 0;
-    movementStarted = false;
-    
-    for (uint8_t i = 0; i < SAFE_MOVEMENT_BUFFER_SIZE; i++) {
-      moveBuffer[i] = SafeMovement();
-    }
+    clearBuffer();
+    resetCurrentMovement();
     
     // Callback çağır
     if (onPasswordMatchCallback != nullptr) {
@@ -365,34 +358,32 @@ private:
   }
   
 public:
-  SafeLock() : eepromInitialized(false), bufferHead(0), bufferCount(0), 
+  SafeLock() : eepromInitialized(false), bufferCount(0), 
                currentDirection(0), currentTicks(0), movementStarted(false),
                onPasswordMatchCallback(nullptr) {}
   
   // Başlat (EEPROM'dan yükle)
   void begin() {
     DEBUG_PRINTLN("[SafeLock] Baslatiliyor...");
+    DEBUG_PRINTF("[SafeLock] Config size: %d bytes\n", sizeof(SafeEEPROMConfig));
     
     // EEPROM'dan yükle
     EEPROM.get(SAFE_EEPROM_START, config);
     
+    DEBUG_PRINTF("[SafeLock] Magic: 0x%04X (beklenen: 0x%04X)\n", config.magicNumber, SAFE_EEPROM_MAGIC);
+    DEBUG_PRINTF("[SafeLock] Checksum valid: %d\n", config.isChecksumValid());
+    
     if (!config.isValid()) {
-      DEBUG_PRINTLN("[SafeLock] EEPROM'da veri yok, varsayilan degerler yukleniyor...");
+      DEBUG_PRINTLN("[SafeLock] EEPROM gecersiz, varsayilan degerler...");
       config = SafeEEPROMConfig();
       saveToEEPROM();
     } else {
-      DEBUG_PRINTLN("[SafeLock] EEPROM'dan yuklendi");
-      
-      // Aktif şifreleri listele
+      DEBUG_PRINTLN("[SafeLock] EEPROM'dan yuklendi:");
       for (uint8_t i = 0; i < SAFE_MAX_PASSWORDS; i++) {
-        if (config.passwords[i].isValid()) {
-          DEBUG_PRINT("[SafeLock] Sifre #");
-          DEBUG_PRINT(i);
-          DEBUG_PRINT(": ");
-          DEBUG_PRINT(config.passwords[i].toString());
-          DEBUG_PRINT(" (");
-          DEBUG_PRINT(config.passwords[i].isActive ? "AKTIF" : "PASIF");
-          DEBUG_PRINTLN(")");
+        if (config.passwords[i].isActive) {
+          DEBUG_PRINTF("[SafeLock] Sifre #%d: %s (API enabled: %d, URL: %s)\n", 
+                       i, config.passwords[i].toString().c_str(),
+                       config.apiConfigs[i].enabled, config.apiConfigs[i].url);
         }
       }
     }
@@ -420,7 +411,6 @@ public:
   
   // Buffer'ı temizle
   void clearBuffer() {
-    bufferHead = 0;
     bufferCount = 0;
     for (int i = 0; i < SAFE_MOVEMENT_BUFFER_SIZE; i++) {
       moveBuffer[i] = SafeMovement();
@@ -450,7 +440,7 @@ public:
         currentTicks = SAFE_MAX_TICKS_PER_STEP;
       }
     } else {
-      // Yön değişti - önceki hareketi kaydet
+      // Yön değişti - önceki hareketi buffer'a ekle
       addMovementToBuffer(currentDirection, currentTicks);
       
       // Yeni harekete başla
@@ -458,25 +448,29 @@ public:
       currentTicks = ticks;
     }
     
-    // Her hareketten sonra kontrol et
-    checkPasswordsWithCurrentMove();
+    // Her harekette mevcut durumu dahil ederek kontrol et (B'siz şifreler için)
+    checkAllSubsequences(false, true);
   }
   
   // SK_encoder'dan buton basımı geldiğinde çağrılır (B)
   void onEncoderButton() {
+    DEBUG_PRINTLN("[SafeLock] BUTON");
+    
     if (movementStarted && currentTicks > 0) {
-      // Mevcut hareketi kaydet
+      // Mevcut hareketi buffer'a ekle
       addMovementToBuffer(currentDirection, currentTicks);
       resetCurrentMovement();
     }
     
-    // Buton ile kontrol et
-    checkPasswords(true);
+    // B ile biten şifreleri kontrol et
+    checkAllSubsequences(true);
   }
   
   // Şifre ayarla (web arayüzünden)
   bool setPassword(uint8_t index, const String& passwordStr, const SafeApiConfig& apiConfig) {
     if (index >= SAFE_MAX_PASSWORDS) return false;
+    
+    DEBUG_PRINTF("[SafeLock] setPassword: index=%d, password=%s\n", index, passwordStr.c_str());
     
     SafePassword newPwd;
     if (!newPwd.fromString(passwordStr)) {
@@ -488,10 +482,8 @@ public:
     config.passwords[index].isActive = true;
     config.apiConfigs[index] = apiConfig;
     
-    DEBUG_PRINT("[SafeLock] Sifre #");
-    DEBUG_PRINT(index);
-    DEBUG_PRINT(" ayarlandi: ");
-    DEBUG_PRINTLN(passwordStr);
+    DEBUG_PRINTF("[SafeLock] Sifre #%d ayarlandi: %s\n", index, passwordStr.c_str());
+    DEBUG_PRINTF("[SafeLock] API enabled: %d, URL: %s\n", apiConfig.enabled, apiConfig.url);
     
     return saveToEEPROM();
   }
@@ -525,25 +517,6 @@ public:
   // Callback ayarla
   void setPasswordMatchCallback(void (*callback)(uint8_t)) {
     onPasswordMatchCallback = callback;
-  }
-  
-  // Debug: Buffer durumunu yazdır
-  void printBufferStatus() {
-    DEBUG_PRINT("[SafeLock] Buffer (");
-    DEBUG_PRINT(bufferCount);
-    DEBUG_PRINT("/");
-    DEBUG_PRINT(SAFE_MOVEMENT_BUFFER_SIZE);
-    DEBUG_PRINT("): ");
-    
-    SafeMovement tempMoves[SAFE_MOVEMENT_BUFFER_SIZE];
-    if (getLastMovements(tempMoves, bufferCount)) {
-      for (uint8_t i = 0; i < bufferCount; i++) {
-        DEBUG_PRINT(tempMoves[i].direction);
-        DEBUG_PRINT(tempMoves[i].ticks);
-        if (i < bufferCount - 1) DEBUG_PRINT("-");
-      }
-    }
-    DEBUG_PRINTLN();
   }
 };
 

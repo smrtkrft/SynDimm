@@ -635,6 +635,8 @@ private:
         }
         
         String body = server->arg("plain");
+        DEBUG_PRINTF("[WebServer] Gelen JSON: %s\n", body.c_str());
+        
         JsonDocument doc;
         DeserializationError error = deserializeJson(doc, body);
         
@@ -645,11 +647,18 @@ private:
         
         uint8_t index = doc["index"] | 0;
         String password = doc["password"] | "";
-        bool apiEnabled = doc["apiEnabled"] | false;
-        String apiUrl = doc["apiUrl"] | "";
-        String apiMethod = doc["apiMethod"] | "GET";
-        String apiHeader = doc["apiHeader"] | "";
-        String apiBody = doc["apiBody"] | "";
+        bool pwdEnabled = doc["pwdEnabled"] | false;
+        
+        // API bilgileri nested object içinde
+        JsonObject api = doc["api"];
+        bool apiEnabled = api["enabled"] | false;
+        String apiUrl = api["url"] | "";
+        String apiMethod = api["method"] | "GET";
+        String apiHeader = api["header"] | "";
+        String apiBody = api["body"] | "";
+        
+        DEBUG_PRINTF("[WebServer] Parsed: index=%d, pwd=%s, pwdEnabled=%d, apiEnabled=%d, url=%s\n", 
+                     index, password.c_str(), pwdEnabled, apiEnabled, apiUrl.c_str());
         
         if (index >= SAFE_MAX_PASSWORDS) {
             server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid password index\"}");

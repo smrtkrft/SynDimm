@@ -81,7 +81,7 @@ void setup() {
   initShutter();
 
   // Initialize Safe Lock System
-  EEPROM.begin(4096);  // Initialize EEPROM for Safe Lock
+  EEPROM.begin(8192);  // Initialize EEPROM for Safe Lock (need ~3KB from addr 2048)
   safeLock.begin();
   safeApiHandler.setSafeLock(&safeLock);
   safeLock.setPasswordMatchCallback([](uint8_t pwdIndex) {

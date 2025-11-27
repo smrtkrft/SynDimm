@@ -21,7 +21,7 @@
 // DEBUG AYARLARI
 // ========================================
 // Production'da yorum satırına al (Serial.print devre dışı kalır)
-// #define DEBUG_MODE
+#define DEBUG_MODE
 
 #ifdef DEBUG_MODE
   #define DEBUG_PRINT(x)    Serial.print(x)
