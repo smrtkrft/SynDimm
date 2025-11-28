@@ -1,7 +1,6 @@
 # SynDimm v0.9.1 - Geliştirme Notları
 **Tarih:** 19 Kasım 2025
 
----ReStart ve Facktory Reset butonlari eklenecek
 
 ✅ Shelly Dimmer 1, 2, L (Gen1)
 ✅ Shelly Dimmer 2 Gen3 (SNSW-001P16EU)
