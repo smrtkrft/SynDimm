@@ -136,7 +136,7 @@ void setup() {
 
 // OTA auto-check variables
 static unsigned long lastOTACheck = 0;
-const unsigned long OTA_CHECK_INTERVAL = 60000; // TEST: 1 dakika
+const unsigned long OTA_CHECK_INTERVAL = 180000; // 3 dakika (saatte max 20 istek)
 
 void loop() {
   // Handle WiFi status (reconnection & AP mode scanning)

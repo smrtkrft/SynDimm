@@ -19,6 +19,7 @@
 
 #include <Arduino.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <Update.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
@@ -30,7 +31,7 @@
 #define GITHUB_API_URL "https://api.github.com/repos/" GITHUB_REPO_OWNER "/" GITHUB_REPO_NAME "/releases/latest"
 
 // Current firmware version
-#define CURRENT_VERSION "v0.9.2"
+#define CURRENT_VERSION "v0.9.1"
 
 // OTA Status
 enum OTAStatus {
@@ -131,15 +132,21 @@ bool checkForUpdates() {
     
     HTTPClient http;
     http.begin(GITHUB_API_URL);
-    http.addHeader("User-Agent", "ESP32-SynDimm");
-    http.setTimeout(10000); // 10 seconds timeout
+    http.addHeader("User-Agent", "ESP32-SynDimm/" CURRENT_VERSION);
+    http.addHeader("Accept", "application/vnd.github.v3+json");
+    http.setTimeout(15000); // 15 seconds timeout
     
     int httpCode = http.GET();
     
     if (httpCode != HTTP_CODE_OK) {
         otaInfo.status = OTA_ERROR;
-        otaInfo.errorMessage = "GitHub API error: " + String(httpCode);
-        DEBUG_PRINTF("[OTA] Failed to fetch release info: %d\n", httpCode);
+        if (httpCode == 403) {
+            otaInfo.errorMessage = "GitHub rate limit exceeded";
+            DEBUG_PRINTLN("[OTA] GitHub API rate limit exceeded. Try again later.");
+        } else {
+            otaInfo.errorMessage = "GitHub API error: " + String(httpCode);
+            DEBUG_PRINTF("[OTA] Failed to fetch release info: %d\n", httpCode);
+        }
         http.end();
         return false;
     }
@@ -212,17 +219,34 @@ bool performOTAUpdate() {
     DEBUG_PRINTLN("[OTA] Starting firmware download...");
     DEBUG_PRINTF("[OTA] URL: %s\n", otaInfo.downloadURL.c_str());
     
+    // WiFiClientSecure for HTTPS with redirect support
+    WiFiClientSecure *client = new WiFiClientSecure;
+    if (!client) {
+        otaInfo.status = OTA_ERROR;
+        otaInfo.errorMessage = "Failed to create client";
+        return false;
+    }
+    
+    // Skip certificate verification for GitHub (or use root CA)
+    client->setInsecure();
+    
     HTTPClient http;
-    http.begin(otaInfo.downloadURL);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    http.setTimeout(30000); // 30 second timeout
+    http.begin(*client, otaInfo.downloadURL);
     http.addHeader("User-Agent", "ESP32-SynDimm");
+    http.addHeader("Accept", "application/octet-stream");
     
+    DEBUG_PRINTLN("[OTA] Connecting to download server...");
     int httpCode = http.GET();
+    DEBUG_PRINTF("[OTA] HTTP Response: %d\n", httpCode);
     
-    if (httpCode != HTTP_CODE_OK && httpCode != HTTP_CODE_MOVED_PERMANENTLY) {
+    if (httpCode != HTTP_CODE_OK) {
         otaInfo.status = OTA_ERROR;
         otaInfo.errorMessage = "Download failed: " + String(httpCode);
         DEBUG_PRINTF("[OTA] Download failed: %d\n", httpCode);
         http.end();
+        delete client;
         return false;
     }
     
@@ -233,6 +257,7 @@ bool performOTAUpdate() {
         otaInfo.errorMessage = "Invalid content length";
         DEBUG_PRINTLN("[OTA] Invalid content length");
         http.end();
+        delete client;
         return false;
     }
     
@@ -244,6 +269,7 @@ bool performOTAUpdate() {
         otaInfo.errorMessage = "Not enough space for OTA";
         DEBUG_PRINTLN("[OTA] Not enough space for OTA");
         http.end();
+        delete client;
         return false;
     }
     
@@ -252,7 +278,10 @@ bool performOTAUpdate() {
     // Download and write firmware
     WiFiClient *stream = http.getStreamPtr();
     size_t written = 0;
-    uint8_t buff[512];
+    uint8_t buff[1024];
+    int lastProgress = -1;
+    
+    DEBUG_PRINTLN("[OTA] Downloading and installing...");
     
     while (http.connected() && (written < contentLength)) {
         size_t available = stream->available();
@@ -266,6 +295,7 @@ bool performOTAUpdate() {
                 DEBUG_PRINTLN("[OTA] Write failed");
                 Update.abort();
                 http.end();
+                delete client;
                 return false;
             }
             
@@ -273,15 +303,19 @@ bool performOTAUpdate() {
             otaInfo.progress = (written * 100) / contentLength;
             
             // Print progress every 10%
-            if (otaInfo.progress % 10 == 0) {
-                DEBUG_PRINTF("[OTA] Progress: %d%%\n", otaInfo.progress);
+            int currentProgress = (otaInfo.progress / 10) * 10;
+            if (currentProgress != lastProgress && currentProgress > 0) {
+                DEBUG_PRINTF("[OTA] Progress: %d%%\n", currentProgress);
+                lastProgress = currentProgress;
             }
         }
         
         delay(1);
+        esp_task_wdt_reset(); // Feed watchdog during long download
     }
     
     http.end();
+    delete client;
     
     // Finalize update
     if (Update.end()) {
