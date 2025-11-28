@@ -168,9 +168,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .info-footer { margin-top: 60px; padding-top: 40px; border-top: 1px solid var(--border-color); text-align: center; }
 .info-footer h3 { font-size: 1.1em; font-weight: 400; color: var(--text-primary); margin-bottom: 18px; letter-spacing: 0.3px; }
 .info-footer p { font-size: 0.88em; color: var(--text-secondary); margin-bottom: 30px; letter-spacing: 0.2px; }
-.button-group { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
-.info-button { display: inline-block; padding: 14px 45px; background: transparent; color: var(--text-primary); text-decoration: none; font-weight: 400; letter-spacing: 0.5px; font-size: 0.9em; border: 1px solid var(--border-light); transition: var(--transition-smooth); }
-.info-button:hover { background: var(--text-primary); color: var(--bg-primary); border-color: var(--text-primary); transform: translateY(-3px); box-shadow: 0 10px 25px var(--shadow-hover); }
+.info-footer .button-group { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+.info-button { padding: 14px 45px; background: transparent; color: var(--text-muted); text-decoration: none; font-weight: 400; letter-spacing: 0.5px; font-size: 0.9em; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; transition: var(--transition-smooth); }
+.info-button:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.3); }
 
 /* Status Card */
 .status-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 20px 25px; margin-bottom: 25px; }

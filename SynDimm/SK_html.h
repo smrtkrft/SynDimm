@@ -775,11 +775,11 @@ String generateHTML(String chipID, String version) {
                 </div>
                 
                 <div class="info-footer">
-                    <h3>Destek</h3>
-                    <p>Dokümantasyon ve güncellemeler</p>
+                    <h3>Destek ve Dokümantasyon</h3>
+                    <p>Detaylı kullanım kılavuzu, örnek senaryolar ve güncellemeler için:</p>
                     <div class="button-group">
-                        <a href="https://smartkraft.ch/syndimm" target="_blank" class="info-button">smartkraft.ch</a>
-                        <a href="https://github.com/smrtkrft/SynDimm" target="_blank" class="info-button">github</a>
+                        <a href="https://smartkraft.ch/syndimm" target="_blank" class="info-button">SmartKraft.ch</a>
+                        <a href="https://github.com/smrtkrft/SynDimm" target="_blank" class="info-button">GitHub</a>
                     </div>
                 </div>
             </div>
