@@ -134,7 +134,7 @@ void setup() {
   // İlk OTA kontrolü (WiFi bağlıysa)
   if (wifi.isConnectedToWiFi()) {
     DEBUG_PRINTLN("[STARTUP] Checking for updates...");
-    checkForUpdates();  // Sadece kontrol et, otomatik güncelleme yapma
+    autoUpdateCheck();  // Kontrol et, otomatik güncelleme açıksa güncelle
   }
   
   // Random seed'i chip ID ile başlat (her cihaz farklı random değer üretir)

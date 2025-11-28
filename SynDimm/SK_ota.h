@@ -80,11 +80,14 @@ void initOTA() {
     DEBUG_PRINTF("[OTA] Auto-update: %s\n", otaInfo.autoUpdateEnabled ? "Enabled" : "Disabled");
 }
 
-// Compare version strings (v0.9.1 vs v1.0.0)
+// Compare version strings (v0.9.1 vs V1.0.1, OTA-v0.9.2 vs v1.0.1)
 bool isNewerVersion(String current, String latest) {
-    // Remove 'v' prefix if exists
-    if (current.startsWith("v")) current = current.substring(1);
-    if (latest.startsWith("v")) latest = latest.substring(1);
+    // Remove 'OTA-' prefix if exists (case insensitive)
+    if (current.startsWith("OTA-") || current.startsWith("ota-")) current = current.substring(4);
+    if (latest.startsWith("OTA-") || latest.startsWith("ota-")) latest = latest.substring(4);
+    // Remove 'v' or 'V' prefix if exists
+    if (current.startsWith("v") || current.startsWith("V")) current = current.substring(1);
+    if (latest.startsWith("v") || latest.startsWith("V")) latest = latest.substring(1);
     
     // Split by dots
     int currentParts[3] = {0, 0, 0};
@@ -227,24 +230,43 @@ bool performOTAUpdate() {
         return false;
     }
     
-    // Skip certificate verification for GitHub (or use root CA)
+    // Skip certificate verification for GitHub
     client->setInsecure();
+    client->setTimeout(30000);
     
     HTTPClient http;
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    http.setTimeout(30000); // 30 second timeout
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);  // Force follow all redirects
+    http.setRedirectLimit(10);  // Allow up to 10 redirects
+    http.setTimeout(60000); // 60 second timeout for large files
     http.begin(*client, otaInfo.downloadURL);
-    http.addHeader("User-Agent", "ESP32-SynDimm");
-    http.addHeader("Accept", "application/octet-stream");
+    http.addHeader("User-Agent", "ESP32-SynDimm/" CURRENT_VERSION);
+    http.addHeader("Accept", "*/*");
+    http.addHeader("Cache-Control", "no-cache");
     
     DEBUG_PRINTLN("[OTA] Connecting to download server...");
     int httpCode = http.GET();
     DEBUG_PRINTF("[OTA] HTTP Response: %d\n", httpCode);
     
+    // Handle redirect manually if needed
+    if (httpCode == HTTP_CODE_MOVED_PERMANENTLY || httpCode == HTTP_CODE_FOUND || 
+        httpCode == HTTP_CODE_SEE_OTHER || httpCode == HTTP_CODE_TEMPORARY_REDIRECT) {
+        String redirectURL = http.getLocation();
+        DEBUG_PRINTF("[OTA] Redirect to: %s\n", redirectURL.c_str());
+        http.end();
+        
+        // Follow redirect
+        http.begin(*client, redirectURL);
+        http.addHeader("User-Agent", "ESP32-SynDimm/" CURRENT_VERSION);
+        http.addHeader("Accept", "*/*");
+        httpCode = http.GET();
+        DEBUG_PRINTF("[OTA] After redirect HTTP Response: %d\n", httpCode);
+    }
+    
     if (httpCode != HTTP_CODE_OK) {
         otaInfo.status = OTA_ERROR;
-        otaInfo.errorMessage = "Download failed: " + String(httpCode);
+        otaInfo.errorMessage = "HTTP " + String(httpCode);
         DEBUG_PRINTF("[OTA] Download failed: %d\n", httpCode);
+        DEBUG_PRINTF("[OTA] Failed URL: %s\n", otaInfo.downloadURL.c_str());
         http.end();
         delete client;
         return false;

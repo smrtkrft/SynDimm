@@ -320,7 +320,7 @@ function showUpdateAvailable(d) {
     setText('ota-release-notes', d.releaseNotes || t('info.no_release_notes'));
     setDisplay('ota-update-card', true); setDisplay('btn-ota-update', true);
 }
-function formatDate(s) { return s ? new Date(s).toLocaleDateString('tr-TR', { year:'numeric', month:'long', day:'numeric' }) : '-'; }
+function formatDate(s) { if(!s) return '-'; const d = new Date(s); return d.getDate().toString().padStart(2,'0') + '.' + (d.getMonth()+1).toString().padStart(2,'0') + '.' + d.getFullYear(); }
 function checkForUpdate() {
     showOTAStatus(t('info.checking'), 'info');
     setDisplay('btn-ota-update', false); setDisplay('ota-update-card', false);
@@ -333,7 +333,7 @@ function performUpdate() {
     if(!confirm(t('info.update_confirm'))) return;
     showOTAStatus(t('info.update_starting'), 'info');
     setDisplay('btn-ota-update', false); setDisplay('ota-progress-container', true);
-    post('/doUpdate', {}).then(d => { if(d.success) monitorUpdateProgress(); else { showOTAStatus(t('info.update_failed') + ': ' + (d.message || ''), 'error'); setDisplay('ota-progress-container', false); } })
+    post('/performOTAUpdate', {}).then(d => { if(d.success) monitorUpdateProgress(); else { showOTAStatus(t('info.update_failed') + ': ' + (d.message || ''), 'error'); setDisplay('ota-progress-container', false); } })
         .catch(e => { showOTAStatus(t('notifications.connection_error') + ': ' + e, 'error'); setDisplay('ota-progress-container', false); });
 }
 function monitorUpdateProgress() {
