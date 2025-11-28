@@ -228,6 +228,27 @@ private:
         performOTAUpdate();
     }
     
+    void handleSaveOTASettings() {
+        if (server->method() != HTTP_POST) {
+            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
+            return;
+        }
+        
+        String body = server->arg("plain");
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, body);
+        
+        if (error) {
+            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
+            return;
+        }
+        
+        bool autoUpdate = doc["autoUpdate"].as<bool>();
+        saveOTASettings(autoUpdate);
+        
+        server->send(200, "application/json", "{\"success\":true}");
+    }
+    
     // Dimmer Endpoints
     void handleConnectDimmer() {
         if (server->method() != HTTP_POST) {
@@ -845,6 +866,12 @@ private:
         }
     }
     
+    static void handleSaveOTASettingsStatic() {
+        if (instance) {
+            instance->handleSaveOTASettings();
+        }
+    }
+    
     // Dimmer static wrappers
     static void handleConnectDimmerStatic() {
         if (instance) {
@@ -1025,6 +1052,7 @@ public:
         server->on("/getOTASettings", HTTP_GET, handleGetOTASettingsStatic);
         server->on("/checkOTAUpdate", HTTP_POST, handleCheckOTAUpdateStatic);
         server->on("/performOTAUpdate", HTTP_POST, handlePerformOTAUpdateStatic);
+        server->on("/saveOTASettings", HTTP_POST, handleSaveOTASettingsStatic);
         
         // Dimmer routes
         server->on("/connectDimmer", HTTP_POST, handleConnectDimmerStatic);

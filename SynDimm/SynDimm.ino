@@ -62,12 +62,17 @@ void setup() {
   DEBUG_PRINTF("[STARTUP] CPU Frequency: %d MHz\n", getCpuFrequencyMhz());
   
   // Watchdog Timer - 30 saniye timeout (donma durumunda reset)
+  // ESP-IDF 5.x'te WDT zaten başlatılmış olabilir, reconfigure kullan
   esp_task_wdt_config_t wdt_config = {
     .timeout_ms = 30000,
     .idle_core_mask = (1 << 0),
     .trigger_panic = true
   };
-  esp_task_wdt_init(&wdt_config);
+  esp_err_t wdt_err = esp_task_wdt_reconfigure(&wdt_config);
+  if (wdt_err == ESP_ERR_INVALID_STATE) {
+    // WDT henüz başlatılmamış, init et
+    esp_task_wdt_init(&wdt_config);
+  }
   esp_task_wdt_add(NULL);
   DEBUG_PRINTLN("[STARTUP] Watchdog Timer aktif (30s)");
   
@@ -131,7 +136,7 @@ void setup() {
 
 // OTA auto-check variables
 static unsigned long lastOTACheck = 0;
-const unsigned long OTA_CHECK_INTERVAL = 60000; // TEST: 1 dakika (production'da 3600000 = 1 saat yapılacak)
+const unsigned long OTA_CHECK_INTERVAL = 60000; // TEST: 1 dakika
 
 void loop() {
   // Handle WiFi status (reconnection & AP mode scanning)

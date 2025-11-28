@@ -77,8 +77,8 @@ function loadCurrentMode() {
         });
     });
 }
-function selectMode(mode) { post('/setMode', {}).then(() => loadCurrentMode()).catch(e => console.error('Mode error:', e)); }
-function setLanguage(lang) { console.log('Language: ' + lang); }
+function selectMode(mode) { post('/setMode', {}).then(() => loadCurrentMode()).catch(() => {}); }
+function setLanguage(lang) { }
 
 // === CONNECTION STATUS ===
 function loadConnectionStatus() {
@@ -95,7 +95,7 @@ function loadConnectionStatus() {
         };
         updateBadge('primary-badge', d.connectedTo === 'primary', d.primaryConfigured);
         updateBadge('backup-badge', d.connectedTo === 'backup', d.backupConfigured);
-    }).catch(e => console.error('Status error:', e));
+    }).catch(() => {});
 }
 
 // === SETTINGS ===
@@ -107,7 +107,7 @@ function loadSavedSettings() {
         if(d.backup.ssid) $('backup-ssid').value = d.backup.ssid;
         if(d.backup.staticIP) $('backup-static').value = d.backup.staticIP;
         if(d.backup.mdns) $('backup-mdns').value = d.backup.mdns;
-    }).catch(e => console.error('Settings error:', e));
+    }).catch(() => {});
 }
 
 // === TABS & ACCORDION ===
@@ -157,7 +157,7 @@ function loadSafePasswords() {
                 });
             }
         })
-        .catch(e => console.log('Safe passwords load error:', e));
+        .catch(() => {});
 }
 
 function saveSafePassword(idx) {
@@ -213,7 +213,7 @@ function loadOTASettings() {
         setText('ota-current-version', d.currentVersion);
         $('ota-auto-update').checked = d.autoUpdateEnabled;
         if(d.updateAvailable) showUpdateAvailable(d);
-    }).catch(e => console.error('OTA error:', e));
+    }).catch(() => {});
 }
 function showUpdateAvailable(d) {
     setText('ota-latest-version', d.latestVersion);
@@ -268,7 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // === DIMMER ===
 let selectedRatio = 3;
 function loadDimmerStatus() {
-    api('/getDimmerStatus').then(d => updateDimmerUI(d)).catch(e => console.error('Dimmer error:', e));
+    api('/getDimmerStatus').then(d => updateDimmerUI(d)).catch(() => {});
 }
 function updateDimmerUI(d) {
     const ip = $('dimmer-status-ip'), br = $('dimmer-status-brightness'), pw = $('dimmer-status-power'), cal = $('dimmer-status-calibration');
@@ -404,7 +404,7 @@ function loadShutterStatus() {
         setText('shutter-encoder-step', d.encoderStep || 3);
         const warn = $('shutter-calibration-warning');
         if(warn) warn.style.display = (d.connected && !d.isCalibrated) ? 'block' : 'none';
-    }).catch(e => console.error('Shutter error:', e));
+    }).catch(() => {});
 }
 function adjustShutterStep(delta) {
     const el = $('shutter-encoder-step'); if(!el) return;

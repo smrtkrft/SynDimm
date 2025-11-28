@@ -64,6 +64,7 @@ body.light-theme {
     --bg-primary: #ffffff;
     --bg-secondary: #f5f5f5;
     --bg-card: rgba(0, 0, 0, 0.03);
+    --bg-tertiary: #f0f0f0;
     --text-primary: #000000;
     --text-secondary: rgba(0, 0, 0, 0.6);
     --text-muted: rgba(0, 0, 0, 0.5);
@@ -75,6 +76,115 @@ body.light-theme {
     --input-bg-focus: rgba(0, 0, 0, 0.08);
     --shadow-hover: rgba(0, 0, 0, 0.15);
 }
+
+/* Light Theme Specific Overrides */
+body.light-theme .info-section { border-bottom-color: rgba(0, 0, 0, 0.06); }
+body.light-theme .info-section:hover p { color: rgba(0, 0, 0, 0.85); }
+body.light-theme .info-button { border-color: rgba(0, 0, 0, 0.15); }
+body.light-theme .info-button:hover { border-color: rgba(0, 0, 0, 0.3); }
+body.light-theme .info-single .info-separator { color: rgba(0, 0, 0, 0.3); }
+
+/* Light Theme - OTA Section */
+body.light-theme .ota-section h2 { color: var(--text-primary); }
+body.light-theme .ota-version-card { background: var(--bg-card); border-color: var(--border-color); }
+body.light-theme .ota-version-label { color: var(--text-muted); }
+body.light-theme .ota-version-value { color: var(--text-primary); }
+body.light-theme .ota-update-version { color: var(--text-primary); }
+body.light-theme .ota-update-date { color: var(--text-muted); }
+body.light-theme .ota-release-notes { color: var(--text-secondary); background: rgba(0, 0, 0, 0.05); }
+body.light-theme .ota-auto-info { color: var(--text-muted); background: var(--bg-card); border-left-color: var(--border-light); }
+body.light-theme .ota-progress-container { background: var(--bg-card); border-color: var(--border-color); }
+body.light-theme .ota-progress-label { color: var(--text-secondary); }
+body.light-theme .ota-progress-bar { background: var(--border-color); }
+body.light-theme .ota-progress-percent { color: var(--text-primary); }
+body.light-theme .info-divider { background: var(--border-color); }
+
+/* Light Theme - Dimmer Section */
+body.light-theme .dimmer-status-card { background: var(--bg-card); border-color: var(--border-color); }
+body.light-theme .dimmer-status-header { border-bottom-color: var(--border-color); }
+body.light-theme .dimmer-info-label { color: var(--text-muted); }
+body.light-theme .dimmer-info-value { color: var(--text-primary); }
+body.light-theme .dimmer-config-section { background: var(--bg-card); border-color: var(--border-color); }
+body.light-theme .dimmer-section-title { color: var(--text-primary); }
+body.light-theme .dimmer-calibration-info { color: var(--text-secondary); background: var(--bg-card); border-left-color: var(--border-light); }
+body.light-theme .dimmer-ratio-group label { color: var(--text-primary); }
+body.light-theme .dimmer-ratio-display { background: var(--bg-card); }
+body.light-theme .ratio-label { color: var(--text-muted); }
+body.light-theme .ratio-value { color: var(--text-primary); }
+body.light-theme .dimmer-calibration-info-compact { color: var(--text-secondary); background: var(--bg-card); border-left-color: var(--border-light); }
+body.light-theme .dimmer-ratio-display-compact { background: var(--bg-card); color: var(--text-muted); }
+body.light-theme .ratio-value-compact { color: var(--text-primary); }
+body.light-theme .dimmer-scan-info { color: var(--text-secondary); background: var(--bg-card); border-left-color: var(--border-light); }
+body.light-theme .dimmer-scan-progress { background: var(--bg-card); border-color: var(--border-color); }
+body.light-theme .scan-progress-text { color: var(--text-secondary); }
+body.light-theme .scan-progress-bar { background: var(--border-color); }
+body.light-theme .devices-list-title { color: var(--text-secondary); }
+
+/* Light Theme - Status Bar */
+body.light-theme .dimmer-status-bar-new { background: var(--bg-card); border-color: var(--border-color); }
+body.light-theme .shutter-status-bar { background: var(--bg-card); border-color: var(--border-color); }
+body.light-theme .status-col { border-right-color: var(--border-light); }
+body.light-theme .status-col-label { color: var(--text-muted); }
+body.light-theme .status-col-value { color: var(--text-primary); }
+body.light-theme .status-power-text { color: var(--text-secondary); }
+
+/* Light Theme - Calibration */
+body.light-theme .calibration-value-display { color: var(--text-primary); }
+body.light-theme .btn-cal-up, body.light-theme .btn-cal-down { background: var(--bg-card); border-color: var(--border-light); color: var(--text-secondary); }
+body.light-theme .btn-cal-up:hover, body.light-theme .btn-cal-down:hover { background: var(--hover-bg); border-color: var(--border-light); color: var(--text-primary); }
+
+/* Light Theme - Brightness */
+body.light-theme .brightness-label { color: var(--text-muted); }
+body.light-theme .brightness-value { color: var(--text-primary); }
+body.light-theme .brightness-bar-bg { background: var(--border-color); }
+body.light-theme .power-status { color: var(--text-secondary); }
+body.light-theme .control-hint { color: var(--text-muted); }
+
+/* Light Theme - Connection Status */
+body.light-theme .connection-status-inline { background: var(--bg-card); }
+
+/* Light Theme - Input Button */
+body.light-theme .btn-inline-scan { background: var(--bg-card); color: var(--text-secondary); border-color: var(--border-light); }
+body.light-theme .btn-inline-scan:hover { background: var(--hover-bg); border-color: var(--border-light); }
+
+/* Light Theme - Scrollbar */
+body.light-theme .devices-container::-webkit-scrollbar-track { background: var(--bg-card); }
+body.light-theme .devices-container::-webkit-scrollbar-thumb { background: var(--border-light); }
+body.light-theme .devices-container::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Light Theme - Slider */
+body.light-theme .calibration-slider { background: linear-gradient(to right, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.08)); }
+body.light-theme .calibration-slider::-webkit-slider-thumb { background: #333333; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.1); }
+body.light-theme .calibration-slider::-webkit-slider-thumb:hover { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.2), 0 0 0 4px rgba(0, 0, 0, 0.08); }
+body.light-theme .calibration-slider::-moz-range-thumb { background: #333333; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.1); }
+body.light-theme .slider-labels { color: rgba(0, 0, 0, 0.35); }
+body.light-theme .slider-value-display { background: var(--bg-card); border-color: var(--border-color); }
+body.light-theme .slider-value-label { color: var(--text-muted); }
+body.light-theme .slider-value-number { color: var(--text-primary); }
+
+/* Light Theme - Mobile Tabs */
+body.light-theme .tab:nth-child(odd) { border-right-color: var(--border-color); }
+body.light-theme .tab { border-bottom-color: var(--border-color); }
+
+/* Light Theme - System Actions */
+body.light-theme .btn-restart { background: #333333; color: #ffffff; }
+body.light-theme .btn-restart:hover { background: #444444; }
+body.light-theme .factory-reset-confirm input { background: var(--bg-secondary); }
+
+/* Light Theme - Buttons with colored backgrounds (must have white text) */
+body.light-theme .btn-ota-update { color: #ffffff; }
+body.light-theme .btn-primary { color: #ffffff; }
+body.light-theme .btn-device-connect { color: #ffffff; }
+body.light-theme .scanned-device-connect { color: #ffffff; }
+body.light-theme .btn-save-main { color: #ffffff; }
+body.light-theme .btn-save { color: #ffffff; background: #333333; }
+body.light-theme .btn-save:hover { background: #444444; }
+body.light-theme .save-button { color: #ffffff; background: #333333; border-color: #333333; }
+body.light-theme .save-button:hover { background: #444444; border-color: #444444; }
+body.light-theme .ratio-btn.active { color: #ffffff; }
+body.light-theme .ratio-btn-compact.active { color: #ffffff; }
+body.light-theme .btn-status-connect { color: var(--text-primary); }
+body.light-theme .theme-btn.active { color: #ffffff; background: #333333; }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 0; display: flex; justify-content: center; align-items: flex-start; transition: background 0.3s ease, color 0.3s ease; }
@@ -286,22 +396,67 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 /* Mobile Responsive */
 @media (max-width: 600px) {
     body { padding: 0; align-items: flex-start; }
-    .header { padding: 40px 25px 30px 25px; }
-    .header h1 { font-size: 1.6em; letter-spacing: 0.3px; }
-    .info-box { gap: 50px; flex-direction: column; margin-top: 20px; }
+    .header { padding: 30px 20px 25px 20px; }
+    .header h1 { font-size: 1.5em; letter-spacing: 0.3px; }
+    .theme-toggle { top: 15px; right: 15px; padding: 4px; }
+    .theme-btn { padding: 6px 12px; font-size: 0.8em; }
+    .info-box { gap: 20px; flex-direction: column; align-items: center; margin-top: 15px; }
+    .info-single { font-size: 0.85em; justify-content: center; }
     .tabs { flex-wrap: wrap; padding: 0; }
-    .tab { flex: 1 1 50%; font-size: 0.85em; padding: 20px 12px; border-right: none; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
-    .tab:nth-child(odd) { border-right: 1px solid rgba(255, 255, 255, 0.08); }
+    .tab { flex: 1 1 50%; font-size: 0.8em; padding: 16px 10px; border-right: none; border-bottom: 1px solid var(--border-color); }
+    .tab:nth-child(odd) { border-right: 1px solid var(--border-color); }
     .tab::after { width: 40%; }
-    .tab-content { padding: 35px 25px; }
+    .tab-content { padding: 25px 20px; min-height: auto; }
     .info-content { padding: 0; }
-    .info-content h2 { font-size: 1.3em; margin-bottom: 35px; }
-    .info-section h3 { font-size: 1.05em; }
-    .info-section p { font-size: 0.9em; }
-    .button-group { flex-direction: column; gap: 15px; }
-    .info-button { flex: 1; min-width: 140px; justify-content: center; }
+    .info-content h2 { font-size: 1.2em; margin-bottom: 30px; }
+    .info-section { margin-bottom: 35px; padding-bottom: 25px; }
+    .info-section h3 { font-size: 1em; }
+    .info-section p { font-size: 0.88em; line-height: 1.7; }
+    .button-group { flex-direction: column; gap: 12px; }
+    .info-button { width: 100%; text-align: center; padding: 12px 30px; }
+    .info-footer { margin-top: 40px; padding-top: 30px; }
+    .info-footer h3 { font-size: 1em; }
     .ap-step-flow { flex-direction: column; align-items: stretch; }
     .ap-arrow { transform: rotate(90deg); text-align: center; }
+    /* Mode buttons mobile */
+    .mode-buttons { flex-direction: column; gap: 12px; }
+    .mode-btn { padding: 20px 15px; }
+    .mode-btn-text { font-size: 1em; }
+    /* Settings row mobile */
+    .settings-row { flex-direction: column; gap: 15px; }
+    .settings-group { padding: 15px; }
+    /* Form groups mobile */
+    .form-group label { font-size: 0.85em; }
+    .form-group input { padding: 12px; font-size: 0.9em; }
+    .form-actions { flex-direction: column; gap: 10px; }
+    .btn-save, .btn-test { padding: 14px 20px; }
+    /* Accordion mobile */
+    .accordion-header { padding: 15px 18px; }
+    .accordion-title-text { font-size: 0.95em; }
+    .accordion-content { padding: 0 18px; }
+    .accordion-header.active + .accordion-content { padding: 0 18px 18px 18px; }
+    /* OTA mobile */
+    .ota-section h2 { font-size: 1.3em; margin-bottom: 20px; }
+    .ota-version-card { padding: 15px; }
+    .ota-version-value { font-size: 1.5em; }
+    .ota-actions { flex-direction: column; gap: 10px; }
+    .btn-ota-check, .btn-ota-update { padding: 14px 20px; }
+    /* Safe tabs mobile */
+    .safe-tabs { gap: 5px; }
+    .safe-tab { padding: 12px 10px; font-size: 0.85em; }
+    .safe-config-section { padding: 15px; }
+    .safe-toggle-row { gap: 10px; }
+    .toggle-label { font-size: 0.9em; }
+    /* System buttons mobile */
+    .system-buttons { flex-direction: column; gap: 12px; }
+    .btn-restart, .btn-factory-reset { width: 100%; padding: 14px 20px; }
+    .factory-reset-confirm { padding: 12px; }
+    .factory-reset-confirm input { width: 100%; margin-bottom: 10px; margin-right: 0; }
+    .btn-confirm-reset, .btn-cancel-reset { width: 100%; margin-right: 0; margin-bottom: 8px; }
+    /* Notification mobile */
+    .notification { padding: 15px 40px 15px 15px; }
+    .notification-message { font-size: 0.9em; }
+    .notification-close { top: 5px; right: 8px; font-size: 1.5em; }
 }
 
 /* OTA Update Styles */
@@ -470,13 +625,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 
 /* Status Bar Responsive */
 @media (max-width: 768px) {
-    .dimmer-status-bar-new { grid-template-columns: repeat(2, 1fr); gap: 20px 0; }
+    .dimmer-status-bar-new, .shutter-status-bar { grid-template-columns: repeat(2, 1fr); gap: 20px 0; padding: 15px 20px; }
     .status-col { border-right: none; border-bottom: none; padding: 0 10px; }
-    .status-col:nth-child(odd) { border-right: 1px solid rgba(255, 255, 255, 0.15); }
+    .status-col:nth-child(odd) { border-right: 1px solid var(--border-light); }
 }
 @media (max-width: 480px) {
-    .dimmer-status-bar-new { grid-template-columns: 1fr; gap: 15px; }
+    .dimmer-status-bar-new, .shutter-status-bar { grid-template-columns: 1fr; gap: 15px; padding: 15px; }
+    .status-col { padding: 10px 0; border-bottom: 1px solid var(--border-color); }
     .status-col:nth-child(odd) { border-right: none; }
+    .status-col:last-child { border-bottom: none; }
+    .status-col-label { font-size: 0.7em; }
+    .status-col-value { font-size: 1em; }
 }
 
 /* Calibration Slider */
@@ -531,12 +690,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .system-buttons { display: flex; justify-content: center; gap: 20px; margin-top: 15px; }
 .btn-restart { padding: 12px 30px; background: #ffffff; color: #000000; border: none; border-radius: var(--radius-md); font-size: 1em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); }
 .btn-restart:hover { background: #e0e0e0; transform: translateY(-2px); }
-.btn-factory-reset { padding: 12px 30px; background: #ef4444; color: #000000; border: none; border-radius: var(--radius-md); font-size: 1em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); }
+.btn-factory-reset { padding: 12px 30px; background: #ef4444; color: #ffffff; border: none; border-radius: var(--radius-md); font-size: 1em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); }
 .btn-factory-reset:hover { background: #dc2626; transform: translateY(-2px); }
 .factory-reset-confirm { margin-top: 20px; padding: 15px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); }
 .factory-reset-confirm p { margin-bottom: 10px; color: var(--text-primary); }
 .factory-reset-confirm input { padding: 10px 15px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-tertiary); color: var(--text-primary); margin-right: 10px; width: 120px; }
-.btn-confirm-reset { padding: 10px 20px; background: #ef4444; color: #000000; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; margin-right: 10px; }
+.btn-confirm-reset { padding: 10px 20px; background: #ef4444; color: #ffffff; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; margin-right: 10px; }
 .btn-confirm-reset:hover { background: #dc2626; }
 .btn-cancel-reset { padding: 10px 20px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer; }
 .btn-cancel-reset:hover { background: var(--bg-secondary); }
