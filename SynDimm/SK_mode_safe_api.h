@@ -1,7 +1,7 @@
 /**
  * SK_mode_safe_api.h
  * SmartKraft SynDimm - Safe Lock API Handler
- * Version: v0.9.1
+ * Version: v1.0.1
  * 
  * ========================================
  * SAFE MOD - API TETİKLEYİCİ
@@ -52,8 +52,8 @@ private:
       return SAFE_API_INVALID_CONFIG;
     }
     
-    DEBUG_PRINT("[SafeAPI] URL: ");
-    DEBUG_PRINTLN(apiConfig.url);
+    // GÜVENLİK: URL Serial'e loglanmıyor
+    DEBUG_PRINTLN("[SafeAPI] Sending request...");
     
     HTTPClient http;
     http.setTimeout(SAFE_API_TIMEOUT_MS);
@@ -132,12 +132,12 @@ public:
   }
   
   static void onPasswordMatch(uint8_t passwordIndex, SafeLock* safeLock, SafeLockAPIHandler* apiHandler) {
-    DEBUG_PRINTF("[SafeAPI] Sifre #%d eslesti, API tetikleniyor...\n", passwordIndex);
+    DEBUG_PRINTF("[SafeAPI] Password #%d matched, triggering API...\n", passwordIndex);
     
     SafeApiConfig apiConfig = safeLock->getApiConfig(passwordIndex);
     
+    // GÜVENLİK: URL Serial'e loglanmıyor
     DEBUG_PRINTF("[SafeAPI] API enabled: %d\n", apiConfig.enabled);
-    DEBUG_PRINTF("[SafeAPI] API URL: %s\n", apiConfig.url);
     
     if (!apiConfig.enabled) {
       DEBUG_PRINTLN("[SafeAPI] API devre disi, cikiliyor");

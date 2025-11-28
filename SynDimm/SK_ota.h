@@ -1,7 +1,7 @@
 /**
  * SK_ota.h
  * SmartKraft SynDimm - GitHub OTA Update System
- * Version: v0.9.2
+ * Version: v1.0.1
  * 
  * ========================================
  * GitHub OTA Update Features:
@@ -31,7 +31,7 @@
 #define GITHUB_API_URL "https://api.github.com/repos/" GITHUB_REPO_OWNER "/" GITHUB_REPO_NAME "/releases/latest"
 
 // Current firmware version
-#define CURRENT_VERSION "v0.9.1"
+#define CURRENT_VERSION "v1.0.1"
 
 // OTA Status
 enum OTAStatus {

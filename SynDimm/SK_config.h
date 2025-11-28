@@ -1,7 +1,7 @@
 /**
  * SK_config.h
  * SmartKraft SynDimm - Configuration & Constants
- * Version: v0.9.1
+ * Version: v1.0.1
  * 
  * ========================================
  * KRITIK KURAL - ASLA DEĞİŞTİRME!
@@ -39,7 +39,7 @@
 #define ERROR_PRINTF(...) Serial.printf(__VA_ARGS__)
 
 // Version Information
-#define VERSION "v0.9.1"
+#define VERSION "v1.0.1"
 #define DEVICE_NAME "SmartKraft SynDimm"
 
 // KY-040 Rotary Encoder Pins

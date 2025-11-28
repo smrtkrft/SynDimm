@@ -1,7 +1,7 @@
 /**
  * SK_mode_manager.h
  * SmartKraft SynDimm - Mode Management System
- * Version: v0.9.1
+ * Version: v1.0.1
  * 
  * Manages system modes: DIMMER, SHUTTER, SAFE
  * Handles mode switching via encoder long press (3s)
@@ -124,9 +124,15 @@ public:
         }
         else if (inSelectionMode && (event == 'L' || event == 'R')) {
             if (event == 'R') {
-                previewMode = (SystemMode)(((int)previewMode + 1) % 3);
+                // Sağa çevirince sonraki mod, ama SAFE(2)'den öteye geçemez
+                if ((int)previewMode < 2) {
+                    previewMode = (SystemMode)((int)previewMode + 1);
+                }
             } else {
-                previewMode = (SystemMode)(((int)previewMode + 2) % 3);
+                // Sola çevirince önceki mod, ama DIMMER(0)'dan öteye geçemez
+                if ((int)previewMode > 0) {
+                    previewMode = (SystemMode)((int)previewMode - 1);
+                }
             }
             buzzer->playDits(getModeDitCount(previewMode));
         }

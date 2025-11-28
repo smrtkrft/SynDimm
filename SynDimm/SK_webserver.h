@@ -1,5 +1,5 @@
 /**
- * SK_webserver.h - Web Server Management v0.9.1
+ * SK_webserver.h - Web Server Management v1.0.1
  * KRITIK: Web arayüzü SADECE ESP32-C6 local erişim içindir!
  */
 
@@ -17,6 +17,7 @@
 #include "SK_mode_safe.h"
 #include "SK_mode_safe_api.h"
 #include "SK_ota.h"
+#include "SK_lang.h"
 
 class SKWebServer {
 private:
@@ -77,8 +78,8 @@ private:
         }
         
         String body = server->arg("plain");
-        DEBUG_PRINTLN("Request body length: " + String(body.length()));
-        DEBUG_PRINTLN("Request body: " + body);
+        // GÜVENLİK: Request body loglanmıyor (WiFi şifresi içerebilir)
+        DEBUG_PRINTLN("Request received, processing...");
         
         if (body.length() == 0) {
             DEBUG_PRINTLN("ERROR: Empty body");
@@ -247,6 +248,47 @@ private:
         saveOTASettings(autoUpdate);
         
         server->send(200, "application/json", "{\"success\":true}");
+    }
+    
+    // Language Endpoints
+    void handleGetLang() {
+        String lang = "en";  // Default
+        if (server->hasArg("lang")) {
+            lang = server->arg("lang");
+        }
+        
+        const char* langJSON = getLanguageJSON(lang);
+        server->send(200, "application/json", langJSON);
+    }
+    
+    void handleSetLang() {
+        if (server->method() != HTTP_POST) {
+            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
+            return;
+        }
+        
+        String body = server->arg("plain");
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, body);
+        
+        if (error) {
+            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
+            return;
+        }
+        
+        String lang = doc["lang"].as<String>();
+        bool success = setLanguageFromCode(lang);
+        
+        if (success) {
+            server->send(200, "application/json", "{\"success\":true}");
+        } else {
+            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid language code\"}");
+        }
+    }
+    
+    void handleGetCurrentLang() {
+        String json = "{\"lang\":\"" + getCurrentLangCode() + "\"}";
+        server->send(200, "application/json", json);
     }
     
     // Dimmer Endpoints
@@ -657,7 +699,8 @@ private:
         }
         
         String body = server->arg("plain");
-        DEBUG_PRINTF("[WebServer] Gelen JSON: %s\n", body.c_str());
+        // GÜVENLİK: Hassas veri loglanmıyor
+        DEBUG_PRINTLN("[WebServer] /saveSafePassword request received");
         
         JsonDocument doc;
         DeserializationError error = deserializeJson(doc, body);
@@ -679,8 +722,9 @@ private:
         String apiHeader = api["header"] | "";
         String apiBody = api["body"] | "";
         
-        DEBUG_PRINTF("[WebServer] Parsed: index=%d, pwd=%s, pwdEnabled=%d, apiEnabled=%d, url=%s\n", 
-                     index, password.c_str(), pwdEnabled, apiEnabled, apiUrl.c_str());
+        // GÜVENLİK: Şifre ve URL loglanmıyor
+        DEBUG_PRINTF("[WebServer] Password slot #%d updated (pwdEnabled=%d, apiEnabled=%d)\n", 
+                     index, pwdEnabled, apiEnabled);
         
         if (index >= SAFE_MAX_PASSWORDS) {
             server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid password index\"}");
@@ -872,6 +916,25 @@ private:
         }
     }
     
+    // Language static wrappers
+    static void handleGetLangStatic() {
+        if (instance) {
+            instance->handleGetLang();
+        }
+    }
+    
+    static void handleSetLangStatic() {
+        if (instance) {
+            instance->handleSetLang();
+        }
+    }
+    
+    static void handleGetCurrentLangStatic() {
+        if (instance) {
+            instance->handleGetCurrentLang();
+        }
+    }
+    
     // Dimmer static wrappers
     static void handleConnectDimmerStatic() {
         if (instance) {
@@ -1053,6 +1116,11 @@ public:
         server->on("/checkOTAUpdate", HTTP_POST, handleCheckOTAUpdateStatic);
         server->on("/performOTAUpdate", HTTP_POST, handlePerformOTAUpdateStatic);
         server->on("/saveOTASettings", HTTP_POST, handleSaveOTASettingsStatic);
+        
+        // Language routes
+        server->on("/getLang", HTTP_GET, handleGetLangStatic);
+        server->on("/setLang", HTTP_POST, handleSetLangStatic);
+        server->on("/getCurrentLang", HTTP_GET, handleGetCurrentLangStatic);
         
         // Dimmer routes
         server->on("/connectDimmer", HTTP_POST, handleConnectDimmerStatic);

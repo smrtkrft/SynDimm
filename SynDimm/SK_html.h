@@ -1,7 +1,7 @@
 /**
  * SK_html.h
  * SmartKraft SynDimm - HTML Structure
- * Version: v0.9.1
+ * Version: v1.0.1
  * 
  * ========================================
  * KRITIK KURAL - ASLA DEĞİŞTİRME!
@@ -54,10 +54,10 @@ String generateHTML(String chipID, String version) {
         </div>
         
         <div class="tabs">
-            <button class="tab active" onclick="openTab(event, 'hizli-ayarlar')">Hızlı Kontrol</button>
-            <button class="tab" onclick="openTab(event, 'modlar')">Modlar</button>
-            <button class="tab" onclick="openTab(event, 'baglanti')">Bağlantı</button>
-            <button class="tab" onclick="openTab(event, 'info')">Info</button>
+            <button class="tab active" onclick="openTab(event, 'hizli-ayarlar')" data-lang="tabs.quick">Quick Control</button>
+            <button class="tab" onclick="openTab(event, 'modlar')" data-lang="tabs.modes">Modes</button>
+            <button class="tab" onclick="openTab(event, 'baglanti')" data-lang="tabs.connection">Connection</button>
+            <button class="tab" onclick="openTab(event, 'info')" data-lang="tabs.info">Info</button>
         </div>
         
         <div id="hizli-ayarlar" class="tab-content active">
@@ -80,18 +80,18 @@ String generateHTML(String chipID, String version) {
                 <div class="settings-row">
                     <!-- Sol: Tema -->
                     <div class="settings-group">
-                        <h4>Tema</h4>
+                        <h4 data-lang="quick.theme">Theme</h4>
                         <div class="theme-selector">
                             <label class="theme-option">
                                 <input type="radio" name="theme" value="dark" checked onclick="setTheme('dark')">
                                 <span class="theme-option-label">
-                                    <span class="theme-name">Koyu</span>
+                                    <span class="theme-name" data-lang="quick.theme_dark">Dark</span>
                                 </span>
                             </label>
                             <label class="theme-option">
                                 <input type="radio" name="theme" value="light" onclick="setTheme('light')">
                                 <span class="theme-option-label">
-                                    <span class="theme-name">Açık</span>
+                                    <span class="theme-name" data-lang="quick.theme_light">Light</span>
                                 </span>
                             </label>
                         </div>
@@ -99,11 +99,11 @@ String generateHTML(String chipID, String version) {
                     
                     <!-- Sağ: Dil -->
                     <div class="settings-group">
-                        <h4>Dil</h4>
+                        <h4 data-lang="quick.language">Language</h4>
                         <div class="language-selector">
-                            <button class="lang-btn lang-btn-tr active" onclick="setLanguage('tr')">TR</button>
-                            <button class="lang-btn lang-btn-en" onclick="setLanguage('en')">EN</button>
+                            <button class="lang-btn lang-btn-en active" onclick="setLanguage('en')">EN</button>
                             <button class="lang-btn lang-btn-de" onclick="setLanguage('de')">DE</button>
+                            <button class="lang-btn lang-btn-tr" onclick="setLanguage('tr')">TR</button>
                         </div>
                     </div>
                 </div>
@@ -117,8 +117,8 @@ String generateHTML(String chipID, String version) {
                 <!-- Dimmer Modu -->
                 <div class="accordion">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title-text">DIMMER</span>
-                        <span class="badge badge-not-configured" id="dimmer-badge">Pasif</span>
+                        <span class="accordion-title-text" data-lang="dimmer.title">DIMMER</span>
+                        <span class="badge badge-not-configured" id="dimmer-badge" data-lang="common.passive">Passive</span>
                         <span class="accordion-icon">▼</span>
                     </div>
                     <div class="accordion-content">
@@ -126,52 +126,52 @@ String generateHTML(String chipID, String version) {
                         <!-- Status Info Bar (Top) - 4 Column Layout -->
                         <div class="dimmer-status-bar-new">
                             <div class="status-col">
-                                <div class="status-col-label">IP ADRESI</div>
+                                <div class="status-col-label" data-lang="dimmer.ip_address">IP ADDRESS</div>
                                 <div class="status-col-value" id="dimmer-status-ip">-</div>
                             </div>
                             <div class="status-col">
-                                <div class="status-col-label">DURUM</div>
+                                <div class="status-col-label" data-lang="dimmer.status">STATUS</div>
                                 <div class="status-col-value">
                                     <span id="dimmer-status-brightness">0%</span>
-                                    <span class="status-power-text" id="dimmer-status-power">Kapalı</span>
+                                    <span class="status-power-text" id="dimmer-status-power" data-lang="common.off">Off</span>
                                 </div>
                             </div>
                             <div class="status-col">
-                                <div class="status-col-label">KALIBRASYON</div>
+                                <div class="status-col-label" data-lang="dimmer.calibration">CALIBRATION</div>
                                 <div class="calibration-controls">
-                                    <button class="btn-cal-up" onclick="adjustCalibration(1)" title="Artır">▲</button>
+                                    <button class="btn-cal-up" onclick="adjustCalibration(1)" data-lang-title="common.increase">▲</button>
                                     <span class="calibration-value-display" id="dimmer-status-calibration">3</span>
-                                    <button class="btn-cal-down" onclick="adjustCalibration(-1)" title="Azalt">▼</button>
+                                    <button class="btn-cal-down" onclick="adjustCalibration(-1)" data-lang-title="common.decrease">▼</button>
                                 </div>
                             </div>
                             <div class="status-col status-col-action">
-                                <div class="status-col-label">AKSIYON</div>
+                                <div class="status-col-label" data-lang="dimmer.action">ACTION</div>
                                 <div class="status-col-value">
-                                    <button class="btn-status-connect" id="btn-connect" onclick="connectDimmer()">Bağlan</button>
-                                    <button class="btn-status-disconnect" id="btn-disconnect" onclick="disconnectDimmer()" style="display: none;">Bağlantıyı Kes</button>
+                                    <button class="btn-status-connect" id="btn-connect" onclick="connectDimmer()" data-lang="common.connect">Connect</button>
+                                    <button class="btn-status-disconnect" id="btn-disconnect" onclick="disconnectDimmer()" style="display: none;" data-lang="common.disconnect">Disconnect</button>
                                 </div>
                             </div>
                         </div>
                         
                         <!-- Connection Section -->
                         <div class="dimmer-config-section">
-                            <h4 class="dimmer-section-title">Cihaz Bağlantısı</h4>
+                            <h4 class="dimmer-section-title" data-lang="dimmer.device_connection">Device Connection</h4>
                             <div class="form-group">
-                                <label>Manuel IP Girişi</label>
+                                <label data-lang="dimmer.manual_ip">Manual IP Entry</label>
                                 <input type="text" id="dimmer-ip-input" placeholder="192.168.1.100" class="input-full">
                             </div>
                             <div class="form-actions-row">
-                                <button class="btn-primary" onclick="connectDimmerManual()">Bağlan</button>
-                                <button class="btn-secondary" onclick="startNetworkScan()">Ağı Tara</button>
-                                <button class="btn-secondary" onclick="stopNetworkScan()" style="display:none;" id="btn-stop-scan">Taramayı Durdur</button>
+                                <button class="btn-primary" onclick="connectDimmerManual()" data-lang="common.connect">Connect</button>
+                                <button class="btn-secondary" onclick="startNetworkScan()" data-lang="dimmer.scan_network">Scan Network</button>
+                                <button class="btn-secondary" onclick="stopNetworkScan()" style="display:none;" id="btn-stop-scan" data-lang="dimmer.stop_scan">Stop Scan</button>
                             </div>
                         </div>
                         
                         <!-- Saved Devices List -->
                         <div class="dimmer-config-section">
-                            <h4 class="dimmer-section-title">Kayıtlı Cihazlar</h4>
+                            <h4 class="dimmer-section-title" data-lang="dimmer.saved_devices">Saved Devices</h4>
                             <div class="saved-devices-list" id="saved-devices-list">
-                                <div class="saved-device-empty">Henüz kayıtlı cihaz yok. Ağ taraması yapın veya manuel bağlanın.</div>
+                                <div class="saved-device-empty" data-lang="dimmer.no_devices">No saved devices yet. Scan network or connect manually.</div>
                             </div>
                         </div>
                         
@@ -181,8 +181,8 @@ String generateHTML(String chipID, String version) {
                 <!-- Shutter Modu -->
                 <div class="accordion">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title-text">SHUTTER</span>
-                        <span class="badge badge-not-configured" id="shutter-badge">Pasif</span>
+                        <span class="accordion-title-text" data-lang="shutter.title">SHUTTER</span>
+                        <span class="badge badge-not-configured" id="shutter-badge" data-lang="common.passive">Passive</span>
                         <span class="accordion-icon">▼</span>
                     </div>
                     <div class="accordion-content">
@@ -190,17 +190,17 @@ String generateHTML(String chipID, String version) {
                         <!-- Status Info Bar (Top) - 4 Column Layout -->
                         <div class="shutter-status-bar">
                             <div class="status-col">
-                                <div class="status-col-label">IP ADRESI</div>
+                                <div class="status-col-label" data-lang="shutter.ip_address">IP ADDRESS</div>
                                 <div class="status-col-value" id="shutter-status-ip">-</div>
                             </div>
                             <div class="status-col">
-                                <div class="status-col-label">DURUM</div>
+                                <div class="status-col-label" data-lang="shutter.status">STATUS</div>
                                 <div class="status-col-value">
-                                    <span class="shutter-status-text" id="shutter-status-text">Bağlı Değil</span>
+                                    <span class="shutter-status-text" id="shutter-status-text" data-lang="shutter.not_connected">Not Connected</span>
                                 </div>
                             </div>
                             <div class="status-col">
-                                <div class="status-col-label">POZISYON</div>
+                                <div class="status-col-label" data-lang="shutter.position">POSITION</div>
                                 <div class="status-col-value">
                                     <div class="position-display">
                                         <div class="position-bar-container">
@@ -211,44 +211,44 @@ String generateHTML(String chipID, String version) {
                                 </div>
                             </div>
                             <div class="status-col status-col-action">
-                                <div class="status-col-label">ENCODER STEP</div>
+                                <div class="status-col-label" data-lang="shutter.encoder_step">ENCODER STEP</div>
                                 <div class="calibration-controls">
-                                    <button class="btn-cal-up" onclick="adjustShutterStep(1)" title="Artır">▲</button>
+                                    <button class="btn-cal-up" onclick="adjustShutterStep(1)" data-lang-title="common.increase">▲</button>
                                     <span class="calibration-value-display" id="shutter-encoder-step">3</span>
-                                    <button class="btn-cal-down" onclick="adjustShutterStep(-1)" title="Azalt">▼</button>
+                                    <button class="btn-cal-down" onclick="adjustShutterStep(-1)" data-lang-title="common.decrease">▼</button>
                                 </div>
                             </div>
                         </div>
                         
                         <!-- Connection Section -->
                         <div class="shutter-config-section">
-                            <h4 class="shutter-section-title">Cihaz Bağlantısı</h4>
+                            <h4 class="shutter-section-title" data-lang="shutter.device_connection">Device Connection</h4>
                             <div class="form-group">
-                                <label>Manuel IP Girişi</label>
+                                <label data-lang="shutter.manual_ip">Manual IP Entry</label>
                                 <input type="text" id="shutter-ip-input" placeholder="192.168.1.100" class="input-full">
                             </div>
                             <div class="form-actions-row">
-                                <button class="btn-primary" onclick="connectShutterManual()">Baglan</button>
-                                <button class="btn-secondary" onclick="disconnectShutter()" id="btn-shutter-disconnect" style="display:none;">Baglatiyi Kes</button>
-                                <button class="btn-secondary" onclick="startShutterNetworkScan()">Agi Tara</button>
-                                <button class="btn-secondary" onclick="stopShutterNetworkScan()" style="display:none;" id="btn-stop-shutter-scan">Taramayi Durdur</button>
+                                <button class="btn-primary" onclick="connectShutterManual()" data-lang="common.connect">Connect</button>
+                                <button class="btn-secondary" onclick="disconnectShutter()" id="btn-shutter-disconnect" style="display:none;" data-lang="common.disconnect">Disconnect</button>
+                                <button class="btn-secondary" onclick="startShutterNetworkScan()" data-lang="shutter.scan_network">Scan Network</button>
+                                <button class="btn-secondary" onclick="stopShutterNetworkScan()" style="display:none;" id="btn-stop-shutter-scan" data-lang="shutter.stop_scan">Stop Scan</button>
                             </div>
                         </div>
                         
                         <!-- Saved Shutter Devices List -->
                         <div class="shutter-config-section">
-                            <h4 class="shutter-section-title">Kayıtlı Cihazlar</h4>
+                            <h4 class="shutter-section-title" data-lang="shutter.saved_devices">Saved Devices</h4>
                             <div class="saved-devices-list" id="saved-shutter-devices-list">
-                                <div class="saved-device-empty">Henüz kayıtlı cihaz yok. Ağ taraması yapın veya manuel bağlanın.</div>
+                                <div class="saved-device-empty" data-lang="shutter.no_devices">No saved devices yet. Scan network or connect manually.</div>
                             </div>
                         </div>
                         
                         <div class="shutter-info-text warning">
-                            <span class="warning-icon">&#9888;</span> Shutter encoder ile kontrol edilir. Tarayicinizdan sadece hiz kalibrasyonu yapabilirsiniz. Teorik olarak tamamlanmis ancak gercek dunyada panjur uzerinde test islemi gerceklestirilmemistir.
+                            <span class="warning-icon">&#9888;</span> <span data-lang="shutter.info_text">Shutter is controlled by encoder. You can only calibrate speed from your browser. Theoretically complete but not tested on real shutter.</span>
                         </div>
                         
                         <div class="shutter-info-text warning" id="shutter-calibration-warning" style="display: none;">
-                            <span class="warning-icon">&#9888;</span> Shutter aygitiiniz kalibre edilmedigi icin encoder donus hareketleri gecici olarak devre disi. Ancak yine de encoder butonu ile tam acma, tam kapatma ve durdurma islemlerini gerceklestirmeye devam edebilirsiniz.
+                            <span class="warning-icon">&#9888;</span> <span data-lang="shutter.calibration_warning">Your shutter device is not calibrated, encoder rotation is temporarily disabled. However, you can still perform full open, full close and stop operations with the encoder button.</span>
                         </div>
                         
                     </div>
@@ -257,25 +257,25 @@ String generateHTML(String chipID, String version) {
                 <!-- Safe Modu -->
                 <div class="accordion">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title-text">SAFE</span>
-                        <span class="badge badge-not-configured" id="safe-badge">Pasif</span>
+                        <span class="accordion-title-text" data-lang="safe.title">SAFE</span>
+                        <span class="badge badge-not-configured" id="safe-badge" data-lang="common.passive">Passive</span>
                         <span class="accordion-icon">▼</span>
                     </div>
                     <div class="accordion-content">
                         
                         <!-- Safe Mod Açıklama -->
-                        <div class="mode-info-text">
-                            Encoder hareketleriyle şifre girişi yapılır. Her şifre için API endpoint tanımlayabilirsiniz.
-                            Doğru şifre girildiğinde ESP32C6 otomatik olarak tanımlı API'yi tetikler.
+                        <div class="mode-info-text" data-lang="safe.description">
+                            Password entry is done with encoder movements. You can define an API endpoint for each password.
+                            When the correct password is entered, ESP32C6 automatically triggers the defined API.
                         </div>
                         
                         <!-- Şifre Tab'ları -->
                         <div class="safe-tabs">
-                            <button class="safe-tab active" onclick="openSafeTab(event, 0)">Sifre 1</button>
-                            <button class="safe-tab" onclick="openSafeTab(event, 1)">Sifre 2</button>
-                            <button class="safe-tab" onclick="openSafeTab(event, 2)">Sifre 3</button>
-                            <button class="safe-tab" onclick="openSafeTab(event, 3)">Sifre 4</button>
-                            <button class="safe-tab" onclick="openSafeTab(event, 4)">Sifre 5</button>
+                            <button class="safe-tab active" onclick="openSafeTab(event, 0)" data-lang="safe.password_1">Password 1</button>
+                            <button class="safe-tab" onclick="openSafeTab(event, 1)" data-lang="safe.password_2">Password 2</button>
+                            <button class="safe-tab" onclick="openSafeTab(event, 2)" data-lang="safe.password_3">Password 3</button>
+                            <button class="safe-tab" onclick="openSafeTab(event, 3)" data-lang="safe.password_4">Password 4</button>
+                            <button class="safe-tab" onclick="openSafeTab(event, 4)" data-lang="safe.password_5">Password 5</button>
                         </div>
                         
                         <!-- Şifre 1 İçerik -->
@@ -287,34 +287,34 @@ String generateHTML(String chipID, String version) {
                                     <input type="checkbox" id="safe-pwd-0-enabled">
                                     <span class="toggle-slider"></span>
                                 </label>
-                                <span class="toggle-label">Enable Password</span>
+                                <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
                             </div>
                             
                             <!-- Configuration Section -->
                             <div class="safe-config-section">
                                 
                                 <div class="form-group">
-                                    <label>Password</label>
-                                    <span class="form-hint-inline">Format: L3-R12-L11-R3-B (Min: 3 steps, Max: 6 steps)</span>
+                                    <label data-lang="safe.password_label">Password</label>
+                                    <span class="form-hint-inline" data-lang="safe.password_format">Format: L3-R12-L11-R3-B (Min: 3 steps, Max: 6 steps)</span>
                                     <input type="text" id="safe-pwd-0" placeholder="L3-R2-L1-R3">
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label>API URL</label>
+                                    <label data-lang="safe.api_url">API URL</label>
                                     <input type="text" id="safe-api-0-url" placeholder="http://192.168.1.100/rpc/switch.toggle?id=0">
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label>Custom Header (optional)</label>
-                                    <span class="form-hint-inline">Format: HeaderName: Value</span>
+                                    <label data-lang="safe.custom_header">Custom Header (optional)</label>
+                                    <span class="form-hint-inline" data-lang="safe.header_format">Format: HeaderName: Value</span>
                                     <input type="text" id="safe-api-0-header" placeholder="X-API-Key: your-api-key">
                                 </div>
                             </div>
                             
                             <!-- Action Buttons -->
                             <div class="form-actions">
-                                <button class="btn-save" onclick="saveSafePassword(0)">Save Password</button>
-                                <button class="btn-test" onclick="testSafeApi(0)">Test API</button>
+                                <button class="btn-save" onclick="saveSafePassword(0)" data-lang="safe.save_password">Save Password</button>
+                                <button class="btn-test" onclick="testSafeApi(0)" data-lang="safe.test_api">Test API</button>
                             </div>
                             
                         </div>
@@ -328,34 +328,34 @@ String generateHTML(String chipID, String version) {
                                     <input type="checkbox" id="safe-pwd-1-enabled">
                                     <span class="toggle-slider"></span>
                                 </label>
-                                <span class="toggle-label">Enable Password</span>
+                                <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
                             </div>
                             
                             <!-- Configuration Section -->
                             <div class="safe-config-section">
                                 
                                 <div class="form-group">
-                                    <label>Password</label>
-                                    <span class="form-hint-inline">Format: L3-R12-L11-R3-B (Min: 3 steps, Max: 6 steps)</span>
+                                    <label data-lang="safe.password_label">Password</label>
+                                    <span class="form-hint-inline" data-lang="safe.password_format">Format: L3-R12-L11-R3-B (Min: 3 steps, Max: 6 steps)</span>
                                     <input type="text" id="safe-pwd-1" placeholder="L3-R2-L1-R3">
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label>API URL</label>
+                                    <label data-lang="safe.api_url">API URL</label>
                                     <input type="text" id="safe-api-1-url" placeholder="http://192.168.1.100/rpc/switch.toggle?id=0">
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label>Custom Header (optional)</label>
-                                    <span class="form-hint-inline">Format: HeaderName: Value</span>
+                                    <label data-lang="safe.custom_header">Custom Header (optional)</label>
+                                    <span class="form-hint-inline" data-lang="safe.header_format">Format: HeaderName: Value</span>
                                     <input type="text" id="safe-api-1-header" placeholder="X-API-Key: your-api-key">
                                 </div>
                             </div>
                             
                             <!-- Action Buttons -->
                             <div class="form-actions">
-                                <button class="btn-save" onclick="saveSafePassword(1)">Save Password</button>
-                                <button class="btn-test" onclick="testSafeApi(1)">Test API</button>
+                                <button class="btn-save" onclick="saveSafePassword(1)" data-lang="safe.save_password">Save Password</button>
+                                <button class="btn-test" onclick="testSafeApi(1)" data-lang="safe.test_api">Test API</button>
                             </div>
                             
                         </div>
@@ -369,34 +369,34 @@ String generateHTML(String chipID, String version) {
                                     <input type="checkbox" id="safe-pwd-2-enabled">
                                     <span class="toggle-slider"></span>
                                 </label>
-                                <span class="toggle-label">Enable Password</span>
+                                <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
                             </div>
                             
                             <!-- Configuration Section -->
                             <div class="safe-config-section">
                                 
                                 <div class="form-group">
-                                    <label>Password</label>
-                                    <span class="form-hint-inline">Format: L3-R12-L11-R3-B (Min: 3 steps, Max: 6 steps)</span>
+                                    <label data-lang="safe.password_label">Password</label>
+                                    <span class="form-hint-inline" data-lang="safe.password_format">Format: L3-R12-L11-R3-B (Min: 3 steps, Max: 6 steps)</span>
                                     <input type="text" id="safe-pwd-2" placeholder="L3-R2-L1-R3">
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label>API URL</label>
+                                    <label data-lang="safe.api_url">API URL</label>
                                     <input type="text" id="safe-api-2-url" placeholder="http://192.168.1.100/rpc/switch.toggle?id=0">
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label>Custom Header (optional)</label>
-                                    <span class="form-hint-inline">Format: HeaderName: Value</span>
+                                    <label data-lang="safe.custom_header">Custom Header (optional)</label>
+                                    <span class="form-hint-inline" data-lang="safe.header_format">Format: HeaderName: Value</span>
                                     <input type="text" id="safe-api-2-header" placeholder="X-API-Key: your-api-key">
                                 </div>
                             </div>
                             
                             <!-- Action Buttons -->
                             <div class="form-actions">
-                                <button class="btn-save" onclick="saveSafePassword(2)">Save Password</button>
-                                <button class="btn-test" onclick="testSafeApi(2)">Test API</button>
+                                <button class="btn-save" onclick="saveSafePassword(2)" data-lang="safe.save_password">Save Password</button>
+                                <button class="btn-test" onclick="testSafeApi(2)" data-lang="safe.test_api">Test API</button>
                             </div>
                             
                         </div>
@@ -410,34 +410,34 @@ String generateHTML(String chipID, String version) {
                                     <input type="checkbox" id="safe-pwd-3-enabled">
                                     <span class="toggle-slider"></span>
                                 </label>
-                                <span class="toggle-label">Enable Password</span>
+                                <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
                             </div>
                             
                             <!-- Configuration Section -->
                             <div class="safe-config-section">
                                 
                                 <div class="form-group">
-                                    <label>Password</label>
-                                    <span class="form-hint-inline">Format: L3-R12-L11-R3-B (Min: 3 steps, Max: 6 steps)</span>
+                                    <label data-lang="safe.password_label">Password</label>
+                                    <span class="form-hint-inline" data-lang="safe.password_format">Format: L3-R12-L11-R3-B (Min: 3 steps, Max: 6 steps)</span>
                                     <input type="text" id="safe-pwd-3" placeholder="L3-R2-L1-R3">
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label>API URL</label>
+                                    <label data-lang="safe.api_url">API URL</label>
                                     <input type="text" id="safe-api-3-url" placeholder="http://192.168.1.100/rpc/switch.toggle?id=0">
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label>Custom Header (optional)</label>
-                                    <span class="form-hint-inline">Format: HeaderName: Value</span>
+                                    <label data-lang="safe.custom_header">Custom Header (optional)</label>
+                                    <span class="form-hint-inline" data-lang="safe.header_format">Format: HeaderName: Value</span>
                                     <input type="text" id="safe-api-3-header" placeholder="X-API-Key: your-api-key">
                                 </div>
                             </div>
                             
                             <!-- Action Buttons -->
                             <div class="form-actions">
-                                <button class="btn-save" onclick="saveSafePassword(3)">Save Password</button>
-                                <button class="btn-test" onclick="testSafeApi(3)">Test API</button>
+                                <button class="btn-save" onclick="saveSafePassword(3)" data-lang="safe.save_password">Save Password</button>
+                                <button class="btn-test" onclick="testSafeApi(3)" data-lang="safe.test_api">Test API</button>
                             </div>
                             
                         </div>
@@ -451,34 +451,34 @@ String generateHTML(String chipID, String version) {
                                     <input type="checkbox" id="safe-pwd-4-enabled">
                                     <span class="toggle-slider"></span>
                                 </label>
-                                <span class="toggle-label">Enable Password</span>
+                                <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
                             </div>
                             
                             <!-- Configuration Section -->
                             <div class="safe-config-section">
                                 
                                 <div class="form-group">
-                                    <label>Password</label>
-                                    <span class="form-hint-inline">Format: L3-R12-L11-R3-B (Min: 3 steps, Max: 6 steps)</span>
+                                    <label data-lang="safe.password_label">Password</label>
+                                    <span class="form-hint-inline" data-lang="safe.password_format">Format: L3-R12-L11-R3-B (Min: 3 steps, Max: 6 steps)</span>
                                     <input type="text" id="safe-pwd-4" placeholder="L3-R2-L1-R3">
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label>API URL</label>
+                                    <label data-lang="safe.api_url">API URL</label>
                                     <input type="text" id="safe-api-4-url" placeholder="http://192.168.1.100/rpc/switch.toggle?id=0">
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label>Custom Header (optional)</label>
-                                    <span class="form-hint-inline">Format: HeaderName: Value</span>
+                                    <label data-lang="safe.custom_header">Custom Header (optional)</label>
+                                    <span class="form-hint-inline" data-lang="safe.header_format">Format: HeaderName: Value</span>
                                     <input type="text" id="safe-api-4-header" placeholder="X-API-Key: your-api-key">
                                 </div>
                             </div>
                             
                             <!-- Action Buttons -->
                             <div class="form-actions">
-                                <button class="btn-save" onclick="saveSafePassword(4)">Save Password</button>
-                                <button class="btn-test" onclick="testSafeApi(4)">Test API</button>
+                                <button class="btn-save" onclick="saveSafePassword(4)" data-lang="safe.save_password">Save Password</button>
+                                <button class="btn-test" onclick="testSafeApi(4)" data-lang="safe.test_api">Test API</button>
                             </div>
                             
                         </div>
@@ -489,28 +489,29 @@ String generateHTML(String chipID, String version) {
                 <!-- Alarm Modu -->
                 <div class="accordion">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title-text">ALARM</span>
-                        <span class="badge badge-not-configured" id="alarm-badge">Pasif</span>
+                        <span class="accordion-title-text" data-lang="alarm.title">ALARM</span>
+                        <span class="badge badge-not-configured" id="alarm-badge" data-lang="common.passive">Passive</span>
                         <span class="accordion-icon">▼</span>
                     </div>
                     <div class="accordion-content">
                         
                         <!-- Alarm Mod Açıklama -->
-                        <div class="mode-info-text">
-                            Alarm modu, acil durumlarda sevdiklerinize anında haber vermek veya yardım istemek için tasarlanmış bir güvenlik özelliğidir. 
-                            Encoder'la etkileşime girdiğinizde API üzerinden mobil uygulamaya sinyal gönderilir. 
-                            Bu sinyal uygulamanın yüklü olduğu telefonların zil sesini tetikleyerek önceden belirlediğiniz mesajları ekranda gösterir.
+                        <div class="mode-info-text" data-lang="alarm.description">
+                            Alarm mode is a security feature designed to instantly notify your loved ones or request help in emergencies. 
+                            When you interact with the encoder, a signal is sent to the mobile app via API. 
+                            This signal triggers the ringtone of phones with the app installed and displays your predetermined messages on screen.
                         </div>
                         
                         <div class="mode-info-text">
-                            <strong>Örnek Kullanım Senaryosu:</strong><br><br>
-                            SynDimm cihazınız Alarm modundayken encoder ile herhangi bir etkileşime girdiğinizde, cihaz ID numaranızla bağlantı kurulmuş Android veya iOS cihazlardaki 
-                            mobil uygulamasına otomatik olarak acil durum isteği gönderilir. Bildirim alan telefonlar yüksek sesle çalmaya başlar ve önceden belirlediğiniz 
-                            acil durum mesajınız ekranda görüntülenir. Bu sayede, kişisel güvenliğiniz için bir panik butonu olarak kullanabileceğiniz akıllı bir çözüm sunar.
+                            <strong data-lang="alarm.example_title">Example Usage Scenario:</strong><br><br>
+                            <span data-lang="alarm.example_text">When you interact with the encoder while your SynDimm device is in Alarm mode, 
+                            an emergency request is automatically sent to the mobile app on Android or iOS devices linked with your device ID. 
+                            Phones receiving the notification start ringing loudly and your predetermined emergency message is displayed on screen. 
+                            This provides a smart solution you can use as a panic button for your personal safety.</span>
                         </div>
                         
                         <div class="mode-info-text">
-                            <strong>Not:</strong> Sistem şu anda geliştirme aşamasındadır ve yakında kullanıma sunulacaktır.
+                            <strong data-lang="common.note">Note:</strong> <span data-lang="alarm.dev_note">The system is currently under development and will be available soon.</span>
                         </div>
                         
                     </div>
@@ -535,15 +536,15 @@ String generateHTML(String chipID, String version) {
                 <div class="status-card">
                     <div class="status-row">
                         <div class="status-item">
-                            <span class="status-label">MOD</span>
+                            <span class="status-label" data-lang="connection.mode">MODE</span>
                             <span class="status-value" id="status-mode">WiFi</span>
                         </div>
                         <div class="status-item">
-                            <span class="status-label">SSID</span>
+                            <span class="status-label" data-lang="connection.ssid">SSID</span>
                             <span class="status-value" id="status-ssid">-</span>
                         </div>
                         <div class="status-item">
-                            <span class="status-label">IP ADRESI</span>
+                            <span class="status-label" data-lang="connection.ip_address">IP ADDRESS</span>
                             <span class="status-value" id="status-ip">-</span>
                             <span class="status-mdns" id="status-mdns">-</span>
                         </div>
@@ -553,27 +554,27 @@ String generateHTML(String chipID, String version) {
                 <!-- AP Mode Bilgilendirme -->
                 <div class="accordion">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title-text">AP MODE - ACIL ERISIM</span>
-                        <span class="badge badge-info">Otomatik</span>
+                        <span class="accordion-title-text" data-lang="connection.ap_mode_title">AP MODE - EMERGENCY ACCESS</span>
+                        <span class="badge badge-info" data-lang="common.automatic">Automatic</span>
                         <span class="accordion-icon">▼</span>
                     </div>
                     <div class="accordion-content">
-                        <div class="ap-info-text">
-                            WiFi baglantisi kurulamazsa cihaz otomatik olarak kendi erisim noktasini acar. 
-                            Bu sayede her zaman cihaza erisebilir ve ayarlarini yapabilirsiniz.
+                        <div class="ap-info-text" data-lang="connection.ap_info">
+                            If WiFi connection cannot be established, the device automatically opens its own access point. 
+                            This way you can always access the device and configure its settings.
                         </div>
                         
                         <div class="ap-details">
                             <div class="ap-detail-row">
-                                <span class="ap-label">Ag Adi (SSID)</span>
+                                <span class="ap-label" data-lang="connection.network_name">Network Name (SSID)</span>
                                 <span class="ap-value">SynDimm-SK[ChipID]</span>
                             </div>
                             <div class="ap-detail-row">
-                                <span class="ap-label">Sifre</span>
-                                <span class="ap-value">Yok (Acik Ag)</span>
+                                <span class="ap-label" data-lang="connection.password">Password</span>
+                                <span class="ap-value" data-lang="connection.no_password">None (Open Network)</span>
                             </div>
                             <div class="ap-detail-row">
-                                <span class="ap-label">IP Adresi</span>
+                                <span class="ap-label" data-lang="connection.ip_address">IP Address</span>
                                 <span class="ap-value">192.168.4.1</span>
                             </div>
                             <div class="ap-detail-row">
@@ -583,13 +584,13 @@ String generateHTML(String chipID, String version) {
                         </div>
                         
                         <div class="ap-steps">
-                            <div class="ap-step-title">Baglanti Sirasi</div>
+                            <div class="ap-step-title" data-lang="connection.connection_order">Connection Order</div>
                             <div class="ap-step-flow">
-                                <span class="ap-step">1. Primary WiFi</span>
+                                <span class="ap-step" data-lang="connection.step_primary">1. Primary WiFi</span>
                                 <span class="ap-arrow">&gt;</span>
-                                <span class="ap-step">2. Backup WiFi</span>
+                                <span class="ap-step" data-lang="connection.step_backup">2. Backup WiFi</span>
                                 <span class="ap-arrow">&gt;</span>
-                                <span class="ap-step ap-step-active">3. AP Mode</span>
+                                <span class="ap-step ap-step-active" data-lang="connection.step_ap">3. AP Mode</span>
                             </div>
                         </div>
                     </div>
@@ -598,27 +599,27 @@ String generateHTML(String chipID, String version) {
                 <!-- Primary WiFi -->
                 <div class="accordion">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title-text">PRIMARY WIFI</span>
-                        <span class="badge badge-not-configured" id="primary-badge">Not Configured</span>
+                        <span class="accordion-title-text" data-lang="connection.primary_wifi">PRIMARY WIFI</span>
+                        <span class="badge badge-not-configured" id="primary-badge" data-lang="common.not_configured">Not Configured</span>
                         <span class="accordion-icon">▼</span>
                     </div>
                     <div class="accordion-content">
                         <div class="form-group">
-                            <label>SSID</label>
-                            <input type="text" id="primary-ssid" placeholder="WiFi SSID girin">
+                            <label data-lang="connection.ssid">SSID</label>
+                            <input type="text" id="primary-ssid" data-lang-placeholder="connection.enter_ssid">
                         </div>
                         <div class="form-group">
-                            <label>Şifre (opsiyonel)</label>
-                            <input type="password" id="primary-password" placeholder="Açık ağ için boş bırakın">
+                            <label data-lang="connection.password_optional">Password (optional)</label>
+                            <input type="password" id="primary-password" data-lang-placeholder="connection.leave_empty_open">
                         </div>
                         <div class="form-group">
-                            <label>Statik IP (opsiyonel)</label>
-                            <input type="text" id="primary-static" placeholder="DHCP için boş bırakın">
+                            <label data-lang="connection.static_ip">Static IP (optional)</label>
+                            <input type="text" id="primary-static" data-lang-placeholder="connection.leave_empty_dhcp">
                         </div>
                         <div class="form-group">
-                            <label>.local Alan Adı (opsiyonel)</label>
-                            <input type="text" id="primary-mdns" placeholder="örn: dimm">
-                            <small class="form-hint">Will be accessible as [name].local on the network</small>
+                            <label data-lang="connection.local_domain">.local Domain Name (optional)</label>
+                            <input type="text" id="primary-mdns" placeholder="e.g: dimm">
+                            <small class="form-hint" data-lang="connection.mdns_hint">Will be accessible as [name].local on the network</small>
                         </div>
                     </div>
                 </div>
@@ -626,34 +627,34 @@ String generateHTML(String chipID, String version) {
                 <!-- Backup WiFi -->
                 <div class="accordion">
                     <div class="accordion-header" onclick="toggleAccordion(this)">
-                        <span class="accordion-title-text">BACKUP WIFI</span>
-                        <span class="badge badge-not-configured" id="backup-badge">Not Configured</span>
+                        <span class="accordion-title-text" data-lang="connection.backup_wifi">BACKUP WIFI</span>
+                        <span class="badge badge-not-configured" id="backup-badge" data-lang="common.not_configured">Not Configured</span>
                         <span class="accordion-icon">▼</span>
                     </div>
                     <div class="accordion-content">
                         <div class="form-group">
-                            <label>SSID</label>
-                            <input type="text" id="backup-ssid" placeholder="WiFi SSID girin">
+                            <label data-lang="connection.ssid">SSID</label>
+                            <input type="text" id="backup-ssid" data-lang-placeholder="connection.enter_ssid">
                         </div>
                         <div class="form-group">
-                            <label>Şifre (opsiyonel)</label>
-                            <input type="password" id="backup-password" placeholder="Açık ağ için boş bırakın">
+                            <label data-lang="connection.password_optional">Password (optional)</label>
+                            <input type="password" id="backup-password" data-lang-placeholder="connection.leave_empty_open">
                         </div>
                         <div class="form-group">
-                            <label>Statik IP (opsiyonel)</label>
-                            <input type="text" id="backup-static" placeholder="DHCP için boş bırakın">
+                            <label data-lang="connection.static_ip">Static IP (optional)</label>
+                            <input type="text" id="backup-static" data-lang-placeholder="connection.leave_empty_dhcp">
                         </div>
                         <div class="form-group">
-                            <label>.local Alan Adı (opsiyonel)</label>
-                            <input type="text" id="backup-mdns" placeholder="örn: benimsyndimm">
-                            <small class="form-hint">Will be accessible as [name].local on the network</small>
+                            <label data-lang="connection.local_domain">.local Domain Name (optional)</label>
+                            <input type="text" id="backup-mdns" placeholder="e.g: mysyndimm">
+                            <small class="form-hint" data-lang="connection.mdns_hint">Will be accessible as [name].local on the network</small>
                         </div>
                     </div>
                 </div>
 
                 <!-- Kaydet Butonu -->
                 <div class="save-button-container">
-                    <button class="save-button" onclick="saveNetworkSettings()">Ağ Yapılandırmasını Kaydet</button>
+                    <button class="save-button" onclick="saveNetworkSettings()" data-lang="connection.save_network">Save Network Configuration</button>
                 </div>
 
             </div>
@@ -664,19 +665,19 @@ String generateHTML(String chipID, String version) {
                 
                 <!-- OTA Update Section -->
                 <div class="ota-section">
-                    <h2>Versiyon Güncelleme</h2>
+                    <h2 data-lang="info.version_update">Version Update</h2>
                     
                     <!-- Current Version Card -->
                     <div class="ota-version-card">
-                        <div class="ota-version-label">Cihaz Sürümü:</div>
-                        <div class="ota-version-value" id="ota-current-version">v0.9.1</div>
+                        <div class="ota-version-label" data-lang="info.device_version">Device Version:</div>
+                        <div class="ota-version-value" id="ota-current-version">v1.0.1</div>
                     </div>
                     
                     <!-- Update Available Card -->
                     <div class="ota-update-card" id="ota-update-card" style="display: none;">
                         <div class="ota-update-header">
                             <span class="ota-update-icon">⬆</span>
-                            <span class="ota-update-title">Yeni Sürüm Mevcut!</span>
+                            <span class="ota-update-title" data-lang="info.new_version_available">New Version Available!</span>
                         </div>
                         <div class="ota-update-version" id="ota-latest-version">-</div>
                         <div class="ota-update-date" id="ota-publish-date">-</div>
@@ -689,22 +690,22 @@ String generateHTML(String chipID, String version) {
                             <input type="checkbox" id="ota-auto-update">
                             <span class="toggle-slider"></span>
                         </label>
-                        <span class="toggle-label">Otomatik Güncelleme</span>
+                        <span class="toggle-label" data-lang="info.auto_update">Automatic Update</span>
                     </div>
                     
-                    <div class="ota-auto-info">
-                        Otomatik güncelleme açık olduğunda cihaz yeni sürümleri kontrol eder ve kendini günceller. Kapalı olduğunda sadece bildirim alırsınız.
+                    <div class="ota-auto-info" data-lang="info.auto_update_info">
+                        When automatic update is enabled, the device checks for new versions and updates itself. When disabled, you only receive notifications.
                     </div>
                     
                     <!-- Action Buttons -->
                     <div class="ota-actions">
-                        <button class="btn-ota-check" onclick="checkForUpdate()">Güncelleme Kontrol Et</button>
-                        <button class="btn-ota-update" id="btn-ota-update" onclick="performUpdate()" style="display: none;">Şimdi Güncelle</button>
+                        <button class="btn-ota-check" onclick="checkForUpdate()" data-lang="info.check_update">Check for Update</button>
+                        <button class="btn-ota-update" id="btn-ota-update" onclick="performUpdate()" style="display: none;" data-lang="info.update_now">Update Now</button>
                     </div>
                     
                     <!-- Progress Bar -->
                     <div class="ota-progress-container" id="ota-progress-container" style="display: none;">
-                        <div class="ota-progress-label" id="ota-progress-label">İndiriliyor...</div>
+                        <div class="ota-progress-label" id="ota-progress-label" data-lang="info.downloading">Downloading...</div>
                         <div class="ota-progress-bar">
                             <div class="ota-progress-fill" id="ota-progress-fill"></div>
                         </div>
@@ -717,66 +718,66 @@ String generateHTML(String chipID, String version) {
                 
                 <div class="info-divider"></div>
                 
-                <h2>Kullanim Kilavuzu</h2>
+                <h2 data-lang="info.usage_guide">Usage Guide</h2>
                 
                 <div class="info-section">
-                    <h3>Dimmer Modu</h3>
-                    <p>Shelly Dimmer cihazlari ile entegre calisir. Encoder ile aydinlatma parcakligini kontrol edebilirsiniz.</p>
-                    <p><strong>Encoder Donusu:</strong> Saga cevirme parlaklik arttirir, sola cevirme azaltir.</p>
-                    <p><strong>Encoder Butonu:</strong> Tek basma ile cihazi acar/kapatir (toggle).</p>
-                    <p><strong>Kalibrasyon:</strong> Web arayuzunden 1-5 arasi kalibrasyon degeri ayarlanabilir. Bu deger her encoder hareketi icin degisecek parlaklik yuzdesini belirler.</p>
-                    <p><strong>Cihaz Baglantisi:</strong> Ag Tara butonu ile yerel agdaki Shelly Dimmer cihazlarini bulun ve baglanin.</p>
+                    <h3 data-lang="info.dimmer_mode">Dimmer Mode</h3>
+                    <p data-lang="info.dimmer_desc">Works integrated with Shelly Dimmer devices. You can control lighting brightness with the encoder.</p>
+                    <p><strong data-lang="info.encoder_rotation">Encoder Rotation:</strong> <span data-lang="info.dimmer_rotation_desc">Turning right increases brightness, turning left decreases.</span></p>
+                    <p><strong data-lang="info.encoder_button">Encoder Button:</strong> <span data-lang="info.dimmer_button_desc">Single press toggles the device on/off.</span></p>
+                    <p><strong data-lang="info.calibration">Calibration:</strong> <span data-lang="info.dimmer_calibration_desc">Calibration value between 1-5 can be set from web interface. This value determines the brightness percentage change for each encoder movement.</span></p>
+                    <p><strong data-lang="info.device_connection">Device Connection:</strong> <span data-lang="info.dimmer_connection_desc">Find and connect to Shelly Dimmer devices on your local network using the Scan Network button.</span></p>
                 </div>
                 
                 <div class="info-section">
-                    <h3>Shutter Modu</h3>
-                    <p>Shelly 2.5 veya Shelly Plus 2PM gibi panjur/kepenk kontrolcu cihazlarla calisir.</p>
-                    <p><strong>Encoder Donusu:</strong> Saga cevirme panjuru kapatir (asagi), sola cevirme acar (yukari). Not: Cihaz kalibre edilmemisse encoder donusu devre disi kalir.</p>
-                    <p><strong>Encoder Butonu:</strong> Hareket halindeyse durdurur. Duruyorsa son hareketin tersine tam acma veya tam kapatma yapar.</p>
-                    <p><strong>Kalibrasyon:</strong> Shelly cihazinin kendi uygulamasindan motor kalibrasyonu yapilmalidir. Web arayuzunden encoder hassasiyeti (1-5) ayarlanabilir.</p>
+                    <h3 data-lang="info.shutter_mode">Shutter Mode</h3>
+                    <p data-lang="info.shutter_desc">Works with shutter/blind controller devices like Shelly 2.5 or Shelly Plus 2PM.</p>
+                    <p><strong data-lang="info.encoder_rotation">Encoder Rotation:</strong> <span data-lang="info.shutter_rotation_desc">Turning right closes the shutter (down), turning left opens (up). Note: Encoder rotation is disabled if device is not calibrated.</span></p>
+                    <p><strong data-lang="info.encoder_button">Encoder Button:</strong> <span data-lang="info.shutter_button_desc">Stops if moving. If stopped, performs full open or full close opposite to last movement.</span></p>
+                    <p><strong data-lang="info.calibration">Calibration:</strong> <span data-lang="info.shutter_calibration_desc">Motor calibration should be done from Shelly's own app. Encoder sensitivity (1-5) can be adjusted from web interface.</span></p>
                 </div>
                 
                 <div class="info-section">
-                    <h3>Safe Modu</h3>
-                    <p>Encoder hareketleriyle sifre girilir ve dogru sifrede belirlenen API cagirilir.</p>
-                    <p><strong>Sifre Formati:</strong> R5-L3-R2-B gibi hareketlerden olusur. R=saga, L=sola, rakam=tur sayisi, B=buton.</p>
-                    <p><strong>Ayarlama:</strong> Web arayuzunden 5 farkli sifre tanimlanabilir. Her sifre icin HTTP GET veya POST API URL girilir.</p>
-                    <p><strong>Kullanim:</strong> Akilli kilit acma, garaj kapisi kontrolu, ozel otomasyon senaryolari icin uygundur.</p>
+                    <h3 data-lang="info.safe_mode">Safe Mode</h3>
+                    <p data-lang="info.safe_desc">Password is entered with encoder movements and the defined API is called on correct password.</p>
+                    <p><strong data-lang="info.password_format_title">Password Format:</strong> <span data-lang="info.safe_format_desc">Consists of movements like R5-L3-R2-B. R=right, L=left, number=rotation count, B=button.</span></p>
+                    <p><strong data-lang="info.settings">Settings:</strong> <span data-lang="info.safe_settings_desc">5 different passwords can be defined from web interface. HTTP GET or POST API URL is entered for each password.</span></p>
+                    <p><strong data-lang="info.usage">Usage:</strong> <span data-lang="info.safe_usage_desc">Suitable for smart lock opening, garage door control, custom automation scenarios.</span></p>
                 </div>
                 
                 <div class="info-section">
-                    <h3>Alarm Modu (Gelistirme Asamasinda)</h3>
-                    <p><strong>Acil Bildirim:</strong> Encoder'a dokundugunuzda veya cevirdiginizde (yon/miktar onemsiz) API uzerinden mobil uygulamaya sinyal gonderir.</p>
-                    <p><strong>Islev:</strong> Hedef telefonda zil sesi tetiklenir ve acil durum mesaji iletilir.</p>
-                    <p class="info-note info-note-warning">Alarm modu gelistirme asamasindadir.</p>
+                    <h3 data-lang="info.alarm_mode">Alarm Mode (Under Development)</h3>
+                    <p><strong data-lang="info.emergency_notification">Emergency Notification:</strong> <span data-lang="info.alarm_notification_desc">When you touch or turn the encoder (direction/amount doesn't matter), sends signal to mobile app via API.</span></p>
+                    <p><strong data-lang="info.function">Function:</strong> <span data-lang="info.alarm_function_desc">Triggers ringtone on target phone and delivers emergency message.</span></p>
+                    <p class="info-note info-note-warning" data-lang="info.alarm_dev_note">Alarm mode is under development.</p>
                 </div>
                 
                 <div class="info-section">
-                    <h3>Genel Ozellikler</h3>
-                    <p><strong>Mod Degistirme:</strong> Encoder butonuna 3 saniye basili tutun. Onizleme moduna gecer, encoder cevirilerek mod secilir, tekrar 3 saniye butona basili tutularak secim onaylanir.</p>
-                    <p><strong>WiFi Baglantisi:</strong> Baglanti sekmesinden SSID ve sifre girerek WiFi agina baglanin. DHCP veya statik IP secenekleri mevcuttur. mDNS destegi ile tarayicidan dimm.local adresiyle de erisebilirsiniz.</p>
-                    <p><strong>Hizli Menu:</strong> Sag ust kosedeki durum cubugundan aktif mod, WiFi durumu ve IP adresini gorebilirsiniz. Tiklandiginda detayli sistem bilgisi paneli acilir.</p>
-                    <p><strong>Mod Hafizasi:</strong> Secilen mod flash bellegine kaydedilir ve cihaz yeniden baslatildiginda otomatik olarak son aktif mod ile calisir.</p>
-                    <p><strong>OTA Guncelleme:</strong> Info sekmesinden GitHub uzerindeki yeni surumler kontrol edilebilir. Guncelleme mevcut ise tek tikla kablosuz yukleme yapilabilir.</p>
+                    <h3 data-lang="info.general_features">General Features</h3>
+                    <p><strong data-lang="info.mode_switch">Mode Switch:</strong> <span data-lang="info.mode_switch_desc">Hold encoder button for 3 seconds. Enters preview mode, select mode by turning encoder, confirm by holding button for 3 seconds again.</span></p>
+                    <p><strong data-lang="info.wifi_connection">WiFi Connection:</strong> <span data-lang="info.wifi_desc">Connect to WiFi network by entering SSID and password in Connection tab. DHCP or static IP options available. With mDNS support, you can also access via dimm.local address from browser.</span></p>
+                    <p><strong data-lang="info.quick_menu">Quick Menu:</strong> <span data-lang="info.quick_menu_desc">You can see active mode, WiFi status and IP address from status bar at top right. Clicking opens detailed system info panel.</span></p>
+                    <p><strong data-lang="info.mode_memory">Mode Memory:</strong> <span data-lang="info.mode_memory_desc">Selected mode is saved to flash memory and device automatically runs with last active mode when restarted.</span></p>
+                    <p><strong data-lang="info.ota_update">OTA Update:</strong> <span data-lang="info.ota_desc">New versions on GitHub can be checked from Info tab. If update available, wireless installation can be done with one click.</span></p>
                 </div>
                 
                 <div class="info-section system-actions">
-                    <h3>Sistem Islemleri</h3>
+                    <h3 data-lang="info.system_operations">System Operations</h3>
                     <div class="system-buttons">
-                        <button class="btn-restart" onclick="restartDevice()">Restart</button>
-                        <button class="btn-factory-reset" onclick="showFactoryResetConfirm()">Factory Reset</button>
+                        <button class="btn-restart" onclick="restartDevice()" data-lang="info.restart">Restart</button>
+                        <button class="btn-factory-reset" onclick="showFactoryResetConfirm()" data-lang="info.factory_reset">Factory Reset</button>
                     </div>
                     <div id="factory-reset-confirm" class="factory-reset-confirm" style="display:none;">
-                        <p>Tum ayarlar silinecek. Onaylamak icin <strong>Evet</strong> yazin:</p>
-                        <input type="text" id="factory-reset-input" placeholder="Evet" autocomplete="off">
-                        <button class="btn-confirm-reset" onclick="confirmFactoryReset()">Onayla</button>
-                        <button class="btn-cancel-reset" onclick="hideFactoryResetConfirm()">Iptal</button>
+                        <p data-lang="info.factory_reset_confirm">All settings will be deleted. Type <strong>Yes</strong> to confirm:</p>
+                        <input type="text" id="factory-reset-input" placeholder="Yes" autocomplete="off">
+                        <button class="btn-confirm-reset" onclick="confirmFactoryReset()" data-lang="info.confirm">Confirm</button>
+                        <button class="btn-cancel-reset" onclick="hideFactoryResetConfirm()" data-lang="info.cancel">Cancel</button>
                     </div>
                 </div>
                 
                 <div class="info-footer">
-                    <h3>Destek ve Dokümantasyon</h3>
-                    <p>Detaylı kullanım kılavuzu, örnek senaryolar ve güncellemeler için:</p>
+                    <h3 data-lang="info.support_docs">Support and Documentation</h3>
+                    <p data-lang="info.support_desc">For detailed user guide, example scenarios and updates:</p>
                     <div class="button-group">
                         <a href="https://smartkraft.ch/syndimm" target="_blank" class="info-button">SmartKraft.ch</a>
                         <a href="https://github.com/smrtkrft/SynDimm" target="_blank" class="info-button">GitHub</a>

@@ -1,7 +1,7 @@
 /**
  * SK_mode_safe.h
  * SmartKraft SynDimm - Safe Lock Mode
- * Version: v0.9.1
+ * Version: v1.0.1
  * 
  * ========================================
  * SAFE MOD - KASA KİLİDİ MANTİĞI
@@ -395,9 +395,9 @@ public:
       }
       
       if (config.passwords[i].isActive || pwdStr.length() > 0) {
-        DEBUG_PRINTF("[SafeLock] Sifre #%d: %s (active=%d, apiEnabled=%d, url=%s)\n", 
-                     i, pwdStr.c_str(), config.passwords[i].isActive,
-                     config.apiConfigs[i].enabled, config.apiConfigs[i].url);
+        // GÜVENLİK: Şifre ve URL Serial'e loglanmıyor
+        DEBUG_PRINTF("[SafeLock] Slot #%d: configured (active=%d, apiEnabled=%d)\n", 
+                     i, config.passwords[i].isActive, config.apiConfigs[i].enabled);
       }
     }
     
@@ -492,7 +492,8 @@ public:
   bool setPassword(uint8_t index, const String& passwordStr, const SafeApiConfig& apiConfig, bool isActive = true) {
     if (index >= SAFE_MAX_PASSWORDS) return false;
     
-    DEBUG_PRINTF("[SafeLock] setPassword: index=%d, password=%s, active=%d\n", index, passwordStr.c_str(), isActive);
+    // GÜVENLİK: Şifre Serial'e loglanmıyor
+    DEBUG_PRINTF("[SafeLock] setPassword: index=%d, active=%d\n", index, isActive);
     
     // Boş şifre gelirse sadece API config ve active durumunu güncelle
     if (passwordStr.length() == 0) {
@@ -512,8 +513,9 @@ public:
     config.passwords[index].isActive = isActive;
     config.apiConfigs[index] = apiConfig;
     
-    DEBUG_PRINTF("[SafeLock] Sifre #%d ayarlandi: %s (active=%d)\n", index, passwordStr.c_str(), isActive);
-    DEBUG_PRINTF("[SafeLock] API enabled: %d, URL: %s\n", apiConfig.enabled, apiConfig.url);
+    // GÜVENLİK: Şifre ve URL Serial'e loglanmıyor
+    DEBUG_PRINTF("[SafeLock] Slot #%d configured (active=%d)\n", index, isActive);
+    DEBUG_PRINTF("[SafeLock] API enabled: %d\n", apiConfig.enabled);
     
     return saveToEEPROM();
   }

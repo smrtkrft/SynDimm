@@ -1,7 +1,7 @@
 /**
  * SynDimm.ino
  * SmartKraft SynDimm - Main Application
- * Version: v0.9.1
+ * Version: v1.0.1
  * 
  * ESP32-C6 with KY-040 Rotary Encoder
  * Web Interface with AP Mode
@@ -107,6 +107,10 @@ void setup() {
     SafeLockAPIHandler::onPasswordMatch(pwdIndex, &safeLock, &safeApiHandler);
   });
 
+  // Initialize Language System
+  initLanguage();
+  DEBUG_PRINTF("[STARTUP] Language: %s\n", getCurrentLangCode().c_str());
+
   // Initialize OTA System
   initOTA();
   
@@ -132,11 +136,25 @@ void setup() {
     DEBUG_PRINTLN("[STARTUP] Checking for updates...");
     checkForUpdates();  // Sadece kontrol et, otomatik güncelleme yapma
   }
+  
+  // Random seed'i chip ID ile başlat (her cihaz farklı random değer üretir)
+  randomSeed(ESP.getEfuseMac() ^ millis());
 }
 
 // OTA auto-check variables
 static unsigned long lastOTACheck = 0;
-const unsigned long OTA_CHECK_INTERVAL = 180000; // 3 dakika (saatte max 20 istek)
+static unsigned long otaCheckInterval = 0;
+
+// 24 saat + random(1-1440 dakika) = 24-48 saat arası
+unsigned long calculateNextOTAInterval() {
+  const unsigned long BASE_INTERVAL = 24UL * 60UL * 60UL * 1000UL;  // 24 saat (ms)
+  const unsigned long RANDOM_RANGE = 1440UL * 60UL * 1000UL;        // 1440 dakika (ms)
+  unsigned long randomMinutes = random(1, 1441);                     // 1-1440 dakika
+  unsigned long interval = BASE_INTERVAL + (randomMinutes * 60UL * 1000UL);
+  DEBUG_PRINTF("[OTA] Next check in %lu hours %lu minutes\n", 
+               interval / 3600000UL, (interval % 3600000UL) / 60000UL);
+  return interval;
+}
 
 void loop() {
   // Handle WiFi status (reconnection & AP mode scanning)
@@ -151,10 +169,20 @@ void loop() {
   // Update mode manager (handle timeout)
   modeManager.update();
   
-  // OTA otomatik güncelleme kontrolü (dakikada bir - test modu)
-  if (wifi.isConnectedToWiFi() && (millis() - lastOTACheck > OTA_CHECK_INTERVAL)) {
-    lastOTACheck = millis();
-    autoUpdateCheck();
+  // OTA otomatik güncelleme kontrolü (24-48 saat arası random)
+  if (wifi.isConnectedToWiFi()) {
+    // İlk çalışmada interval hesapla
+    if (otaCheckInterval == 0) {
+      otaCheckInterval = calculateNextOTAInterval();
+      lastOTACheck = millis();
+    }
+    
+    // Süre dolduysa kontrol et ve yeni interval hesapla
+    if (millis() - lastOTACheck > otaCheckInterval) {
+      lastOTACheck = millis();
+      autoUpdateCheck();
+      otaCheckInterval = calculateNextOTAInterval();  // Sonraki kontrol için yeni random
+    }
   }
   
   // ========================================
