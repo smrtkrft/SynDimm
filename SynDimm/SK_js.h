@@ -26,6 +26,7 @@ if(localStorage.getItem('theme') === 'light') document.addEventListener('DOMCont
 window.addEventListener('DOMContentLoaded', () => {
     loadSavedSettings(); loadConnectionStatus(); loadOTASettings();
     loadDimmerStatus(); loadShutterStatus(); loadSavedDevices(); loadCurrentMode(); updateQuickSettings();
+    loadSafePasswords(); // Safe şifrelerini yükle
     setInterval(loadConnectionStatus, 5000);
     setInterval(loadDimmerStatus, 2000);
     setInterval(loadShutterStatus, 2000);
@@ -139,6 +140,26 @@ function showNotification(msg, type = 'info') {
 function closeNotification() { $('notification').style.display = 'none'; }
 
 // === SAFE PASSWORD ===
+function loadSafePasswords() {
+    fetch('/getSafeStatus')
+        .then(r => r.json())
+        .then(d => {
+            if(d.passwords) {
+                d.passwords.forEach((p, i) => {
+                    const pwdEl = $('safe-pwd-' + i);
+                    const enabledEl = $('safe-pwd-' + i + '-enabled');
+                    const urlEl = $('safe-api-' + i + '-url');
+                    const headerEl = $('safe-api-' + i + '-header');
+                    if(pwdEl) pwdEl.value = p.password || '';
+                    if(enabledEl) enabledEl.checked = p.active || false;
+                    if(urlEl) urlEl.value = p.apiUrl || '';
+                    if(headerEl) headerEl.value = p.apiHeader || '';
+                });
+            }
+        })
+        .catch(e => console.log('Safe passwords load error:', e));
+}
+
 function saveSafePassword(idx) {
     const pwd = $('safe-pwd-' + idx).value, enabled = $('safe-pwd-' + idx + '-enabled').checked;
     const url = $('safe-api-' + idx + '-url').value, header = $('safe-api-' + idx + '-header').value;
@@ -204,7 +225,7 @@ function formatDate(s) { return s ? new Date(s).toLocaleDateString('tr-TR', { ye
 function checkForUpdate() {
     showOTAStatus('Güncelleme kontrol ediliyor...', 'info');
     setDisplay('btn-ota-update', false); setDisplay('ota-update-card', false);
-    api('/checkUpdate').then(d => {
+    post('/checkOTAUpdate', {}).then(d => {
         if(d.success) { if(d.updateAvailable) { showUpdateAvailable(d); showOTAStatus('Yeni sürüm bulundu!', 'success'); } else showOTAStatus('Cihazınız güncel!', 'success'); }
         else showOTAStatus('Hata: ' + (d.message || 'Kontrol edilemedi'), 'error');
     }).catch(e => showOTAStatus('Bağlantı hatası: ' + e, 'error'));
@@ -416,6 +437,39 @@ function stopShutterNetworkScan() {
     post('/stopShutterScan', {}).then(d => {
         if(d.success) { showNotification('Tarama durduruldu', 'info'); if(shutterScanProgressInterval) { clearInterval(shutterScanProgressInterval); shutterScanProgressInterval = null; } setDisplay('btn-stop-shutter-scan', false); }
     }).catch(() => {});
+}
+
+// === SYSTEM ACTIONS ===
+function restartDevice() {
+    showNotification('Cihaz yeniden başlatılıyor...', 'info');
+    post('/restart', {}).then(() => {
+        showNotification('Cihaz yeniden başlatıldı. Sayfa 5 saniye sonra yenilenecek.', 'success');
+        setTimeout(() => location.reload(), 5000);
+    }).catch(e => showNotification('Restart hatası: ' + e, 'error'));
+}
+
+function showFactoryResetConfirm() {
+    $('factory-reset-confirm').style.display = 'block';
+    $('factory-reset-input').value = '';
+    $('factory-reset-input').focus();
+}
+
+function hideFactoryResetConfirm() {
+    $('factory-reset-confirm').style.display = 'none';
+    $('factory-reset-input').value = '';
+}
+
+function confirmFactoryReset() {
+    const input = $('factory-reset-input').value.trim().toLowerCase();
+    if(input !== 'evet') {
+        showNotification('Onay için "Evet" yazmanız gerekiyor!', 'error');
+        return;
+    }
+    showNotification('Factory reset yapılıyor...', 'info');
+    post('/factoryReset', {}).then(() => {
+        showNotification('Factory reset tamamlandı. Cihaz yeniden başlatılıyor...', 'success');
+        setTimeout(() => location.reload(), 10000);
+    }).catch(e => showNotification('Factory reset hatası: ' + e, 'error'));
 }
 )rawliteral";
 

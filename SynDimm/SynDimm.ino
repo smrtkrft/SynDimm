@@ -28,6 +28,7 @@
 
 // Include all modules
 #include <esp_system.h>
+#include <esp_task_wdt.h>
 #include <ESPmDNS.h>
 #include <EEPROM.h>
 #include "SK_config.h"
@@ -56,6 +57,20 @@ void setup() {
   Serial.begin(SERIAL_BAUD_RATE);
   delay(1000);
   
+  // CPU frekansini maksimumda tut (160MHz for ESP32-C6)
+  setCpuFrequencyMhz(160);
+  DEBUG_PRINTF("[STARTUP] CPU Frequency: %d MHz\n", getCpuFrequencyMhz());
+  
+  // Watchdog Timer - 30 saniye timeout (donma durumunda reset)
+  esp_task_wdt_config_t wdt_config = {
+    .timeout_ms = 30000,
+    .idle_core_mask = (1 << 0),
+    .trigger_panic = true
+  };
+  esp_task_wdt_init(&wdt_config);
+  esp_task_wdt_add(NULL);
+  DEBUG_PRINTLN("[STARTUP] Watchdog Timer aktif (30s)");
+  
   // Get chip ID
   uint64_t chipid = ESP.getEfuseMac();
   char chipIDStr[13];
@@ -81,7 +96,6 @@ void setup() {
   initShutter();
 
   // Initialize Safe Lock System
-  EEPROM.begin(8192);  // Initialize EEPROM for Safe Lock (need ~3KB from addr 2048)
   safeLock.begin();
   safeApiHandler.setSafeLock(&safeLock);
   safeLock.setPasswordMatchCallback([](uint8_t pwdIndex) {
@@ -98,15 +112,26 @@ void setup() {
   webServer.setSafeLock(&safeLock);  // Link Safe Lock to web server
   webServer.setSafeApiHandler(&safeApiHandler);  // Link Safe API Handler (ESP32 handles all HTTP)
   
-  // Auto-reconnect based on active mode
+  // Auto-reconnect ALL modes at startup (background connections)
   SystemMode activeMode = modeManager.getActiveMode();
-  DEBUG_PRINTF("[STARTUP] Mode: %s\n", activeMode == MODE_DIMMER ? "DIMMER" : activeMode == MODE_SHUTTER ? "SHUTTER" : "SAFE");
+  DEBUG_PRINTF("[STARTUP] Active Mode: %s\n", activeMode == MODE_DIMMER ? "DIMMER" : activeMode == MODE_SHUTTER ? "SHUTTER" : "SAFE");
   
-  if (activeMode == MODE_DIMMER) {
-    autoReconnect();  // Reconnect to last dimmer
+  // Always try to connect to saved devices (background, read-only for inactive modes)
+  DEBUG_PRINTLN("[STARTUP] Connecting to saved devices...");
+  autoReconnect();        // Dimmer - always try
+  autoReconnectShutter(); // Shutter - always try
+  DEBUG_PRINTLN("[STARTUP] Device connections complete");
+  
+  // İlk OTA kontrolü (WiFi bağlıysa)
+  if (wifi.isConnectedToWiFi()) {
+    DEBUG_PRINTLN("[STARTUP] Checking for updates...");
+    checkForUpdates();  // Sadece kontrol et, otomatik güncelleme yapma
   }
-  // Shutter reconnection will be manual via web interface
 }
+
+// OTA auto-check variables
+static unsigned long lastOTACheck = 0;
+const unsigned long OTA_CHECK_INTERVAL = 60000; // TEST: 1 dakika (production'da 3600000 = 1 saat yapılacak)
 
 void loop() {
   // Handle WiFi status (reconnection & AP mode scanning)
@@ -120,6 +145,12 @@ void loop() {
   
   // Update mode manager (handle timeout)
   modeManager.update();
+  
+  // OTA otomatik güncelleme kontrolü (dakikada bir - test modu)
+  if (wifi.isConnectedToWiFi() && (millis() - lastOTACheck > OTA_CHECK_INTERVAL)) {
+    lastOTACheck = millis();
+    autoUpdateCheck();
+  }
   
   // ========================================
   // MOD İZOLASYONU - Sadece aktif mod güncellenir
@@ -161,6 +192,9 @@ void loop() {
       }
     }
   }
+  
+  // Watchdog'u besle - donma önleme
+  esp_task_wdt_reset();
   
   delay(10);
 }

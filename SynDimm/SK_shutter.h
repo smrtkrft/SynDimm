@@ -107,6 +107,7 @@ struct ShutterConfig {
     int encoderStep;            // 1-5: % change per encoder tick
     ShutterDirection lastDirection;  // Persistent last direction
     int lastPosition;           // Last known position
+    String lastConnectedIP;     // Last connected device IP
 };
 
 // Anonymous namespace to prevent multiple definition
@@ -147,6 +148,8 @@ void setEncoderStep(int step);          // 1-5
 int getEncoderStep();
 void saveShutterConfig();
 void loadShutterConfig();
+void saveShutterLastIP(String ip);
+void autoReconnectShutter();
 
 // Encoder Handlers (called from SK_encoder.h)
 void handleShutterEncoderRotate(int direction);  // +1 = right(down), -1 = left(up)
@@ -198,10 +201,28 @@ void loadShutterConfig() {
     shutterConfig.encoderStep = shutterPrefs.getInt("encoder_step", SHUTTER_DEFAULT_STEP);
     shutterConfig.lastDirection = (ShutterDirection)shutterPrefs.getInt("last_dir", DIRECTION_NONE);
     shutterConfig.lastPosition = shutterPrefs.getInt("last_pos", 0);
+    shutterConfig.lastConnectedIP = shutterPrefs.getString("last_ip", "");
     
     // Validate
     if (shutterConfig.encoderStep < 1 || shutterConfig.encoderStep > 5) {
         shutterConfig.encoderStep = SHUTTER_DEFAULT_STEP;
+    }
+    
+    DEBUG_PRINTF("[SHUTTER] Loaded last IP: %s\n", shutterConfig.lastConnectedIP.c_str());
+}
+
+// Save last connected IP
+void saveShutterLastIP(String ip) {
+    shutterConfig.lastConnectedIP = ip;
+    shutterPrefs.putString("last_ip", ip);
+    DEBUG_PRINTF("[SHUTTER] Saved last IP: %s\n", ip.c_str());
+}
+
+// Auto reconnect to last shutter
+void autoReconnectShutter() {
+    if (shutterConfig.lastConnectedIP.length() > 0) {
+        DEBUG_PRINTF("[SHUTTER] Auto-reconnecting to: %s\n", shutterConfig.lastConnectedIP.c_str());
+        connectToShutter(shutterConfig.lastConnectedIP);
     }
 }
 
@@ -381,7 +402,10 @@ bool connectToShutter(String ip) {
     // Get initial status
     getShutterStatus();
     
-    DEBUG_PRINTF("[SHUTTER] ✓ Connected: %s (Gen%d)\n", shutterDevice.displayName.c_str(), shutterDevice.generation);
+    // Save last connected IP
+    saveShutterLastIP(ip);
+    
+    DEBUG_PRINTF("[SHUTTER] Connected: %s (Gen%d)\n", shutterDevice.displayName.c_str(), shutterDevice.generation);
     return true;
 }
 

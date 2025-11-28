@@ -760,12 +760,26 @@ String generateHTML(String chipID, String version) {
                     <p><strong>OTA Guncelleme:</strong> Info sekmesinden GitHub uzerindeki yeni surumler kontrol edilebilir. Guncelleme mevcut ise tek tikla kablosuz yukleme yapilabilir.</p>
                 </div>
                 
+                <div class="info-section system-actions">
+                    <h3>Sistem Islemleri</h3>
+                    <div class="system-buttons">
+                        <button class="btn-restart" onclick="restartDevice()">Restart</button>
+                        <button class="btn-factory-reset" onclick="showFactoryResetConfirm()">Factory Reset</button>
+                    </div>
+                    <div id="factory-reset-confirm" class="factory-reset-confirm" style="display:none;">
+                        <p>Tum ayarlar silinecek. Onaylamak icin <strong>Evet</strong> yazin:</p>
+                        <input type="text" id="factory-reset-input" placeholder="Evet" autocomplete="off">
+                        <button class="btn-confirm-reset" onclick="confirmFactoryReset()">Onayla</button>
+                        <button class="btn-cancel-reset" onclick="hideFactoryResetConfirm()">Iptal</button>
+                    </div>
+                </div>
+                
                 <div class="info-footer">
-                    <h3>Destek ve Dokümantasyon</h3>
-                    <p>Detaylı kullanım kılavuzu, örnek senaryolar ve güncellemeler için:</p>
+                    <h3>Destek</h3>
+                    <p>Dokümantasyon ve güncellemeler</p>
                     <div class="button-group">
-                        <a href="https://smartkraft.ch/syndimm" target="_blank" class="info-button">SmartKraft.ch</a>
-                        <a href="https://github.com/smrtkrft/SynDimm" target="_blank" class="info-button">GitHub</a>
+                        <a href="https://smartkraft.ch/syndimm" target="_blank" class="info-button">smartkraft.ch</a>
+                        <a href="https://github.com/smrtkrft/SynDimm" target="_blank" class="info-button">github</a>
                     </div>
                 </div>
             </div>

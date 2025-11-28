@@ -19,6 +19,7 @@
 
 #include <WiFi.h>
 #include <Preferences.h>
+#include <esp_wifi.h>
 #include "SK_config.h"
 
 class SKWiFi {
@@ -26,6 +27,8 @@ private:
     String chipID;
     String apSSID;
     Preferences prefs;
+    unsigned long lastKeepAliveTime;
+    static const unsigned long KEEP_ALIVE_INTERVAL = 30000; // 30 saniyede bir kontrol
     
     // Network configuration
     struct NetworkConfig {
@@ -92,6 +95,13 @@ public:
         connectedToWiFi = false;
         apModeActive = false;
         lastScanTime = 0;
+        lastKeepAliveTime = 0;
+    }
+    
+    // WiFi Power Save Mode'u devre dışı bırak - her zaman tam güç
+    void disablePowerSave() {
+        esp_wifi_set_ps(WIFI_PS_NONE);
+        DEBUG_PRINTLN("[WiFi] Power Save Mode DEVRE DISI - Tam performans");
     }
     
     // Get Chip ID (last 6 characters)
@@ -118,6 +128,9 @@ public:
         
         WiFi.mode(WIFI_AP);
         WiFi.softAP(apSSID.c_str()); // No password - open network
+        
+        // Power Save'i devre dışı bırak
+        disablePowerSave();
         
         IPAddress IP = WiFi.softAPIP();
         DEBUG_PRINT("AP IP address: ");
@@ -258,6 +271,9 @@ public:
             DEBUG_PRINT("IP Address: ");
             DEBUG_PRINTLN(WiFi.localIP());
             
+            // Power Save'i devre dışı bırak - her zaman erişilebilir ol
+            disablePowerSave();
+            
             // Start mDNS if configured
             if (network.mdns.length() > 0) {
                 if (MDNS.begin(network.mdns.c_str())) {
@@ -317,28 +333,47 @@ public:
     
     // Check WiFi status and handle reconnection
     void handleWiFi() {
+        unsigned long currentTime = millis();
+        
+        // Keep-alive: Periyodik olarak bağlantıyı kontrol et ve power save'i kapat
+        if (currentTime - lastKeepAliveTime >= KEEP_ALIVE_INTERVAL) {
+            lastKeepAliveTime = currentTime;
+            
+            // Power save hala kapalı mı kontrol et
+            esp_wifi_set_ps(WIFI_PS_NONE);
+            
+            // WiFi bağlantısını zorla kontrol et
+            if (connectedToWiFi && WiFi.status() == WL_CONNECTED) {
+                // Ping benzeri kontrol - RSSI oku
+                int rssi = WiFi.RSSI();
+                if (rssi < -90) {
+                    DEBUG_PRINTF("[WiFi] Zayif sinyal: %d dBm\n", rssi);
+                }
+            }
+        }
+        
         // If connected to WiFi, check if still connected
         if (connectedToWiFi && !apModeActive) {
             if (WiFi.status() != WL_CONNECTED) {
-                DEBUG_PRINTLN("\n⚠ WiFi connection lost!");
+                DEBUG_PRINTLN("\n[WiFi] Baglanti kesildi!");
                 connectedToWiFi = false;
                 
                 // Try to scan and reconnect before starting AP
                 String foundSSID;
                 bool isPrimary;
                 
-                DEBUG_PRINTLN("Attempting to reconnect...");
+                DEBUG_PRINTLN("Yeniden baglaniliyor...");
                 if (scanForSavedNetworks(foundSSID, isPrimary)) {
                     NetworkConfig& network = isPrimary ? primaryNetwork : backupNetwork;
                     
                     if (connectToWiFi(network)) {
-                        DEBUG_PRINTLN("[OK] Reconnected to " + foundSSID);
+                        DEBUG_PRINTLN("[OK] Yeniden baglandi: " + foundSSID);
                         return;
                     }
                 }
                 
                 // Could not reconnect - Start AP Mode
-                DEBUG_PRINTLN("Could not reconnect - Starting AP Mode");
+                DEBUG_PRINTLN("Baglanilamadi - AP Mode baslatiliyor");
                 setupAP();
                 lastScanTime = millis();
             }
@@ -347,9 +382,9 @@ public:
         
         // If in AP Mode, periodically scan for saved networks
         if (apModeActive) {
-            if (millis() - lastScanTime >= WIFI_SCAN_INTERVAL_MS) {
-                DEBUG_PRINTLN("\n[AP Mode] Checking for saved networks...");
-                lastScanTime = millis();
+            if (currentTime - lastScanTime >= WIFI_SCAN_INTERVAL_MS) {
+                DEBUG_PRINTLN("\n[AP Mode] Kayitli aglar araniyor...");
+                lastScanTime = currentTime;
                 
                 String foundSSID;
                 bool isPrimary;
@@ -358,7 +393,7 @@ public:
                     NetworkConfig& network = isPrimary ? primaryNetwork : backupNetwork;
                     
                     if (connectToWiFi(network)) {
-                        DEBUG_PRINTLN("[OK] Connected to WiFi - Closing AP Mode");
+                        DEBUG_PRINTLN("[OK] WiFi baglandi - AP Mode kapatiliyor");
                         WiFi.softAPdisconnect(true);
                         apModeActive = false;
                         return;

@@ -23,6 +23,7 @@
 
 #include <Arduino.h>
 #include <EEPROM.h>
+#include <Preferences.h>
 #include "SK_config.h"
 
 // ==================== YAPILANDIRMA ====================
@@ -224,9 +225,10 @@ struct __attribute__((packed)) SafeEEPROMConfig {
 
 class SafeLock {
 private:
-  // EEPROM Konfigürasyonu
+  // Konfigürasyon
   SafeEEPROMConfig config;
-  bool eepromInitialized;
+  bool initialized;
+  Preferences safePrefs;
   
   // Sliding window buffer - son 8 hareket
   SafeMovement moveBuffer[SAFE_MOVEMENT_BUFFER_SIZE];
@@ -358,55 +360,75 @@ private:
   }
   
 public:
-  SafeLock() : eepromInitialized(false), bufferCount(0), 
+  SafeLock() : initialized(false), bufferCount(0), 
                currentDirection(0), currentTicks(0), movementStarted(false),
                onPasswordMatchCallback(nullptr) {}
   
-  // Başlat (EEPROM'dan yükle)
+  // Başlat (Preferences'dan yükle)
   void begin() {
     DEBUG_PRINTLN("[SafeLock] Baslatiliyor...");
-    DEBUG_PRINTF("[SafeLock] Config size: %d bytes\n", sizeof(SafeEEPROMConfig));
     
-    // EEPROM'dan yükle
-    EEPROM.get(SAFE_EEPROM_START, config);
+    safePrefs.begin("safelock", false);
     
-    DEBUG_PRINTF("[SafeLock] Magic: 0x%04X (beklenen: 0x%04X)\n", config.magicNumber, SAFE_EEPROM_MAGIC);
-    DEBUG_PRINTF("[SafeLock] Checksum valid: %d\n", config.isChecksumValid());
-    
-    if (!config.isValid()) {
-      DEBUG_PRINTLN("[SafeLock] EEPROM gecersiz, varsayilan degerler...");
-      config = SafeEEPROMConfig();
-      saveToEEPROM();
-    } else {
-      DEBUG_PRINTLN("[SafeLock] EEPROM'dan yuklendi:");
-      for (uint8_t i = 0; i < SAFE_MAX_PASSWORDS; i++) {
-        if (config.passwords[i].isActive) {
-          DEBUG_PRINTF("[SafeLock] Sifre #%d: %s (API enabled: %d, URL: %s)\n", 
-                       i, config.passwords[i].toString().c_str(),
-                       config.apiConfigs[i].enabled, config.apiConfigs[i].url);
-        }
+    // Her şifre için ayarları yükle
+    for (uint8_t i = 0; i < SAFE_MAX_PASSWORDS; i++) {
+      String keyPwd = "pwd" + String(i);
+      String keyActive = "active" + String(i);
+      String keyApiEnabled = "apiEn" + String(i);
+      String keyApiUrl = "apiUrl" + String(i);
+      String keyApiHeader = "apiHdr" + String(i);
+      String keyApiMethod = "apiMth" + String(i);
+      
+      String pwdStr = safePrefs.getString(keyPwd.c_str(), "");
+      config.passwords[i].isActive = safePrefs.getBool(keyActive.c_str(), false);
+      config.apiConfigs[i].enabled = safePrefs.getBool(keyApiEnabled.c_str(), false);
+      
+      String url = safePrefs.getString(keyApiUrl.c_str(), "");
+      String header = safePrefs.getString(keyApiHeader.c_str(), "");
+      url.toCharArray(config.apiConfigs[i].url, SAFE_API_URL_MAX);
+      header.toCharArray(config.apiConfigs[i].header, SAFE_API_HEADER_MAX);
+      config.apiConfigs[i].method = (SafeHttpMethod)safePrefs.getInt(keyApiMethod.c_str(), SAFE_HTTP_GET);
+      
+      // Şifreyi parse et
+      if (pwdStr.length() > 0) {
+        config.passwords[i].fromString(pwdStr);
+      }
+      
+      if (config.passwords[i].isActive || pwdStr.length() > 0) {
+        DEBUG_PRINTF("[SafeLock] Sifre #%d: %s (active=%d, apiEnabled=%d, url=%s)\n", 
+                     i, pwdStr.c_str(), config.passwords[i].isActive,
+                     config.apiConfigs[i].enabled, config.apiConfigs[i].url);
       }
     }
     
-    eepromInitialized = true;
+    initialized = true;
     clearBuffer();
     resetCurrentMovement();
+    DEBUG_PRINTLN("[SafeLock] Baslatma tamamlandi");
   }
   
-  // EEPROM'a kaydet
+  // Preferences'a kaydet
   bool saveToEEPROM() {
-    if (!eepromInitialized) return false;
+    if (!initialized) return false;
     
-    config.updateChecksum();
-    EEPROM.put(SAFE_EEPROM_START, config);
-    
-    if (EEPROM.commit()) {
-      DEBUG_PRINTLN("[SafeLock] EEPROM'a kaydedildi");
-      return true;
-    } else {
-      DEBUG_PRINTLN("[SafeLock] EEPROM kaydetme HATASI!");
-      return false;
+    for (uint8_t i = 0; i < SAFE_MAX_PASSWORDS; i++) {
+      String keyPwd = "pwd" + String(i);
+      String keyActive = "active" + String(i);
+      String keyApiEnabled = "apiEn" + String(i);
+      String keyApiUrl = "apiUrl" + String(i);
+      String keyApiHeader = "apiHdr" + String(i);
+      String keyApiMethod = "apiMth" + String(i);
+      
+      safePrefs.putString(keyPwd.c_str(), config.passwords[i].toString());
+      safePrefs.putBool(keyActive.c_str(), config.passwords[i].isActive);
+      safePrefs.putBool(keyApiEnabled.c_str(), config.apiConfigs[i].enabled);
+      safePrefs.putString(keyApiUrl.c_str(), String(config.apiConfigs[i].url));
+      safePrefs.putString(keyApiHeader.c_str(), String(config.apiConfigs[i].header));
+      safePrefs.putInt(keyApiMethod.c_str(), config.apiConfigs[i].method);
     }
+    
+    DEBUG_PRINTLN("[SafeLock] Preferences'a kaydedildi");
+    return true;
   }
   
   // Buffer'ı temizle
@@ -467,10 +489,18 @@ public:
   }
   
   // Şifre ayarla (web arayüzünden)
-  bool setPassword(uint8_t index, const String& passwordStr, const SafeApiConfig& apiConfig) {
+  bool setPassword(uint8_t index, const String& passwordStr, const SafeApiConfig& apiConfig, bool isActive = true) {
     if (index >= SAFE_MAX_PASSWORDS) return false;
     
-    DEBUG_PRINTF("[SafeLock] setPassword: index=%d, password=%s\n", index, passwordStr.c_str());
+    DEBUG_PRINTF("[SafeLock] setPassword: index=%d, password=%s, active=%d\n", index, passwordStr.c_str(), isActive);
+    
+    // Boş şifre gelirse sadece API config ve active durumunu güncelle
+    if (passwordStr.length() == 0) {
+      config.passwords[index].isActive = isActive;
+      config.apiConfigs[index] = apiConfig;
+      DEBUG_PRINTF("[SafeLock] Sifre #%d sadece durum guncellendi: active=%d\n", index, isActive);
+      return saveToEEPROM();
+    }
     
     SafePassword newPwd;
     if (!newPwd.fromString(passwordStr)) {
@@ -479,10 +509,10 @@ public:
     }
     
     config.passwords[index] = newPwd;
-    config.passwords[index].isActive = true;
+    config.passwords[index].isActive = isActive;
     config.apiConfigs[index] = apiConfig;
     
-    DEBUG_PRINTF("[SafeLock] Sifre #%d ayarlandi: %s\n", index, passwordStr.c_str());
+    DEBUG_PRINTF("[SafeLock] Sifre #%d ayarlandi: %s (active=%d)\n", index, passwordStr.c_str(), isActive);
     DEBUG_PRINTF("[SafeLock] API enabled: %d, URL: %s\n", apiConfig.enabled, apiConfig.url);
     
     return saveToEEPROM();

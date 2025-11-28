@@ -299,7 +299,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
     .info-section h3 { font-size: 1.05em; }
     .info-section p { font-size: 0.9em; }
     .button-group { flex-direction: column; gap: 15px; }
-    .info-button { width: 100%; text-align: center; }
+    .info-button { flex: 1; min-width: 140px; justify-content: center; }
     .ap-step-flow { flex-direction: column; align-items: stretch; }
     .ap-arrow { transform: rotate(90deg); text-align: center; }
 }
@@ -525,6 +525,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .btn-save-main { padding: 15px 50px; background: linear-gradient(135deg, var(--color-info), var(--color-success)); color: var(--text-primary); border: none; border-radius: var(--radius-lg); font-size: 1.1em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3); }
 .btn-save-main:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4); }
 .btn-save-main:active { transform: translateY(0); }
+
+/* System Actions (Restart & Factory Reset) */
+.system-actions { text-align: center; }
+.system-buttons { display: flex; justify-content: center; gap: 20px; margin-top: 15px; }
+.btn-restart { padding: 12px 30px; background: #ffffff; color: #000000; border: none; border-radius: var(--radius-md); font-size: 1em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); }
+.btn-restart:hover { background: #e0e0e0; transform: translateY(-2px); }
+.btn-factory-reset { padding: 12px 30px; background: #ef4444; color: #000000; border: none; border-radius: var(--radius-md); font-size: 1em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); }
+.btn-factory-reset:hover { background: #dc2626; transform: translateY(-2px); }
+.factory-reset-confirm { margin-top: 20px; padding: 15px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); }
+.factory-reset-confirm p { margin-bottom: 10px; color: var(--text-primary); }
+.factory-reset-confirm input { padding: 10px 15px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-tertiary); color: var(--text-primary); margin-right: 10px; width: 120px; }
+.btn-confirm-reset { padding: 10px 20px; background: #ef4444; color: #000000; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; margin-right: 10px; }
+.btn-confirm-reset:hover { background: #dc2626; }
+.btn-cancel-reset { padding: 10px 20px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer; }
+.btn-cancel-reset:hover { background: var(--bg-secondary); }
 
 )rawliteral";
 

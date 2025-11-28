@@ -616,6 +616,7 @@ private:
             pwd["apiEnabled"] = apiConfig.enabled;
             pwd["apiUrl"] = String(apiConfig.url);
             pwd["apiMethod"] = apiConfig.method == SAFE_HTTP_POST ? "POST" : "GET";
+            pwd["apiHeader"] = String(apiConfig.header);
         }
         
         String output;
@@ -672,7 +673,7 @@ private:
         apiBody.toCharArray(apiConfig.body, SAFE_API_BODY_MAX);
         apiConfig.enabled = apiEnabled;
         
-        bool success = safeLockPtr->setPassword(index, password, apiConfig);
+        bool success = safeLockPtr->setPassword(index, password, apiConfig, pwdEnabled);
         
         if (success) {
             server->send(200, "application/json", "{\"success\":true,\"message\":\"Password saved\"}");
@@ -721,6 +722,57 @@ private:
         } else {
             server->send(200, "application/json", "{\"success\":false,\"message\":\"API test basarisiz\"}");
         }
+    }
+    
+    // System Actions
+    void handleRestart() {
+        server->send(200, "application/json", "{\"success\":true,\"message\":\"Restarting...\"}");
+        delay(500);
+        ESP.restart();
+    }
+    
+    void handleFactoryReset() {
+        DEBUG_PRINTLN("[FACTORY RESET] Starting factory reset...");
+        
+        // 1. WiFi ayarlarını sil
+        Preferences wifiPrefs;
+        wifiPrefs.begin(PREFS_NAMESPACE, false);
+        wifiPrefs.clear();
+        wifiPrefs.end();
+        DEBUG_PRINTLN("[FACTORY RESET] WiFi settings cleared");
+        
+        // 2. Dimmer ayarlarını sil
+        Preferences dimmerPrefs;
+        dimmerPrefs.begin("dimmer-settings", false);
+        dimmerPrefs.clear();
+        dimmerPrefs.end();
+        DEBUG_PRINTLN("[FACTORY RESET] Dimmer settings cleared");
+        
+        // 3. Shutter ayarlarını sil
+        Preferences shutterPrefs;
+        shutterPrefs.begin("shutter", false);
+        shutterPrefs.clear();
+        shutterPrefs.end();
+        DEBUG_PRINTLN("[FACTORY RESET] Shutter settings cleared");
+        
+        // 4. Mode manager ayarlarını sil
+        Preferences modePrefs;
+        modePrefs.begin("mode", false);
+        modePrefs.clear();
+        modePrefs.end();
+        DEBUG_PRINTLN("[FACTORY RESET] Mode settings cleared");
+        
+        // 5. Safe Lock ayarlarını sil
+        Preferences safePrefs;
+        safePrefs.begin("safelock", false);
+        safePrefs.clear();
+        safePrefs.end();
+        DEBUG_PRINTLN("[FACTORY RESET] Safe Lock settings cleared");
+        
+        server->send(200, "application/json", "{\"success\":true,\"message\":\"Factory reset complete. Restarting...\"}");
+        
+        delay(1000);
+        ESP.restart();
     }
     
     // Static wrapper functions for server callbacks
@@ -916,6 +968,18 @@ private:
         }
     }
     
+    static void handleRestartStatic() {
+        if (instance) {
+            instance->handleRestart();
+        }
+    }
+    
+    static void handleFactoryResetStatic() {
+        if (instance) {
+            instance->handleFactoryReset();
+        }
+    }
+    
 public:
     SKWebServer() {
         server = new WebServer(WEB_SERVER_PORT);
@@ -990,6 +1054,10 @@ public:
         server->on("/saveSafePassword", HTTP_POST, handleSetSafePasswordStatic);
         server->on("/setSafePassword", HTTP_POST, handleSetSafePasswordStatic);
         server->on("/testSafeApi", HTTP_POST, handleTestSafeApiStatic);
+        
+        // System action routes
+        server->on("/restart", HTTP_POST, handleRestartStatic);
+        server->on("/factoryReset", HTTP_POST, handleFactoryResetStatic);
         
         server->onNotFound(handleNotFoundStatic);
         

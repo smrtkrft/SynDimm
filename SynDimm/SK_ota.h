@@ -195,7 +195,7 @@ bool checkForUpdates() {
         DEBUG_PRINTLN("[OTA] Already on latest version");
     }
     
-    return otaInfo.updateAvailable;
+    return true; // Kontrol başarılı (güncelleme olsun veya olmasın)
 }
 
 // Perform OTA update
@@ -310,6 +310,7 @@ bool performOTAUpdate() {
 String getOTASettingsJSON() {
     JsonDocument doc;
     
+    doc["success"] = true;
     doc["currentVersion"] = otaInfo.currentVersion;
     doc["latestVersion"] = otaInfo.latestVersion;
     doc["updateAvailable"] = otaInfo.updateAvailable;
@@ -335,15 +336,17 @@ void saveOTASettings(bool autoUpdate) {
 
 // Auto-update check (called periodically)
 void autoUpdateCheck() {
-    if (!otaInfo.autoUpdateEnabled) {
-        return;
-    }
+    DEBUG_PRINTLN("[OTA] Periodic update check...");
     
-    DEBUG_PRINTLN("[OTA] Auto-update check...");
-    
-    if (checkForUpdates()) {
-        DEBUG_PRINTLN("[OTA] New version found! Starting auto-update...");
-        performOTAUpdate();
+    // Önce güncelleme kontrolü yap
+    if (checkForUpdates() && otaInfo.updateAvailable) {
+        // Sadece otomatik güncelleme açıksa güncelle
+        if (otaInfo.autoUpdateEnabled) {
+            DEBUG_PRINTLN("[OTA] New version found! Starting auto-update...");
+            performOTAUpdate();
+        } else {
+            DEBUG_PRINTLN("[OTA] New version found! Auto-update disabled, waiting for manual update.");
+        }
     }
 }
 
