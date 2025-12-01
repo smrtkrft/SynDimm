@@ -1,7 +1,7 @@
 /**
  * SK_ota.h
  * SmartKraft SynDimm - GitHub OTA Update System
- * Version: v1.0.1
+ * Version: v1.0.2
  * 
  * ========================================
  * GitHub OTA Update Features:
@@ -31,7 +31,7 @@
 #define GITHUB_API_URL "https://api.github.com/repos/" GITHUB_REPO_OWNER "/" GITHUB_REPO_NAME "/releases/latest"
 
 // Current firmware version
-#define CURRENT_VERSION "v1.0.1"
+#define CURRENT_VERSION "v1.0.2"
 
 // OTA Status
 enum OTAStatus {
@@ -390,6 +390,71 @@ void saveOTASettings(bool autoUpdate) {
     DEBUG_PRINTF("[OTA] Auto-update set to: %s\n", autoUpdate ? "Enabled" : "Disabled");
 }
 
+// ========================================
+// OTA ZAMANLAMA SİSTEMİ (Restart'a Dayanıklı)
+// ========================================
+
+// Sonraki OTA kontrol zamanını hesapla ve kaydet (24-48 saat arası)
+unsigned long scheduleNextOTACheck() {
+    const unsigned long BASE_INTERVAL = 24UL * 60UL * 60UL * 1000UL;  // 24 saat
+    const unsigned long RANDOM_MAX = 24UL * 60UL * 60UL * 1000UL;     // +0-24 saat random
+    unsigned long randomOffset = random(0, RANDOM_MAX);
+    unsigned long interval = BASE_INTERVAL + randomOffset;
+    
+    // Interval ve planlama zamanını kaydet
+    otaPrefs.putULong("ota_interval", interval);
+    otaPrefs.putULong("scheduled_at", millis());
+    
+    DEBUG_PRINTF("[OTA] Sonraki kontrol: %lu saat %lu dakika sonra\n", 
+                 interval / 3600000UL, (interval % 3600000UL) / 60000UL);
+    
+    return interval;
+}
+
+// Kalan süreyi hesapla (restart sonrası devam için)
+unsigned long getRemainingOTATime() {
+    unsigned long scheduledInterval = otaPrefs.getULong("ota_interval", 0);
+    unsigned long scheduledAt = otaPrefs.getULong("scheduled_at", 0);
+    
+    if (scheduledInterval == 0 || scheduledAt == 0) {
+        // Hiç planlanmamış, yeni hesapla
+        DEBUG_PRINTLN("[OTA] Zamanlanmis kontrol yok, yeni hesaplaniyor...");
+        return scheduleNextOTACheck();
+    }
+    
+    unsigned long currentUptime = millis();
+    
+    // Restart olmuş mu kontrol et (uptime küçükse restart olmuştur)
+    if (currentUptime < scheduledAt) {
+        // Restart olmuş - scheduledAt eski millis değeri, şimdi sıfırdan başladık
+        // Kalan süre = toplam interval - (restart öncesi geçen süre)
+        // Ama scheduledAt'ı bilmiyoruz, sadece interval'ı biliyoruz
+        // Bu durumda interval'dan currentUptime çıkar
+        if (currentUptime < scheduledInterval) {
+            unsigned long remaining = scheduledInterval - currentUptime;
+            if (remaining > 0 && remaining < 48UL * 60UL * 60UL * 1000UL) {
+                DEBUG_PRINTF("[OTA] Restart sonrasi, kalan sure: %lu saat %lu dakika\n",
+                            remaining / 3600000UL, (remaining % 3600000UL) / 60000UL);
+                return remaining;
+            }
+        }
+    } else {
+        // Normal çalışma - restart olmamış
+        unsigned long elapsedSinceSchedule = currentUptime - scheduledAt;
+        if (elapsedSinceSchedule < scheduledInterval) {
+            unsigned long remaining = scheduledInterval - elapsedSinceSchedule;
+            DEBUG_PRINTF("[OTA] Kalan sure: %lu saat %lu dakika\n",
+                        remaining / 3600000UL, (remaining % 3600000UL) / 60000UL);
+            return remaining;
+        }
+    }
+    
+    // Süre geçmiş veya geçersiz, yeni hesapla
+    DEBUG_PRINTLN("[OTA] Sure gecmis veya gecersiz, yeni hesaplaniyor...");
+    return scheduleNextOTACheck();
+    return scheduleNextOTACheck();
+}
+
 // Auto-update check (called periodically)
 void autoUpdateCheck() {
     DEBUG_PRINTLN("[OTA] Periodic update check...");
@@ -404,6 +469,9 @@ void autoUpdateCheck() {
             DEBUG_PRINTLN("[OTA] New version found! Auto-update disabled, waiting for manual update.");
         }
     }
+    
+    // Kontrol sonrası yeni süre planla
+    scheduleNextOTACheck();
 }
 
 #endif // SK_OTA_H
