@@ -113,7 +113,7 @@ private:
         leftCount = 0;
       }
       lastDirection = 'R';
-      rightCount++;
+      rightCount = rightCount + 1;
       debugPending = true;
       encoderPosition = 0;
     } else if (encoderPosition <= -STEPS_PER_DETENT) {
@@ -123,7 +123,7 @@ private:
         rightCount = 0;
       }
       lastDirection = 'L';
-      leftCount++;
+      leftCount = leftCount + 1;
       debugPending = true;
       encoderPosition = 0;
     }
@@ -153,7 +153,7 @@ public:
   // Custom constructor - for manual pin assignment
   SKEncoder(uint8_t clk, uint8_t dt, uint8_t sw) 
     : clkPin(clk), dtPin(dt), swPin(sw), 
-      lastInterruptTime(0), lastButtonTime(0), buttonPressTime(0),
+      lastButtonTime(0), buttonPressTime(0),
       bufferWriteIndex(0), bufferReadIndex(0),
       lastDirection(0), buttonWasPressed(false),
       encoderState(0), encoderPosition(0),

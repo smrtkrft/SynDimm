@@ -39,6 +39,9 @@
 #define SAFE_API_HEADER_MAX 64          // Maksimum header uzunluğu
 #define SAFE_API_BODY_MAX 128           // Maksimum body uzunluğu
 
+// EEPROM Magic Number (validasyon için)
+#define SAFE_EEPROM_MAGIC 0x5AFE        // "SAFE" benzeri hex değer
+
 // ==================== VERI YAPILARI ====================
 
 // HTTP Method
