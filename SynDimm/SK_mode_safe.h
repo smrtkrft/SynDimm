@@ -36,7 +36,7 @@
 
 // API Konfigürasyon Limitleri
 #define SAFE_API_URL_MAX 128            // Maksimum URL uzunluğu
-#define SAFE_API_HEADER_MAX 64          // Maksimum header uzunluğu
+#define SAFE_API_HEADER_MAX 256         // Maksimum header uzunluğu (multiple headers: "Header1: Value1; Header2: Value2")
 #define SAFE_API_BODY_MAX 128           // Maksimum body uzunluğu
 
 // EEPROM Magic Number (validasyon için)

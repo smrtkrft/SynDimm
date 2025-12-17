@@ -63,16 +63,34 @@ private:
       return SAFE_API_ERROR;
     }
     
-    // Custom header
+    // Custom headers (supports multiple semicolon-separated headers: "Header1: Value1; Header2: Value2")
     if (strlen(apiConfig.header) > 0) {
       String headerStr = String(apiConfig.header);
-      int colonPos = headerStr.indexOf(':');
-      if (colonPos > 0) {
-        String headerName = headerStr.substring(0, colonPos);
-        String headerValue = headerStr.substring(colonPos + 1);
-        headerName.trim();
-        headerValue.trim();
-        http.addHeader(headerName, headerValue);
+      int startPos = 0;
+
+      while (startPos < headerStr.length()) {
+        int semicolonPos = headerStr.indexOf(';', startPos);
+        String singleHeader;
+
+        if (semicolonPos == -1) {
+          singleHeader = headerStr.substring(startPos);
+          startPos = headerStr.length();
+        } else {
+          singleHeader = headerStr.substring(startPos, semicolonPos);
+          startPos = semicolonPos + 1;
+        }
+
+        singleHeader.trim();
+        int colonPos = singleHeader.indexOf(':');
+        if (colonPos > 0) {
+          String headerName = singleHeader.substring(0, colonPos);
+          String headerValue = singleHeader.substring(colonPos + 1);
+          headerName.trim();
+          headerValue.trim();
+          if (headerName.length() > 0 && headerValue.length() > 0) {
+            http.addHeader(headerName, headerValue);
+          }
+        }
       }
     }
     
