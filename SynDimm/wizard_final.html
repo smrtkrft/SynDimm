@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>SynDimm - Kurulum</title>
+    <style>
+        /* ========================================
+           CSS RESET & BASE
+        ======================================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #f5f5f7;
+            color: #1d1d1f;
+            min-height: 100vh;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        /* ========================================
+           WIZARD CONTAINER
+        ======================================== */
+        .wizard-container {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* ========================================
+           HEADER
+        ======================================== */
+        .wizard-header {
+            text-align: center;
+            padding: 20px 0 30px;
+        }
+        
+        .logo {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1d1d1f;
+            letter-spacing: -0.3px;
+        }
+        
+        .logo-sub {
+            font-size: 11px;
+            color: #86868b;
+            margin-top: 2px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        
+        /* ========================================
+           PROGRESS INDICATOR
+        ======================================== */
+        .progress-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .step-counter {
+            font-size: 13px;
+            color: #86868b;
+            font-weight: 500;
+        }
+        
+        .step-dots {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 4px;
+            background: #d2d2d7;
+            transition: all 0.4s ease;
+        }
+        
+        .dot.active {
+            width: 28px;
+            background: #0071e3;
+        }
+        
+        .dot.completed {
+            background: #34c759;
+        }
+        
+        /* ========================================
+           CARD
+        ======================================== */
+        .wizard-card {
+            background: white;
+            border-radius: 18px;
+            padding: 32px 28px;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.06);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* ========================================
+           STEP CONTENT
+        ======================================== */
+        .step-content {
+            display: none;
+            flex-direction: column;
+            flex: 1;
+            animation: fadeIn 0.4s ease;
+        }
+        
+        .step-content.active {
+            display: flex;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+        }
+        
+        .step-header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+        
+        .step-icon {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #0071e3, #40a9ff);
+            border-radius: 16px;
+            margin: 0 auto 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .step-icon svg {
+            width: 28px;
+            height: 28px;
+            fill: white;
+        }
+        
+        .step-title {
+            font-size: 26px;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+        
+        .step-description {
+            font-size: 15px;
+            color: #86868b;
+            max-width: 320px;
+            margin: 0 auto;
+        }
+        
+        .step-body {
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        /* ========================================
+           INFO BOX
+        ======================================== */
+        .info-box {
+            background: #f5f5f7;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .info-box-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 6px;
+        }
+        
+        .info-box-text {
+            font-size: 13px;
+            color: #86868b;
+            line-height: 1.5;
+        }
+        
+        /* ========================================
+           FORM ELEMENTS
+        ======================================== */
+        .form-section {
+            margin-bottom: 24px;
+        }
+        
+        .form-section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #86868b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            padding-left: 4px;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: #1d1d1f;
+            margin-bottom: 8px;
+            padding-left: 4px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 14px 16px;
+            background: #f5f5f7;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            color: #1d1d1f;
+            transition: all 0.2s ease;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            background: #ebebed;
+            box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.15);
+        }
+        
+        .form-input::placeholder {
+            color: #86868b;
+        }
+        
+        .form-hint {
+            font-size: 12px;
+            color: #86868b;
+            margin-top: 6px;
+            padding-left: 4px;
+        }
+        
+        /* ========================================
+           TOGGLE SWITCH
+        ======================================== */
+        .toggle-list {
+            background: #f5f5f7;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .toggle-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .toggle-item:last-child {
+            border-bottom: none;
+        }
+        
+        .toggle-label {
+            font-size: 15px;
+            color: #1d1d1f;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            width: 51px;
+            height: 31px;
+            flex-shrink: 0;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #e9e9eb;
+            transition: 0.3s;
+            border-radius: 31px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 27px;
+            width: 27px;
+            left: 2px;
+            bottom: 2px;
+            background: white;
+            transition: 0.3s;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .toggle-switch input:checked + .toggle-slider {
+            background: #34c759;
+        }
+        
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+        
+        /* ========================================
+           NUMBER INPUT
+        ======================================== */
+        .number-input-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #f5f5f7;
+            border-radius: 12px;
+            padding: 8px 12px;
+        }
+        
+        .number-btn {
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: white;
+            border-radius: 10px;
+            font-size: 20px;
+            color: #0071e3;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s ease;
+        }
+        
+        .number-btn:hover {
+            background: #0071e3;
+            color: white;
+        }
+        
+        .number-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .number-value {
+            flex: 1;
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+        
+        .number-unit {
+            font-size: 14px;
+            color: #86868b;
+            font-weight: 400;
+        }
+        
+        /* ========================================
+           SUMMARY LIST
+        ======================================== */
+        .summary-list {
+            background: #f5f5f7;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .summary-item:last-child {
+            border-bottom: none;
+        }
+        
+        .summary-label {
+            font-size: 14px;
+            color: #86868b;
+        }
+        
+        .summary-value {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1d1d1f;
+        }
+        
+        .summary-value.success {
+            color: #34c759;
+        }
+        
+        .summary-value.warning {
+            color: #ff9500;
+        }
+        
+        .summary-value.error {
+            color: #ff3b30;
+        }
+        
+        /* ========================================
+           OTA STATUS
+        ======================================== */
+        .ota-status {
+            text-align: center;
+            padding: 30px 20px;
+            margin-bottom: 24px;
+        }
+        
+        .ota-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #34c759, #30d158);
+            border-radius: 50%;
+            margin: 0 auto 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .ota-icon svg {
+            width: 32px;
+            height: 32px;
+            fill: white;
+        }
+        
+        .ota-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 4px;
+        }
+        
+        .ota-version {
+            font-size: 14px;
+            color: #86868b;
+        }
+        
+        /* ========================================
+           BUTTONS
+        ======================================== */
+        .button-container {
+            display: flex;
+            gap: 12px;
+            margin-top: auto;
+            padding-top: 24px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 16px 20px;
+            border: none;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        
+        .btn:active {
+            transform: scale(0.98);
+        }
+        
+        .btn-primary {
+            background: #0071e3;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #0077ed;
+        }
+        
+        .btn-secondary {
+            background: #f5f5f7;
+            color: #1d1d1f;
+        }
+        
+        .btn-secondary:hover {
+            background: #ebebed;
+        }
+        
+        .btn-skip {
+            background: transparent;
+            color: #86868b;
+            flex: 0.7;
+        }
+        
+        .btn-skip:hover {
+            color: #1d1d1f;
+        }
+        
+        .btn-success {
+            background: #34c759;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #30d158;
+        }
+        
+        .btn-icon {
+            font-size: 14px;
+        }
+        
+        /* Three button layout */
+        .button-container.three-buttons {
+            flex-wrap: wrap;
+        }
+        
+        .button-container.three-buttons .btn-secondary {
+            flex: 0 0 100%;
+            order: 3;
+            margin-top: 8px;
+            background: transparent;
+            color: #86868b;
+        }
+        
+        /* ========================================
+           RESPONSIVE
+        ======================================== */
+        @media (max-width: 480px) {
+            .wizard-container {
+                padding: 16px;
+            }
+            
+            .wizard-card {
+                padding: 24px 20px;
+                border-radius: 16px;
+            }
+            
+            .step-title {
+                font-size: 22px;
+            }
+            
+            .step-description {
+                font-size: 14px;
+            }
+        }
+        
+        /* ========================================
+           LOADING STATE
+        ======================================== */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: #86868b;
+            padding: 20px;
+        }
+        
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e9e9eb;
+            border-top-color: #0071e3;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="wizard-container">
+        <!-- Header -->
+        <div class="wizard-header">
+            <div class="logo">SmartKraft SynDimm</div>
+            <div class="logo-sub">Kurulum Sihirbazı</div>
+        </div>
+        
+        <!-- Progress -->
+        <div class="progress-container">
+            <span class="step-counter" id="stepCounter">1 / 6</span>
+            <div class="step-dots" id="stepDots">
+                <div class="dot active" data-step="1"></div>
+                <div class="dot" data-step="2"></div>
+                <div class="dot" data-step="3"></div>
+                <div class="dot" data-step="4"></div>
+                <div class="dot" data-step="5"></div>
+                <div class="dot" data-step="6"></div>
+            </div>
+        </div>
+        
+        <!-- Card -->
+        <div class="wizard-card">
+            
+            <!-- STEP 1: Welcome -->
+            <div class="step-content active" data-step="1">
+                <div class="step-header">
+                    <div class="step-icon">
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                    </div>
+                    <h1 class="step-title">Hoş Geldiniz</h1>
+                    <p class="step-description">SmartKraft SynDimm cihazınızı kullanmaya başlamadan önce birkaç basit ayar yapmanız gerekiyor.</p>
+                </div>
+                
+                <div class="step-body">
+                    <div class="info-box">
+                        <div class="info-box-title">Bu kurulum neler içeriyor?</div>
+                        <div class="info-box-text">WiFi bağlantısı, mod ayarları ve güncelleme kontrolü adımlarını tamamlayacaksınız. Kurulum yaklaşık 2-3 dakika sürecektir.</div>
+                    </div>
+                    
+                    <div class="info-box">
+                        <div class="info-box-title">Daha sonra değiştirebilir miyim?</div>
+                        <div class="info-box-text">Evet, tüm ayarları kurulum tamamlandıktan sonra ayarlar menüsünden değiştirebilirsiniz. İstediğiniz adımları atlayabilirsiniz.</div>
+                    </div>
+                </div>
+                
+                <div class="button-container">
+                    <button class="btn btn-primary" onclick="nextStep()">
+                        Başlayalım
+                        <span class="btn-icon">→</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- STEP 2: WiFi Settings -->
+            <div class="step-content" data-step="2">
+                <div class="step-header">
+                    <div class="step-icon">
+                        <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+                    </div>
+                    <h1 class="step-title">WiFi Ayarları</h1>
+                    <p class="step-description">Cihazınızı kablosuz ağınıza bağlayın</p>
+                </div>
+                
+                <div class="step-body">
+                    <!-- Primary WiFi -->
+                    <div class="form-section">
+                        <div class="form-section-title">Birincil Ağ</div>
+                        <div class="form-group">
+                            <label class="form-label">Ağ Adı (SSID)</label>
+                            <input type="text" class="form-input" id="primarySSID" placeholder="WiFi ağ adını girin">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Şifre</label>
+                            <input type="password" class="form-input" id="primaryPass" placeholder="WiFi şifresini girin">
+                        </div>
+                    </div>
+                    
+                    <!-- Backup WiFi -->
+                    <div class="form-section">
+                        <div class="form-section-title">Yedek Ağ (Opsiyonel)</div>
+                        <div class="form-group">
+                            <label class="form-label">Ağ Adı (SSID)</label>
+                            <input type="text" class="form-input" id="backupSSID" placeholder="Yedek WiFi ağ adı">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Şifre</label>
+                            <input type="password" class="form-input" id="backupPass" placeholder="Yedek WiFi şifresi">
+                        </div>
+                        <div class="form-hint">Birincil ağa bağlanılamazsa yedek ağ kullanılır.</div>
+                    </div>
+                </div>
+                
+                <div class="button-container">
+                    <button class="btn btn-secondary" onclick="prevStep()">
+                        <span class="btn-icon">←</span>
+                        Geri
+                    </button>
+                    <button class="btn btn-primary" onclick="nextStep()">
+                        Devam
+                        <span class="btn-icon">→</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- STEP 3: Dimmer Mode -->
+            <div class="step-content" data-step="3">
+                <div class="step-header">
+                    <div class="step-icon">
+                        <svg viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7zm2.85 11.1l-.85.6V16h-4v-2.3l-.85-.6C7.8 12.16 7 10.63 7 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.63-.8 3.16-2.15 4.1z"/></svg>
+                    </div>
+                    <h1 class="step-title">Dimmer Modu</h1>
+                    <p class="step-description">Aydınlatma kontrolü ayarlarını yapılandırın</p>
+                </div>
+                
+                <div class="step-body">
+                    <div class="form-section">
+                        <div class="form-section-title">Temel Ayarlar</div>
+                        <div class="toggle-list">
+                            <div class="toggle-item">
+                                <span class="toggle-label">Dimmer Modu Aktif</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="dimmerActive" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="toggle-item">
+                                <span class="toggle-label">Son Durumu Hatırla</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="dimmerRemember" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="toggle-item">
+                                <span class="toggle-label">Yumuşak Geçiş</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="dimmerSmooth" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">Varsayılan Parlaklık</div>
+                        <div class="number-input-group">
+                            <button class="number-btn" onclick="adjustNumber('dimmerBrightness', -10)">−</button>
+                            <div class="number-value">
+                                <span id="dimmerBrightness">80</span>
+                                <span class="number-unit">%</span>
+                            </div>
+                            <button class="number-btn" onclick="adjustNumber('dimmerBrightness', 10)">+</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="button-container three-buttons">
+                    <button class="btn btn-skip" onclick="nextStep()">Atla</button>
+                    <button class="btn btn-primary" onclick="nextStep()">
+                        Devam
+                        <span class="btn-icon">→</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="prevStep()">
+                        <span class="btn-icon">←</span>
+                        Geri
+                    </button>
+                </div>
+            </div>
+            
+            <!-- STEP 4: Shutter Mode -->
+            <div class="step-content" data-step="4">
+                <div class="step-header">
+                    <div class="step-icon">
+                        <svg viewBox="0 0 24 24"><path d="M20 19V3H4v16H2v2h20v-2h-2zM6 5h12v14H6V5zm2 2v2h8V7H8zm0 4v2h8v-2H8zm0 4v2h8v-2H8z"/></svg>
+                    </div>
+                    <h1 class="step-title">Shutter Modu</h1>
+                    <p class="step-description">Perde ve panjur kontrolü ayarlarını yapılandırın</p>
+                </div>
+                
+                <div class="step-body">
+                    <div class="form-section">
+                        <div class="form-section-title">Temel Ayarlar</div>
+                        <div class="toggle-list">
+                            <div class="toggle-item">
+                                <span class="toggle-label">Shutter Modu Aktif</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="shutterActive" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="toggle-item">
+                                <span class="toggle-label">Son Pozisyonu Hatırla</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="shutterRemember" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">Tam Açılma Süresi</div>
+                        <div class="number-input-group">
+                            <button class="number-btn" onclick="adjustNumber('shutterOpenTime', -5)">−</button>
+                            <div class="number-value">
+                                <span id="shutterOpenTime">30</span>
+                                <span class="number-unit">sn</span>
+                            </div>
+                            <button class="number-btn" onclick="adjustNumber('shutterOpenTime', 5)">+</button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">Tam Kapanma Süresi</div>
+                        <div class="number-input-group">
+                            <button class="number-btn" onclick="adjustNumber('shutterCloseTime', -5)">−</button>
+                            <div class="number-value">
+                                <span id="shutterCloseTime">30</span>
+                                <span class="number-unit">sn</span>
+                            </div>
+                            <button class="number-btn" onclick="adjustNumber('shutterCloseTime', 5)">+</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="button-container three-buttons">
+                    <button class="btn btn-skip" onclick="nextStep()">Atla</button>
+                    <button class="btn btn-primary" onclick="nextStep()">
+                        Devam
+                        <span class="btn-icon">→</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="prevStep()">
+                        <span class="btn-icon">←</span>
+                        Geri
+                    </button>
+                </div>
+            </div>
+            
+            <!-- STEP 5: Safe Mode -->
+            <div class="step-content" data-step="5">
+                <div class="step-header">
+                    <div class="step-icon">
+                        <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                    </div>
+                    <h1 class="step-title">Safe Modu</h1>
+                    <p class="step-description">Güvenli kilit ayarlarını yapılandırın</p>
+                </div>
+                
+                <div class="step-body">
+                    <div class="form-section">
+                        <div class="form-section-title">Temel Ayarlar</div>
+                        <div class="toggle-list">
+                            <div class="toggle-item">
+                                <span class="toggle-label">Safe Modu Aktif</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="safeActive" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="toggle-item">
+                                <span class="toggle-label">Yanlış Şifre Uyarısı</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="safeWarning" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">Şifre Uzunluğu</div>
+                        <div class="number-input-group">
+                            <button class="number-btn" onclick="adjustNumber('safeLength', -1)">−</button>
+                            <div class="number-value">
+                                <span id="safeLength">4</span>
+                                <span class="number-unit">hane</span>
+                            </div>
+                            <button class="number-btn" onclick="adjustNumber('safeLength', 1)">+</button>
+                        </div>
+                    </div>
+                    
+                    <div class="info-box">
+                        <div class="info-box-title">Şifre Ayarları</div>
+                        <div class="info-box-text">Şifreleri kurulum tamamlandıktan sonra ayarlar menüsünden yapılandırabilirsiniz.</div>
+                    </div>
+                </div>
+                
+                <div class="button-container three-buttons">
+                    <button class="btn btn-skip" onclick="nextStep()">Atla</button>
+                    <button class="btn btn-primary" onclick="nextStep()">
+                        Devam
+                        <span class="btn-icon">→</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="prevStep()">
+                        <span class="btn-icon">←</span>
+                        Geri
+                    </button>
+                </div>
+            </div>
+            
+            <!-- STEP 6: Complete -->
+            <div class="step-content" data-step="6">
+                <div class="step-header">
+                    <h1 class="step-title">Kurulum Tamamlandı</h1>
+                    <p class="step-description">Tüm ayarlarınız hazır</p>
+                </div>
+                
+                <div class="step-body">
+                    <!-- OTA Status -->
+                    <div class="ota-status">
+                        <div class="ota-icon">
+                            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                        </div>
+                        <div class="ota-title">Yazılım Güncel</div>
+                        <div class="ota-version">Sürüm: v1.2.0</div>
+                    </div>
+                    
+                    <!-- Summary -->
+                    <div class="form-section">
+                        <div class="form-section-title">Kurulum Özeti</div>
+                        <div class="summary-list">
+                            <div class="summary-item">
+                                <span class="summary-label">WiFi</span>
+                                <span class="summary-value success" id="summaryWifi">Yapılandırıldı</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Yedek WiFi</span>
+                                <span class="summary-value warning" id="summaryBackup">Atlandı</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Dimmer Modu</span>
+                                <span class="summary-value success" id="summaryDimmer">Aktif</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Shutter Modu</span>
+                                <span class="summary-value success" id="summaryShutter">Aktif</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Safe Modu</span>
+                                <span class="summary-value success" id="summarySafe">Aktif</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="button-container">
+                    <button class="btn btn-secondary" onclick="prevStep()">
+                        <span class="btn-icon">←</span>
+                        Geri
+                    </button>
+                    <button class="btn btn-success" onclick="completeSetup()">
+                        Kurulumu Tamamla
+                    </button>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+
+    <script>
+        // ========================================
+        // WIZARD STATE
+        // ========================================
+        let currentStep = 1;
+        const totalSteps = 6;
+        
+        // ========================================
+        // STEP NAVIGATION
+        // ========================================
+        function nextStep() {
+            if (currentStep < totalSteps) {
+                goToStep(currentStep + 1);
+            }
+        }
+        
+        function prevStep() {
+            if (currentStep > 1) {
+                goToStep(currentStep - 1);
+            }
+        }
+        
+        function goToStep(step) {
+            // Hide current step
+            const currentContent = document.querySelector(`.step-content[data-step="${currentStep}"]`);
+            currentContent.classList.remove('active');
+            
+            // Update current step
+            currentStep = step;
+            
+            // Show new step
+            const newContent = document.querySelector(`.step-content[data-step="${currentStep}"]`);
+            newContent.classList.add('active');
+            
+            // Update progress
+            updateProgress();
+            
+            // Update summary if on last step
+            if (currentStep === 6) {
+                updateSummary();
+            }
+        }
+        
+        function updateProgress() {
+            // Update counter
+            document.getElementById('stepCounter').textContent = `${currentStep} / ${totalSteps}`;
+            
+            // Update dots
+            const dots = document.querySelectorAll('.dot');
+            dots.forEach((dot, index) => {
+                const stepNum = index + 1;
+                dot.classList.remove('active', 'completed');
+                
+                if (stepNum === currentStep) {
+                    dot.classList.add('active');
+                } else if (stepNum < currentStep) {
+                    dot.classList.add('completed');
+                }
+            });
+        }
+        
+        // ========================================
+        // NUMBER INPUT
+        // ========================================
+        function adjustNumber(id, delta) {
+            const element = document.getElementById(id);
+            let value = parseInt(element.textContent);
+            
+            // Define limits for each field
+            const limits = {
+                'dimmerBrightness': { min: 10, max: 100 },
+                'shutterOpenTime': { min: 5, max: 120 },
+                'shutterCloseTime': { min: 5, max: 120 },
+                'safeLength': { min: 4, max: 8 }
+            };
+            
+            const limit = limits[id] || { min: 0, max: 100 };
+            value = Math.max(limit.min, Math.min(limit.max, value + delta));
+            
+            element.textContent = value;
+        }
+        
+        // ========================================
+        // SUMMARY UPDATE
+        // ========================================
+        function updateSummary() {
+            // WiFi
+            const primarySSID = document.getElementById('primarySSID').value;
+            const summaryWifi = document.getElementById('summaryWifi');
+            if (primarySSID) {
+                summaryWifi.textContent = 'Yapılandırıldı';
+                summaryWifi.className = 'summary-value success';
+            } else {
+                summaryWifi.textContent = 'Atlandı';
+                summaryWifi.className = 'summary-value warning';
+            }
+            
+            // Backup WiFi
+            const backupSSID = document.getElementById('backupSSID').value;
+            const summaryBackup = document.getElementById('summaryBackup');
+            if (backupSSID) {
+                summaryBackup.textContent = 'Yapılandırıldı';
+                summaryBackup.className = 'summary-value success';
+            } else {
+                summaryBackup.textContent = 'Atlandı';
+                summaryBackup.className = 'summary-value warning';
+            }
+            
+            // Dimmer
+            const dimmerActive = document.getElementById('dimmerActive').checked;
+            const summaryDimmer = document.getElementById('summaryDimmer');
+            summaryDimmer.textContent = dimmerActive ? 'Aktif' : 'Devre Dışı';
+            summaryDimmer.className = dimmerActive ? 'summary-value success' : 'summary-value warning';
+            
+            // Shutter
+            const shutterActive = document.getElementById('shutterActive').checked;
+            const summaryShutter = document.getElementById('summaryShutter');
+            summaryShutter.textContent = shutterActive ? 'Aktif' : 'Devre Dışı';
+            summaryShutter.className = shutterActive ? 'summary-value success' : 'summary-value warning';
+            
+            // Safe
+            const safeActive = document.getElementById('safeActive').checked;
+            const summarySafe = document.getElementById('summarySafe');
+            summarySafe.textContent = safeActive ? 'Aktif' : 'Devre Dışı';
+            summarySafe.className = safeActive ? 'summary-value success' : 'summary-value warning';
+        }
+        
+        // ========================================
+        // COMPLETE SETUP
+        // ========================================
+        function completeSetup() {
+            // Collect all settings
+            const settings = {
+                wifi: {
+                    primarySSID: document.getElementById('primarySSID').value,
+                    primaryPass: document.getElementById('primaryPass').value,
+                    backupSSID: document.getElementById('backupSSID').value,
+                    backupPass: document.getElementById('backupPass').value
+                },
+                dimmer: {
+                    active: document.getElementById('dimmerActive').checked,
+                    remember: document.getElementById('dimmerRemember').checked,
+                    smooth: document.getElementById('dimmerSmooth').checked,
+                    brightness: parseInt(document.getElementById('dimmerBrightness').textContent)
+                },
+                shutter: {
+                    active: document.getElementById('shutterActive').checked,
+                    remember: document.getElementById('shutterRemember').checked,
+                    openTime: parseInt(document.getElementById('shutterOpenTime').textContent),
+                    closeTime: parseInt(document.getElementById('shutterCloseTime').textContent)
+                },
+                safe: {
+                    active: document.getElementById('safeActive').checked,
+                    warning: document.getElementById('safeWarning').checked,
+                    length: parseInt(document.getElementById('safeLength').textContent)
+                }
+            };
+            
+            console.log('Setup completed:', settings);
+            
+            // In real implementation, this would:
+            // 1. Send settings to ESP32 via fetch('/saveSetup', ...)
+            // 2. Set first_setup = 1
+            // 3. Redirect to main interface
+            
+            alert('Kurulum tamamlandı! Cihaz yeniden başlatılacak.');
+            
+            // Simulate redirect
+            // window.location.href = '/';
+        }
+        
+        // ========================================
+        // INIT
+        // ========================================
+        document.addEventListener('DOMContentLoaded', function() {
+            updateProgress();
+        });
+    </script>
+</body>
+</html>
