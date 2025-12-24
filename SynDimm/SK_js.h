@@ -813,12 +813,12 @@ function closeWifiScanModal() {
 }
 function scanWifiNetworks() {
     setDisplay('wifi-scan-loading', true);
-    setDisplay('wifi-network-list', false);
+    setDisplay('wifi-scan-results', false);
     setDisplay('wifi-scan-empty', false);
     api('/scanWiFi').then(d => {
         setDisplay('wifi-scan-loading', false);
         if(d.count > 0) {
-            setDisplay('wifi-network-list', true);
+            setDisplay('wifi-scan-results', true);
             renderWifiNetworks(d.networks);
         } else {
             setDisplay('wifi-scan-empty', true);
