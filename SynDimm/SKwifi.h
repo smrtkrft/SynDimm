@@ -20,6 +20,7 @@
 #include <WiFi.h>
 #include <Preferences.h>
 #include <esp_wifi.h>
+#include <ArduinoJson.h>
 #include "SK_config.h"
 
 class SKWiFi {
