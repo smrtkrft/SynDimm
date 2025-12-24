@@ -473,7 +473,7 @@ String generateHTML(String chipID, String version) {
                             </div>
                             <div class="form-group">
                                 <label data-lang="connection.password_optional">Password (optional)</label>
-                                <input type="password" id="quick-primary-password" data-lang-placeholder="connection.leave_empty_open">
+                                <input type="password" id="quick-primary-password" autocomplete="current-password" data-lang-placeholder="connection.leave_empty_open">
                             </div>
                             <div class="form-group">
                                 <label data-lang="connection.static_ip">Static IP (optional)</label>
@@ -504,7 +504,7 @@ String generateHTML(String chipID, String version) {
                             </div>
                             <div class="form-group">
                                 <label data-lang="connection.password_optional">Password (optional)</label>
-                                <input type="password" id="quick-backup-password" data-lang-placeholder="connection.leave_empty_open">
+                                <input type="password" id="quick-backup-password" autocomplete="current-password" data-lang-placeholder="connection.leave_empty_open">
                             </div>
                             <div class="form-group">
                                 <label data-lang="connection.static_ip">Static IP (optional)</label>
