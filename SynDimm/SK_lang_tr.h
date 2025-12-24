@@ -206,8 +206,8 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
     "scanning": "Taranıyor...",
     "no_networks": "Ağ bulunamadı",
     "rescan": "Yeniden Tara",
-    "wifi_open": "Açık",
-    "wifi_secured": "Şifreli",
+    "wifi_open": "Sifresiz",
+    "wifi_secured": "Sifreli",
     "wifi_selected": "'{ssid}' seçildi"
   },
   

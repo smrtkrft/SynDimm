@@ -904,13 +904,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .wifi-network-list { display: flex; flex-direction: column; gap: 8px; }
 .wifi-network-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); cursor: pointer; transition: var(--transition-fast); }
 .wifi-network-item:hover { background: var(--hover-bg); border-color: var(--color-info-border); }
-.wifi-network-info { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .wifi-network-ssid { font-size: 1em; font-weight: 500; color: var(--text-primary); }
-.wifi-network-details { display: flex; gap: 12px; font-size: 0.8em; color: var(--text-muted); }
-.wifi-signal-icon { font-size: 1.2em; color: var(--text-secondary); margin-left: 10px; }
-.wifi-signal-strong { color: var(--color-success); }
-.wifi-signal-medium { color: var(--color-warning); }
-.wifi-signal-weak { color: var(--color-error); }
+.wifi-network-security { font-size: 0.8em; color: var(--text-muted); margin-left: 8px; }
 
 /* WiFi Scan Empty */
 .wifi-scan-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; color: var(--text-muted); }

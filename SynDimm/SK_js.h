@@ -833,13 +833,11 @@ function renderWifiNetworks(networks) {
     const list = $('wifi-network-list');
     list.innerHTML = '';
     networks.sort((a, b) => b.rssi - a.rssi).forEach(net => {
-        const signalClass = net.rssi > -50 ? 'wifi-signal-strong' : (net.rssi > -70 ? 'wifi-signal-medium' : 'wifi-signal-weak');
-        const signalIcon = net.rssi > -50 ? '📶' : (net.rssi > -70 ? '📶' : '📶');
-        const lockIcon = net.encryption === 'open' ? '🔓' : '🔒';
+        const securityText = net.encryption === 'open' ? t('connection.wifi_open') : t('connection.wifi_secured');
         const item = document.createElement('div');
         item.className = 'wifi-network-item';
         item.onclick = () => selectWifiNetwork(net.ssid);
-        item.innerHTML = '<div class="wifi-network-info"><span class="wifi-network-ssid">' + net.ssid + '</span><span class="wifi-network-details"><span>' + lockIcon + ' ' + (net.encryption === 'open' ? t('connection.wifi_open') : t('connection.wifi_secured')) + '</span><span>' + net.rssi + ' dBm</span></span></div><span class="wifi-signal-icon ' + signalClass + '">' + signalIcon + '</span>';
+        item.innerHTML = '<span class="wifi-network-ssid">' + net.ssid + '</span><span class="wifi-network-security">(' + securityText + ')</span>';
         list.appendChild(item);
     });
 }
