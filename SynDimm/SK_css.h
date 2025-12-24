@@ -214,7 +214,7 @@ body.light-theme .btn-status-connect { color: var(--text-primary); }
 body.light-theme .theme-btn.active { color: #ffffff; background: #333333; }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 0; display: flex; justify-content: center; align-items: flex-start; transition: background 0.3s ease, color 0.3s ease; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 19.2px; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 0; display: flex; justify-content: center; align-items: flex-start; transition: background 0.3s ease, color 0.3s ease; }
 .container { max-width: 900px; width: 100%; background: var(--bg-primary); min-height: 100vh; }
 .header { background: var(--bg-primary); color: var(--text-primary); padding: 40px 40px 15px 40px; text-align: center; border-bottom: none; position: relative; }
 .header h1 { font-size: 2.2em; margin-bottom: 12px; font-weight: 400; letter-spacing: 0.5px; color: var(--text-primary); }
@@ -288,36 +288,36 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 /* Variant 1: Circle with "i" (italik) */
 .info-tooltip-i { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; background: rgba(255, 255, 255, 0.1); border: 1px solid var(--border-light); border-radius: 50%; font-size: 12px; font-style: italic; font-weight: 600; color: var(--text-muted); cursor: help; margin-left: 8px; transition: var(--transition-fast); }
 .info-tooltip-i:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
-.info-tooltip-i .tooltip-content { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); min-width: 220px; max-width: 280px; padding: 12px 15px; background: rgba(30, 30, 35, 0.95); border: 1px solid var(--border-light); border-radius: 8px; font-size: 0.85em; font-style: normal; font-weight: 400; color: var(--text-secondary); line-height: 1.5; visibility: hidden; opacity: 0; transition: var(--transition-fast); z-index: 99999; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); text-align: left; }
+.info-tooltip-i .tooltip-content { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); min-width: 220px; max-width: 320px; padding: 14px 18px; background: rgba(30, 30, 35, 0.95); border: 1px solid var(--border-light); border-radius: 8px; font-size: 1.1em; font-style: normal; font-weight: 400; color: var(--text-secondary); line-height: 1.6; visibility: hidden; opacity: 0; transition: var(--transition-fast); z-index: 99999; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); text-align: left; }
 .info-tooltip-i .tooltip-content::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: rgba(30, 30, 35, 0.95); }
 .info-tooltip-i:hover .tooltip-content { visibility: visible; opacity: 1; }
 
 /* Variant 2: Circle with "?" */
 .info-tooltip-q { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; background: rgba(59, 130, 246, 0.15); border: 1px solid var(--color-info-border); border-radius: 50%; font-size: 12px; font-weight: 700; color: var(--color-info); cursor: help; margin-left: 8px; transition: var(--transition-fast); }
 .info-tooltip-q:hover { background: var(--color-info); color: #fff; }
-.info-tooltip-q .tooltip-content { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); min-width: 220px; max-width: 280px; padding: 12px 15px; background: var(--bg-card); border: 1px solid var(--color-info-border); border-radius: 8px; font-size: 0.85em; font-weight: 400; color: var(--text-secondary); line-height: 1.5; visibility: hidden; opacity: 0; transition: var(--transition-fast); z-index: 1000; box-shadow: 0 4px 20px rgba(59, 130, 246, 0.2); text-align: left; }
+.info-tooltip-q .tooltip-content { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); min-width: 220px; max-width: 320px; padding: 14px 18px; background: var(--bg-card); border: 1px solid var(--color-info-border); border-radius: 8px; font-size: 1.1em; font-weight: 400; color: var(--text-secondary); line-height: 1.6; visibility: hidden; opacity: 0; transition: var(--transition-fast); z-index: 1000; box-shadow: 0 4px 20px rgba(59, 130, 246, 0.2); text-align: left; }
 .info-tooltip-q .tooltip-content::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--color-info-border); }
 .info-tooltip-q:hover .tooltip-content { visibility: visible; opacity: 1; }
 
 /* Variant 3: Asterisk (*) */
 .info-tooltip-ast { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 14px; font-weight: 700; color: var(--color-warning); cursor: help; margin-left: 6px; transition: var(--transition-fast); }
 .info-tooltip-ast:hover { color: var(--color-warning-dark); transform: scale(1.2); }
-.info-tooltip-ast .tooltip-content { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); min-width: 220px; max-width: 280px; padding: 12px 15px; background: var(--bg-card); border: 1px solid var(--color-warning); border-radius: 8px; font-size: 0.85em; font-weight: 400; color: var(--text-secondary); line-height: 1.5; visibility: hidden; opacity: 0; transition: var(--transition-fast); z-index: 1000; box-shadow: 0 4px 20px rgba(251, 191, 36, 0.2); text-align: left; }
+.info-tooltip-ast .tooltip-content { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); min-width: 220px; max-width: 320px; padding: 14px 18px; background: var(--bg-card); border: 1px solid var(--color-warning); border-radius: 8px; font-size: 1.1em; font-weight: 400; color: var(--text-secondary); line-height: 1.6; visibility: hidden; opacity: 0; transition: var(--transition-fast); z-index: 1000; box-shadow: 0 4px 20px rgba(251, 191, 36, 0.2); text-align: left; }
 .info-tooltip-ast .tooltip-content::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--color-warning); }
 .info-tooltip-ast:hover .tooltip-content { visibility: visible; opacity: 1; }
 
 /* Variant 4: Inline hint text (for theme/language) */
-.info-hint-inline { display: block; font-size: 0.8em; color: var(--text-muted); margin-top: 8px; font-style: italic; }
+.info-hint-inline { display: block; font-size: 1.1em; color: var(--text-muted); margin-top: 8px; font-style: italic; }
 
 /* Variant 5: Collapsible info box */
 .info-box-collapsible { margin-top: 12px; background: rgba(59, 130, 246, 0.08); border: 1px solid var(--color-info-border); border-radius: 6px; overflow: hidden; }
 .info-box-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; transition: var(--transition-fast); }
 .info-box-header:hover { background: rgba(59, 130, 246, 0.12); }
 .info-box-icon { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; background: var(--color-info); color: #fff; border-radius: 50%; font-size: 11px; font-style: italic; font-weight: 600; font-family: Georgia, serif; }
-.info-box-title { font-size: 0.85em; color: var(--color-info); font-weight: 500; }
+.info-box-title { font-size: 1.1em; color: var(--color-info); font-weight: 500; }
 .info-box-arrow { margin-left: auto; color: var(--color-info); font-size: 10px; transition: transform 0.2s; }
 .info-box-header.open .info-box-arrow { transform: rotate(180deg); }
-.info-box-content { padding: 0 12px 12px 12px; font-size: 0.85em; color: var(--text-secondary); line-height: 1.6; display: none; }
+.info-box-content { padding: 0 12px 12px 12px; font-size: 1.1em; color: var(--text-secondary); line-height: 1.6; display: none; }
 .info-box-content.open { display: block; }
 
 /* Settings Row */
@@ -347,8 +347,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .info-section p { font-size: 0.92em; line-height: 1.9; color: var(--text-secondary); margin-bottom: 14px; transition: color 0.3s ease; letter-spacing: 0.2px; }
 .info-section:hover p { color: rgba(255, 255, 255, 0.85); }
 .info-section p strong { color: var(--text-primary); font-weight: 500; }
-.info-note { font-style: italic; color: var(--text-muted) !important; font-size: 0.88em !important; }
-.info-note-warning { background: rgba(255, 152, 0, 0.15) !important; border-left: 3px solid rgb(255, 152, 0) !important; color: rgb(255, 152, 0) !important; padding: 12px 15px !important; border-radius: var(--radius-sm) !important; font-style: normal !important; margin-top: 15px !important; }
+.info-note { font-style: italic; color: var(--text-muted) !important; font-size: 1.1em !important; }
+.info-note-warning { background: rgba(255, 152, 0, 0.15) !important; border-left: 3px solid rgb(255, 152, 0) !important; color: rgb(255, 152, 0) !important; padding: 14px 18px !important; border-radius: var(--radius-sm) !important; font-style: normal !important; margin-top: 15px !important; font-size: 1.1em !important; }
 
 /* Info Footer */
 .info-footer { margin-top: 60px; padding-top: 40px; border-top: 1px solid var(--border-color); text-align: center; }
@@ -547,9 +547,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .ota-update-title { font-size: 1.1em; color: rgb(59, 130, 246); font-weight: 500; }
 .ota-update-version { font-size: 1.4em; color: #ffffff; font-weight: 500; margin-bottom: 8px; }
 .ota-update-date { font-size: 0.85em; color: rgba(255, 255, 255, 0.5); margin-bottom: 15px; }
-.ota-release-notes { font-size: 0.9em; color: rgba(255, 255, 255, 0.7); line-height: 1.6; padding: 15px; background: rgba(0, 0, 0, 0.2); border-radius: 6px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; }
+.ota-release-notes { font-size: 1.1em; color: rgba(255, 255, 255, 0.7); line-height: 1.6; padding: 18px; background: rgba(0, 0, 0, 0.2); border-radius: 6px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; }
 .ota-toggle-row { display: flex; align-items: center; gap: 15px; margin-bottom: 15px; }
-.ota-auto-info { font-size: 0.85em; color: rgba(255, 255, 255, 0.5); line-height: 1.6; margin-bottom: 25px; padding: 12px 15px; background: rgba(255, 255, 255, 0.03); border-left: 3px solid rgba(255, 255, 255, 0.2); border-radius: 4px; }
+.ota-auto-info { font-size: 1.1em; color: rgba(255, 255, 255, 0.5); line-height: 1.6; margin-bottom: 25px; padding: 14px 18px; background: rgba(255, 255, 255, 0.03); border-left: 3px solid rgba(255, 255, 255, 0.2); border-radius: 4px; }
 .ota-actions { display: flex; gap: 15px; margin-bottom: 20px; }
 .btn-ota-check, .btn-ota-update { flex: 1; padding: 14px 25px; border-radius: var(--radius-md); font-size: 0.95em; font-weight: 500; cursor: pointer; transition: var(--transition-normal); border: none; }
 .btn-ota-check { background: var(--input-bg-focus); color: var(--text-secondary); border: 1px solid var(--border-light); }
@@ -611,7 +611,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .ap-credential-item-compact { display: flex; flex-direction: column; gap: 1px; min-width: 80px; }
 .ap-credential-label { font-size: 0.65em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .ap-credential-value { font-size: 0.82em; color: var(--text-primary); font-family: 'SF Mono', 'Consolas', monospace; }
-.ap-mode-warning { padding: 10px 16px; background: rgba(251, 191, 36, 0.1); border-top: 1px solid rgba(251, 191, 36, 0.2); font-size: 0.8em; color: var(--color-warning); display: flex; align-items: center; justify-content: center; gap: 8px; text-align: center; }
+.ap-mode-warning { padding: 12px 18px; background: rgba(251, 191, 36, 0.1); border-top: 1px solid rgba(251, 191, 36, 0.2); font-size: 1.1em; color: var(--color-warning); display: flex; align-items: center; justify-content: center; gap: 8px; text-align: center; }
 .ap-mode-warning .warning-icon { font-size: 1em; }
 .wifi-accordion-first { margin-top: 15px; }
 @media (max-width: 480px) { 
@@ -633,7 +633,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .dimmer-info-value { font-size: 1.1em; color: #ffffff; font-weight: 400; }
 .dimmer-config-section { background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 15px; margin-bottom: 12px; }
 .dimmer-section-title { font-size: 0.95em; font-weight: 500; color: #ffffff; margin-bottom: 12px; text-align: center; letter-spacing: 0.5px; }
-.dimmer-calibration-info { font-size: 0.85em; color: rgba(255, 255, 255, 0.6); line-height: 1.6; margin-bottom: 20px; padding: 12px 15px; background: rgba(255, 255, 255, 0.03); border-left: 3px solid rgba(255, 255, 255, 0.2); border-radius: 4px; }
+.dimmer-calibration-info { font-size: 1.1em; color: rgba(255, 255, 255, 0.6); line-height: 1.6; margin-bottom: 20px; padding: 14px 18px; background: rgba(255, 255, 255, 0.03); border-left: 3px solid rgba(255, 255, 255, 0.2); border-radius: 4px; }
 .dimmer-ratio-group { margin-bottom: 20px; }
 .dimmer-ratio-group label { display: block; margin-bottom: 12px; font-size: 0.9em; font-weight: 500; color: #ffffff; text-align: center; }
 .dimmer-ratio-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 15px; }
@@ -646,7 +646,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 
 /* Compact Calibration Styles */
 .dimmer-compact-section { padding: 15px; margin-bottom: 15px; }
-.dimmer-calibration-info-compact { font-size: 0.8em; color: rgba(255, 255, 255, 0.6); line-height: 1.4; margin-bottom: 12px; padding: 8px 10px; background: rgba(255, 255, 255, 0.03); border-left: 2px solid rgba(255, 255, 255, 0.2); border-radius: 4px; }
+.dimmer-calibration-info-compact { font-size: 1.1em; color: rgba(255, 255, 255, 0.6); line-height: 1.5; margin-bottom: 12px; padding: 12px 14px; background: rgba(255, 255, 255, 0.03); border-left: 2px solid rgba(255, 255, 255, 0.2); border-radius: 4px; }
 .dimmer-ratio-buttons-compact { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 10px; }
 .ratio-btn-compact { padding: 8px 4px; background: var(--card-hover); border: 1px solid var(--border-light); border-radius: var(--radius-md); color: var(--text-secondary); font-size: 0.9em; cursor: pointer; transition: var(--transition-fast); display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .ratio-btn-compact .ratio-num { font-size: 1.2em; font-weight: 600; }
@@ -656,7 +656,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .dimmer-ratio-display-compact { text-align: center; padding: 6px; background: rgba(255, 255, 255, 0.03); border-radius: 4px; font-size: 0.85em; color: rgba(255, 255, 255, 0.6); margin-bottom: 10px; }
 .ratio-value-compact { font-size: 1.2em; color: #ffffff; font-weight: 600; margin-left: 6px; }
 .btn-compact { padding: 10px 20px; font-size: 0.9em; }
-.dimmer-scan-info { font-size: 0.85em; color: rgba(255, 255, 255, 0.6); line-height: 1.6; margin-bottom: 20px; padding: 12px 15px; background: rgba(255, 255, 255, 0.03); border-left: 3px solid rgba(255, 255, 255, 0.2); border-radius: 4px; }
+.dimmer-scan-info { font-size: 1.1em; color: rgba(255, 255, 255, 0.6); line-height: 1.6; margin-bottom: 20px; padding: 14px 18px; background: rgba(255, 255, 255, 0.03); border-left: 3px solid rgba(255, 255, 255, 0.2); border-radius: 4px; }
 .dimmer-scan-progress { margin-top: 20px; padding: 15px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; }
 .scan-progress-text { font-size: 0.9em; color: rgba(255, 255, 255, 0.7); margin-bottom: 10px; text-align: center; }
 .scan-progress-bar { width: 100%; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; overflow: hidden; }
@@ -877,6 +877,43 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .info-footer .button-group { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; }
 .info-button { padding: 12px 30px; background: var(--card-bg); color: var(--text-primary); border: 2px solid var(--border-color); border-radius: 8px; text-decoration: none; font-weight: 500; transition: all 0.3s ease; }
 .info-button:hover { background: var(--accent-color); color: white; border-color: var(--accent-color); }
+
+/* Form Label Row - SSID with Scan Button */
+.form-label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.btn-wifi-scan { padding: 4px 12px; font-size: 0.8em; background: var(--color-info-bg); color: var(--color-info); border: 1px solid var(--color-info-border); border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition-fast); font-weight: 500; }
+.btn-wifi-scan:hover { background: var(--color-info); color: #fff; }
+
+/* WiFi Scan Modal */
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 10000; backdrop-filter: blur(4px); }
+.modal-content { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; width: 90%; max-width: 400px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); }
+.wifi-scan-modal { overflow: hidden; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--border-color); }
+.modal-header h3 { margin: 0; font-size: 1.1em; font-weight: 500; color: var(--text-primary); }
+.modal-close { background: none; border: none; font-size: 1.8em; color: var(--text-muted); cursor: pointer; padding: 0; line-height: 1; transition: var(--transition-fast); }
+.modal-close:hover { color: var(--text-primary); transform: scale(1.1); }
+.modal-body { padding: 15px 20px; overflow-y: auto; flex: 1; max-height: 350px; }
+.modal-footer { display: flex; gap: 10px; padding: 15px 20px; border-top: 1px solid var(--border-color); }
+.modal-footer .btn { flex: 1; }
+
+/* WiFi Scan Loading */
+.wifi-scan-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; gap: 15px; }
+.loading-spinner { width: 40px; height: 40px; border: 3px solid var(--border-color); border-top-color: var(--color-info); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* WiFi Network List */
+.wifi-network-list { display: flex; flex-direction: column; gap: 8px; }
+.wifi-network-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); cursor: pointer; transition: var(--transition-fast); }
+.wifi-network-item:hover { background: var(--hover-bg); border-color: var(--color-info-border); }
+.wifi-network-info { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.wifi-network-ssid { font-size: 1em; font-weight: 500; color: var(--text-primary); }
+.wifi-network-details { display: flex; gap: 12px; font-size: 0.8em; color: var(--text-muted); }
+.wifi-signal-icon { font-size: 1.2em; color: var(--text-secondary); margin-left: 10px; }
+.wifi-signal-strong { color: var(--color-success); }
+.wifi-signal-medium { color: var(--color-warning); }
+.wifi-signal-weak { color: var(--color-error); }
+
+/* WiFi Scan Empty */
+.wifi-scan-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; color: var(--text-muted); }
 
 )rawliteral";
 

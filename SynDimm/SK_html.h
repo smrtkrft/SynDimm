@@ -465,7 +465,10 @@ String generateHTML(String chipID, String version) {
                         </div>
                         <div class="accordion-content">
                             <div class="form-group">
-                                <label data-lang="connection.ssid">SSID</label>
+                                <div class="form-label-row">
+                                    <label data-lang="connection.ssid">SSID</label>
+                                    <button type="button" class="btn-wifi-scan" onclick="openWifiScanModal('quick-primary-ssid')" data-lang="connection.scan">Scan</button>
+                                </div>
                                 <input type="text" id="quick-primary-ssid" data-lang-placeholder="connection.enter_ssid">
                             </div>
                             <div class="form-group">
@@ -493,7 +496,10 @@ String generateHTML(String chipID, String version) {
                         </div>
                         <div class="accordion-content">
                             <div class="form-group">
-                                <label data-lang="connection.ssid">SSID</label>
+                                <div class="form-label-row">
+                                    <label data-lang="connection.ssid">SSID</label>
+                                    <button type="button" class="btn-wifi-scan" onclick="openWifiScanModal('quick-backup-ssid')" data-lang="connection.scan">Scan</button>
+                                </div>
                                 <input type="text" id="quick-backup-ssid" data-lang-placeholder="connection.enter_ssid">
                             </div>
                             <div class="form-group">
@@ -579,6 +585,32 @@ String generateHTML(String chipID, String version) {
                     </div>
                 </div>
                 
+            </div>
+        </div>
+    </div>
+    
+    <!-- WiFi Scan Popup Modal -->
+    <div id="wifi-scan-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content wifi-scan-modal">
+            <div class="modal-header">
+                <h3 data-lang="connection.scan_wifi">Scan WiFi Networks</h3>
+                <button class="modal-close" onclick="closeWifiScanModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="wifi-scan-loading" class="wifi-scan-loading">
+                    <div class="loading-spinner"></div>
+                    <span data-lang="connection.scanning">Scanning...</span>
+                </div>
+                <div id="wifi-scan-results" class="wifi-scan-results" style="display: none;">
+                    <div id="wifi-network-list" class="wifi-network-list"></div>
+                </div>
+                <div id="wifi-scan-empty" class="wifi-scan-empty" style="display: none;">
+                    <span data-lang="connection.no_networks">No networks found</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="scanWifiNetworks()" data-lang="connection.rescan">Rescan</button>
+                <button class="btn btn-secondary" onclick="closeWifiScanModal()" data-lang="common.close">Close</button>
             </div>
         </div>
     </div>

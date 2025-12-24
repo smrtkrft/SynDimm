@@ -799,6 +799,57 @@ function confirmFactoryReset() {
         setTimeout(() => location.reload(), 10000);
     }).catch(e => showNotification(t('common.error') + ': ' + e, 'error'));
 }
+
+// === WIFI SCAN MODAL ===
+let wifiScanTargetInput = null;
+function openWifiScanModal(targetInputId) {
+    wifiScanTargetInput = targetInputId;
+    $('wifi-scan-modal').style.display = 'flex';
+    scanWifiNetworks();
+}
+function closeWifiScanModal() {
+    $('wifi-scan-modal').style.display = 'none';
+    wifiScanTargetInput = null;
+}
+function scanWifiNetworks() {
+    setDisplay('wifi-scan-loading', true);
+    setDisplay('wifi-network-list', false);
+    setDisplay('wifi-scan-empty', false);
+    api('/scanWiFi').then(d => {
+        setDisplay('wifi-scan-loading', false);
+        if(d.count > 0) {
+            setDisplay('wifi-network-list', true);
+            renderWifiNetworks(d.networks);
+        } else {
+            setDisplay('wifi-scan-empty', true);
+        }
+    }).catch(() => {
+        setDisplay('wifi-scan-loading', false);
+        setDisplay('wifi-scan-empty', true);
+        showNotification(t('notifications.scan_failed'), 'error');
+    });
+}
+function renderWifiNetworks(networks) {
+    const list = $('wifi-network-list');
+    list.innerHTML = '';
+    networks.sort((a, b) => b.rssi - a.rssi).forEach(net => {
+        const signalClass = net.rssi > -50 ? 'wifi-signal-strong' : (net.rssi > -70 ? 'wifi-signal-medium' : 'wifi-signal-weak');
+        const signalIcon = net.rssi > -50 ? '📶' : (net.rssi > -70 ? '📶' : '📶');
+        const lockIcon = net.encryption === 'open' ? '🔓' : '🔒';
+        const item = document.createElement('div');
+        item.className = 'wifi-network-item';
+        item.onclick = () => selectWifiNetwork(net.ssid);
+        item.innerHTML = '<div class="wifi-network-info"><span class="wifi-network-ssid">' + net.ssid + '</span><span class="wifi-network-details"><span>' + lockIcon + ' ' + (net.encryption === 'open' ? t('connection.wifi_open') : t('connection.wifi_secured')) + '</span><span>' + net.rssi + ' dBm</span></span></div><span class="wifi-signal-icon ' + signalClass + '">' + signalIcon + '</span>';
+        list.appendChild(item);
+    });
+}
+function selectWifiNetwork(ssid) {
+    if(wifiScanTargetInput) {
+        $(wifiScanTargetInput).value = ssid;
+    }
+    closeWifiScanModal();
+    showNotification(t('connection.wifi_selected', {ssid: ssid}), 'success');
+}
 )rawliteral";
 
 #endif // SK_JS_H

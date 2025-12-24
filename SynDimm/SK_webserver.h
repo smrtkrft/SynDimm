@@ -27,7 +27,57 @@ private:
     class SKModeManager* modeManager;  // Mode manager pointer
     void (*httpRequestCallback)();  // HTTP request callback
     
-    // Handler functions
+    // ========== HELPER FUNCTIONS ==========
+    
+    // Send JSON success response
+    void sendSuccess(const char* msg = nullptr) {
+        String json = msg ? String("{\"success\":true,\"message\":\"") + msg + "\"}" 
+                          : "{\"success\":true}";
+        server->send(200, "application/json", json);
+    }
+    
+    // Send JSON error response
+    void sendError(int code, const char* msg) {
+        String json = String("{\"success\":false,\"message\":\"") + msg + "\"}";
+        server->send(code, "application/json", json);
+    }
+    
+    // Check if request is POST method
+    bool requirePost() {
+        if (server->method() != HTTP_POST) {
+            sendError(405, "Method Not Allowed");
+            return false;
+        }
+        return true;
+    }
+    
+    // Parse JSON body from POST request, returns true if successful
+    bool parseJsonBody(JsonDocument& doc) {
+        if (!requirePost()) return false;
+        
+        String body = server->arg("plain");
+        if (body.length() == 0) {
+            sendError(400, "Empty body");
+            return false;
+        }
+        
+        DeserializationError error = deserializeJson(doc, body);
+        if (error) {
+            sendError(400, "Invalid JSON");
+            return false;
+        }
+        return true;
+    }
+    
+    // Clear a preferences namespace
+    void clearPrefsNamespace(const char* ns) {
+        Preferences prefs;
+        prefs.begin(ns, false);
+        prefs.clear();
+        prefs.end();
+    }
+    
+    // ========== HANDLER FUNCTIONS ==========
     void handleRoot() {
         if (httpRequestCallback) httpRequestCallback();
         String html = generateHTML(chipID, VERSION);
@@ -193,6 +243,16 @@ private:
         }
     }
     
+    void handleScanWiFi() {
+        if (httpRequestCallback) httpRequestCallback();
+        if (wifiManager) {
+            String json = wifiManager->getScannedNetworksJSON();
+            server->send(200, "application/json", json);
+        } else {
+            server->send(500, "application/json", "{\"error\":\"WiFi manager not found\"}");
+        }
+    }
+    
     void handleGetStatus() {
         if (httpRequestCallback) httpRequestCallback();
         if (wifiManager) {
@@ -204,85 +264,45 @@ private:
     }
     
     void handleSetAPMode() {
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        String body = server->arg("plain");
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, body);
-        
-        if (error) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
-            return;
-        }
+        if (!parseJsonBody(doc)) return;
         
         if (!wifiManager) {
-            server->send(500, "application/json", "{\"success\":false,\"message\":\"WiFi manager not found\"}");
+            sendError(500, "WiFi manager not found");
             return;
         }
         
-        bool enabled = doc["enabled"].as<bool>();
-        wifiManager->setAPModeEnabled(enabled);
-        
-        server->send(200, "application/json", "{\"success\":true}");
+        wifiManager->setAPModeEnabled(doc["enabled"].as<bool>());
+        sendSuccess();
     }
     
     // OTA Endpoints
     void handleGetOTASettings() {
-        String json = getOTASettingsJSON();
-        server->send(200, "application/json", json);
+        server->send(200, "application/json", getOTASettingsJSON());
     }
     
     void handleCheckOTAUpdate() {
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
+        if (!requirePost()) return;
         
-        bool success = checkForUpdates();
-        
-        if (success) {
-            String json = getOTASettingsJSON();
-            server->send(200, "application/json", json);
+        if (checkForUpdates()) {
+            server->send(200, "application/json", getOTASettingsJSON());
         } else {
-            server->send(500, "application/json", "{\"success\":false,\"message\":\"Update check failed\"}");
+            sendError(500, "Update check failed");
         }
     }
     
     void handlePerformOTAUpdate() {
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        server->send(200, "application/json", "{\"success\":true,\"message\":\"Update started\"}");
-        
-        // Start update in background
+        if (!requirePost()) return;
+        sendSuccess("Update started");
         delay(100);
         performOTAUpdate();
     }
     
     void handleSaveOTASettings() {
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        String body = server->arg("plain");
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, body);
-        
-        if (error) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
-            return;
-        }
-        
-        bool autoUpdate = doc["autoUpdate"].as<bool>();
-        saveOTASettings(autoUpdate);
-        
-        server->send(200, "application/json", "{\"success\":true}");
+        if (!parseJsonBody(doc)) return;
+        saveOTASettings(doc["autoUpdate"].as<bool>());
+        sendSuccess();
     }
     
     // Language Endpoints
@@ -297,27 +317,13 @@ private:
     }
     
     void handleSetLang() {
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        String body = server->arg("plain");
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, body);
+        if (!parseJsonBody(doc)) return;
         
-        if (error) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
-            return;
-        }
-        
-        String lang = doc["lang"].as<String>();
-        bool success = setLanguageFromCode(lang);
-        
-        if (success) {
-            server->send(200, "application/json", "{\"success\":true}");
+        if (setLanguageFromCode(doc["lang"].as<String>())) {
+            sendSuccess();
         } else {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid language code\"}");
+            sendError(400, "Invalid language code");
         }
     }
     
@@ -328,45 +334,26 @@ private:
     
     // Dimmer Endpoints
     void handleConnectDimmer() {
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        String body = server->arg("plain");
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, body);
-        
-        if (error) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
-            return;
-        }
+        if (!parseJsonBody(doc)) return;
         
         String ip = doc["ip"].as<String>();
-        
         if (ip.length() == 0) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"IP address required\"}");
+            sendError(400, "IP address required");
             return;
         }
         
-        // Call dimmer connection function (from SK_dimmer.h)
-        bool success = connectToDimmer(ip);
-        
-        if (success) {
-            server->send(200, "application/json", "{\"success\":true,\"message\":\"Connected to dimmer\"}");
+        if (connectToDimmer(ip)) {
+            sendSuccess("Connected to dimmer");
         } else {
             server->send(200, "application/json", "{\"success\":false,\"message\":\"Connection failed\"}");
         }
     }
     
     void handleDisconnectDimmer() {
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
+        if (!requirePost()) return;
         disconnectDimmer();
-        server->send(200, "application/json", "{\"success\":true,\"message\":\"Disconnected\"}");
+        sendSuccess("Disconnected");
     }
     
     void handleGetDimmerStatus() {
@@ -375,67 +362,39 @@ private:
     }
     
     void handleSetDimmerRatio() {
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        String body = server->arg("plain");
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, body);
-        
-        if (error) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
-            return;
-        }
+        if (!parseJsonBody(doc)) return;
         
         int ratio = doc["ratio"].as<int>();
-        
         if (ratio < 1 || ratio > 5) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Ratio must be between 1-5\"}");
+            sendError(400, "Ratio must be between 1-5");
             return;
         }
         
         setDimmerRatio(ratio);
-        server->send(200, "application/json", "{\"success\":true,\"message\":\"Ratio saved\"}");
+        sendSuccess("Ratio saved");
     }
     
     void handleScanNetwork() {
         DEBUG_PRINTLN("[WEB] /scanNetwork called");
+        if (!requirePost()) return;
         
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        // Configure unified scanner for all device types
         ScanConfig config;
-        config.filters = FILTER_DIMMERS | FILTER_SHUTTERS; // Scan both dimmer and shutter devices
+        config.filters = FILTER_DIMMERS | FILTER_SHUTTERS;
         config.parallelCount = 10;
         config.tcpTimeout = 500;
         config.httpTimeout = 3000;
         config.autoSave = true;
         
-        // Start unified scan (non-blocking FreeRTOS task)
         startNetworkScan(config, nullptr, nullptr, nullptr);
-        
-        String response = "{\"success\":true,\"message\":\"Network scan started\"}";
-        server->send(200, "application/json", response);
+        sendSuccess("Network scan started");
     }
     
     void handleStopScan() {
         DEBUG_PRINTLN("[WEB] /stopScan called");
-        
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        // Stop ongoing unified scan
+        if (!requirePost()) return;
         stopNetworkScan();
-        
-        String response = "{\"success\":true,\"message\":\"Scan stopped\"}";
-        server->send(200, "application/json", response);
+        sendSuccess("Scan stopped");
     }
     
     void handleGetScanResults() {
@@ -477,32 +436,17 @@ private:
     }
     
     void handleRemoveSavedDevice() {
-        if (!server->hasArg("plain")) {
-            server->send(400, "application/json", "{\"success\": false, \"message\": \"No data\"}");
-            return;
-        }
-        
-        String body = server->arg("plain");
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, body);
-        
-        if (error) {
-            server->send(400, "application/json", "{\"success\": false, \"message\": \"Invalid JSON\"}");
-            return;
-        }
+        if (!parseJsonBody(doc)) return;
         
         String ip = doc["ip"].as<String>();
-        
         if (ip.length() == 0) {
-            server->send(400, "application/json", "{\"success\": false, \"message\": \"No IP provided\"}");
+            sendError(400, "No IP provided");
             return;
         }
         
-        // Remove device from saved list
-        bool removed = removeDimmerDevice(ip);
-        
-        if (removed) {
-            server->send(200, "application/json", "{\"success\": true}");
+        if (removeDimmerDevice(ip)) {
+            sendSuccess();
         } else {
             server->send(200, "application/json", "{\"success\": false, \"message\": \"Device not found\"}");
         }
@@ -510,71 +454,40 @@ private:
     
     // Shutter Endpoints
     void handleConnectShutter() {
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        String body = server->arg("plain");
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, body);
-        
-        if (error) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
-            return;
-        }
+        if (!parseJsonBody(doc)) return;
         
         String ip = doc["ip"].as<String>();
-        
         if (ip.length() == 0) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"IP address required\"}");
+            sendError(400, "IP address required");
             return;
         }
         
-        // Call shutter connection function (from SK_shutter.h)
-        bool success = connectToShutter(ip);
-        
-        if (success) {
-            server->send(200, "application/json", "{\"success\":true,\"message\":\"Shutter bağlantısı başarılı\"}");
+        if (connectToShutter(ip)) {
+            sendSuccess("Shutter connected");
         } else {
-            // Daha detaylı hata mesajı için detectDevice kullan
             DiscoveredDevice device = detectDevice(ip);
-            String errorMsg = "Bağlantı başarısız: ";
+            String errorMsg = "Connection failed: ";
             
-            if (!device.isValid) {
-                errorMsg += "Cihaz bulunamadı veya yanıt vermiyor";
-            } else if (device.mode == "relay") {
-                errorMsg += "Cihaz RELAY modunda (Roller moda geçirin)";
-            } else if (!device.supportsShutter) {
-                errorMsg += "Cihaz roller/shutter modunu desteklemiyor";
-            } else {
-                errorMsg += "Bilinmeyen hata (Mode: " + device.mode + ")";
-            }
+            if (!device.isValid) errorMsg += "Device not found";
+            else if (device.mode == "relay") errorMsg += "Device in RELAY mode";
+            else if (!device.supportsShutter) errorMsg += "Device doesn't support shutter";
+            else errorMsg += "Unknown error";
             
-            String response = "{\"success\":false,\"message\":\"" + errorMsg + "\"}";
-            server->send(200, "application/json", response);
+            server->send(200, "application/json", "{\"success\":false,\"message\":\"" + errorMsg + "\"}");
         }
     }
     
     void handleDisconnectShutter() {
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
+        if (!requirePost()) return;
         disconnectShutter();
-        server->send(200, "application/json", "{\"success\":true,\"message\":\"Disconnected\"}");
+        sendSuccess("Disconnected");
     }
     
     void handleScanShutterNetwork() {
         DEBUG_PRINTLN("[WEB] /scanShutterNetwork called");
+        if (!requirePost()) return;
         
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        // Configure scanner for shutter devices only
         ScanConfig config;
         config.filters = FILTER_SHUTTERS;
         config.parallelCount = 10;
@@ -582,112 +495,74 @@ private:
         config.httpTimeout = 3000;
         config.autoSave = true;
         
-        // Start unified scan targeting shutters
         startNetworkScan(config, nullptr, nullptr, nullptr);
-        
-        String response = "{\"success\":true,\"message\":\"Shutter network scan started\"}";
-        server->send(200, "application/json", response);
+        sendSuccess("Shutter network scan started");
     }
     
     void handleGetShutterStatus() {
-        String json = getShutterStatusJSON();
-        server->send(200, "application/json", json);
+        server->send(200, "application/json", getShutterStatusJSON());
     }
     
     void handleAdjustShutterStep() {
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        String body = server->arg("plain");
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, body);
-        
-        if (error) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
-            return;
-        }
+        if (!parseJsonBody(doc)) return;
         
         int step = doc["step"].as<int>();
-        
         if (step < 1 || step > 5) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Step must be 1-5\"}");
+            sendError(400, "Step must be 1-5");
             return;
         }
         
         setEncoderStep(step);
-        server->send(200, "application/json", "{\"success\":true}");
+        sendSuccess();
     }
     
     // Mode Manager Endpoints
     void handleGetCurrentMode() {
         if (!modeManager) {
-            server->send(500, "application/json", "{\"error\":\"Mode manager not initialized\"}");
+            sendError(500, "Mode manager not initialized");
             return;
         }
-        
-        String json = modeManager->getStatusJSON();
-        server->send(200, "application/json", json);
+        server->send(200, "application/json", modeManager->getStatusJSON());
     }
     
     void handleSetMode() {
         if (!modeManager) {
-            server->send(500, "application/json", "{\"success\":false,\"message\":\"Mode manager not initialized\"}");
+            sendError(500, "Mode manager not initialized");
             return;
         }
+        if (!requirePost()) return;
         
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        // Try to get mode from form data first
+        // Try to get mode from form data or JSON body
         String modeStr = "";
         if (server->hasArg("mode")) {
             modeStr = server->arg("mode");
         } else {
-            // Try JSON body
-            String body = server->arg("plain");
             JsonDocument doc;
-            DeserializationError error = deserializeJson(doc, body);
-            
-            if (!error && doc["mode"].is<JsonVariant>()) {
-                if (doc["mode"].is<int>()) {
-                    int modeInt = doc["mode"].as<int>();
-                    if (modeInt == 0) modeStr = "DIMMER";
-                    else if (modeInt == 1) modeStr = "SHUTTER";
-                    else if (modeInt == 2) modeStr = "SAFE";
-                } else {
-                    modeStr = doc["mode"].as<String>();
-                }
+            deserializeJson(doc, server->arg("plain"));
+            if (doc["mode"].is<int>()) {
+                int m = doc["mode"].as<int>();
+                modeStr = (m == 0) ? "DIMMER" : (m == 1) ? "SHUTTER" : (m == 2) ? "SAFE" : "";
+            } else {
+                modeStr = doc["mode"].as<String>();
             }
         }
         
         if (modeStr.isEmpty()) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Mode parameter required\"}");
+            sendError(400, "Mode parameter required");
             return;
         }
         
-        // Convert string to SystemMode enum
         SystemMode mode;
-        if (modeStr == "DIMMER" || modeStr == "0") {
-            mode = MODE_DIMMER;
-        } else if (modeStr == "SHUTTER" || modeStr == "1") {
-            mode = MODE_SHUTTER;
-        } else if (modeStr == "SAFE" || modeStr == "2") {
-            mode = MODE_SAFE;
-        } else {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid mode\"}");
-            return;
-        }
+        if (modeStr == "DIMMER" || modeStr == "0") mode = MODE_DIMMER;
+        else if (modeStr == "SHUTTER" || modeStr == "1") mode = MODE_SHUTTER;
+        else if (modeStr == "SAFE" || modeStr == "2") mode = MODE_SAFE;
+        else { sendError(400, "Invalid mode"); return; }
         
-        bool success = modeManager->setMode(mode);
-        
-        if (success) {
-            server->send(200, "application/json", "{\"success\":true}");
+        if (modeManager->setMode(mode)) {
+            sendSuccess();
         } else {
-            server->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to set mode\"}");
+            sendError(500, "Failed to set mode");
         }
     }
     
@@ -697,7 +572,7 @@ private:
     
     void handleGetSafeStatus() {
         if (!safeLockPtr) {
-            server->send(500, "application/json", "{\"error\":\"Safe Lock not initialized\"}");
+            sendError(500, "Safe Lock not initialized");
             return;
         }
         
@@ -710,11 +585,11 @@ private:
             pwd["password"] = safeLockPtr->getPassword(i);
             pwd["active"] = safeLockPtr->isPasswordActive(i);
             
-            SafeApiConfig apiConfig = safeLockPtr->getApiConfig(i);
-            pwd["apiEnabled"] = apiConfig.enabled;
-            pwd["apiUrl"] = String(apiConfig.url);
-            pwd["apiMethod"] = apiConfig.method == SAFE_HTTP_POST ? "POST" : "GET";
-            pwd["apiHeader"] = String(apiConfig.header);
+            SafeApiConfig cfg = safeLockPtr->getApiConfig(i);
+            pwd["apiEnabled"] = cfg.enabled;
+            pwd["apiUrl"] = String(cfg.url);
+            pwd["apiMethod"] = cfg.method == SAFE_HTTP_POST ? "POST" : "GET";
+            pwd["apiHeader"] = String(cfg.header);
         }
         
         String output;
@@ -724,109 +599,61 @@ private:
     
     void handleSetSafePassword() {
         if (!safeLockPtr) {
-            server->send(500, "application/json", "{\"success\":false,\"message\":\"Safe Lock not initialized\"}");
+            sendError(500, "Safe Lock not initialized");
             return;
         }
-        
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        String body = server->arg("plain");
-        // GÜVENLİK: Hassas veri loglanmıyor
-        DEBUG_PRINTLN("[WebServer] /saveSafePassword request received");
         
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, body);
-        
-        if (error) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
-            return;
-        }
+        if (!parseJsonBody(doc)) return;
+        DEBUG_PRINTLN("[WebServer] /saveSafePassword request received");
         
         uint8_t index = doc["index"] | 0;
-        String password = doc["password"] | "";
-        bool pwdEnabled = doc["pwdEnabled"] | false;
-        
-        // API bilgileri nested object içinde
-        JsonObject api = doc["api"];
-        bool apiEnabled = api["enabled"] | false;
-        String apiUrl = api["url"] | "";
-        String apiMethod = api["method"] | "GET";
-        String apiHeader = api["header"] | "";
-        String apiBody = api["body"] | "";
-        
-        // GÜVENLİK: Şifre ve URL loglanmıyor
-        DEBUG_PRINTF("[WebServer] Password slot #%d updated (pwdEnabled=%d, apiEnabled=%d)\n", 
-                     index, pwdEnabled, apiEnabled);
-        
         if (index >= SAFE_MAX_PASSWORDS) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid password index\"}");
+            sendError(400, "Invalid password index");
             return;
         }
         
+        JsonObject api = doc["api"];
         SafeApiConfig apiConfig;
-        apiUrl.toCharArray(apiConfig.url, SAFE_API_URL_MAX);
-        apiConfig.method = (apiMethod == "POST") ? SAFE_HTTP_POST : SAFE_HTTP_GET;
-        apiHeader.toCharArray(apiConfig.header, SAFE_API_HEADER_MAX);
-        apiBody.toCharArray(apiConfig.body, SAFE_API_BODY_MAX);
-        apiConfig.enabled = apiEnabled;
+        String(api["url"] | "").toCharArray(apiConfig.url, SAFE_API_URL_MAX);
+        apiConfig.method = (String(api["method"] | "GET") == "POST") ? SAFE_HTTP_POST : SAFE_HTTP_GET;
+        String(api["header"] | "").toCharArray(apiConfig.header, SAFE_API_HEADER_MAX);
+        String(api["body"] | "").toCharArray(apiConfig.body, SAFE_API_BODY_MAX);
+        apiConfig.enabled = api["enabled"] | false;
         
-        bool success = safeLockPtr->setPassword(index, password, apiConfig, pwdEnabled);
-        
-        if (success) {
-            server->send(200, "application/json", "{\"success\":true,\"message\":\"Password saved\"}");
+        if (safeLockPtr->setPassword(index, doc["password"] | "", apiConfig, doc["pwdEnabled"] | false)) {
+            sendSuccess("Password saved");
         } else {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid password format\"}");
+            sendError(400, "Invalid password format");
         }
     }
     
     void handleTestSafeApi() {
-        // API testi ESP32-C6 tarafindan yapilir, web sadece ayar icin
         if (!safeApiHandlerPtr) {
-            server->send(500, "application/json", "{\"success\":false,\"message\":\"Safe API Handler not initialized\"}");
+            sendError(500, "Safe API Handler not initialized");
             return;
         }
         
-        if (server->method() != HTTP_POST) {
-            server->send(405, "application/json", "{\"success\":false,\"message\":\"Method Not Allowed\"}");
-            return;
-        }
-        
-        String body = server->arg("plain");
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, body);
-        
-        if (error) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
-            return;
-        }
+        if (!parseJsonBody(doc)) return;
         
         String url = doc["url"] | "";
-        String methodStr = doc["method"] | "GET";
-        String header = doc["header"] | "";
-        String bodyData = doc["body"] | "";
-        
         if (url.length() == 0) {
-            server->send(400, "application/json", "{\"success\":false,\"message\":\"URL required\"}");
+            sendError(400, "URL required");
             return;
         }
         
-        // ESP32-C6 üzerinden API testi yap (SafeLockAPIHandler kullan)
-        SafeHttpMethod method = (methodStr == "POST") ? SAFE_HTTP_POST : SAFE_HTTP_GET;
-        bool success = safeApiHandlerPtr->testApi(url, method, header, bodyData);
-        
-        if (success) {
-            server->send(200, "application/json", "{\"success\":true,\"message\":\"API test basarili (ESP32-C6)\"}");
+        SafeHttpMethod method = (String(doc["method"] | "GET") == "POST") ? SAFE_HTTP_POST : SAFE_HTTP_GET;
+        if (safeApiHandlerPtr->testApi(url, method, doc["header"] | "", doc["body"] | "")) {
+            sendSuccess("API test successful");
         } else {
-            server->send(200, "application/json", "{\"success\":false,\"message\":\"API test basarisiz\"}");
+            server->send(200, "application/json", "{\"success\":false,\"message\":\"API test failed\"}");
         }
     }
     
     // System Actions
     void handleRestart() {
-        server->send(200, "application/json", "{\"success\":true,\"message\":\"Restarting...\"}");
+        sendSuccess("Restarting...");
         delay(500);
         ESP.restart();
     }
@@ -834,293 +661,22 @@ private:
     void handleFactoryReset() {
         DEBUG_PRINTLN("[FACTORY RESET] Starting factory reset...");
         
-        // 0. First Setup'i sifirla (wizard gosterilecek)
         resetFirstSetup();
-        DEBUG_PRINTLN("[FACTORY RESET] First setup reset - Wizard will show");
         
-        // 1. WiFi ayarlarini sil
-        Preferences wifiPrefs;
-        wifiPrefs.begin(PREFS_NAMESPACE, false);
-        wifiPrefs.clear();
-        wifiPrefs.end();
-        DEBUG_PRINTLN("[FACTORY RESET] WiFi settings cleared");
+        // Clear all preferences namespaces
+        const char* namespaces[] = {PREFS_NAMESPACE, "dimmer-settings", "shutter", "mode", "safelock", "ota-settings"};
+        for (const char* ns : namespaces) {
+            clearPrefsNamespace(ns);
+        }
+        DEBUG_PRINTLN("[FACTORY RESET] All settings cleared");
         
-        // 2. Dimmer ayarlarini sil
-        Preferences dimmerPrefs;
-        dimmerPrefs.begin("dimmer-settings", false);
-        dimmerPrefs.clear();
-        dimmerPrefs.end();
-        DEBUG_PRINTLN("[FACTORY RESET] Dimmer settings cleared");
-        
-        // 3. Shutter ayarlarini sil
-        Preferences shutterPrefs;
-        shutterPrefs.begin("shutter", false);
-        shutterPrefs.clear();
-        shutterPrefs.end();
-        DEBUG_PRINTLN("[FACTORY RESET] Shutter settings cleared");
-        
-        // 4. Mode manager ayarlarini sil
-        Preferences modePrefs;
-        modePrefs.begin("mode", false);
-        modePrefs.clear();
-        modePrefs.end();
-        DEBUG_PRINTLN("[FACTORY RESET] Mode settings cleared");
-        
-        // 5. Safe Lock ayarlarini sil
-        Preferences safePrefs;
-        safePrefs.begin("safelock", false);
-        safePrefs.clear();
-        safePrefs.end();
-        DEBUG_PRINTLN("[FACTORY RESET] Safe Lock settings cleared");
-        
-        // 6. OTA ayarlarini sil
-        Preferences otaPrefs;
-        otaPrefs.begin("ota-settings", false);
-        otaPrefs.clear();
-        otaPrefs.end();
-        DEBUG_PRINTLN("[FACTORY RESET] OTA settings cleared");
-        
-        server->send(200, "application/json", "{\"success\":true,\"message\":\"Factory reset complete. Restarting...\"}");
-        
+        sendSuccess("Factory reset complete. Restarting...");
         delay(1000);
         ESP.restart();
     }
     
-    // Static wrapper functions for server callbacks
+    // Static instance for callbacks
     static SKWebServer* instance;
-    
-    static void handleRootStatic() {
-        if (instance) {
-            instance->handleRoot();
-        }
-    }
-    
-    static void handleCSSStatic() {
-        if (instance) {
-            instance->handleCSS();
-        }
-    }
-    
-    static void handleScriptStatic() {
-        if (instance) {
-            instance->handleScript();
-        }
-    }
-    
-    static void handleFaviconStatic() {
-        if (instance) {
-            instance->handleFavicon();
-        }
-    }
-    
-    static void handleNotFoundStatic() {
-        if (instance) {
-            instance->handleNotFound();
-        }
-    }
-    
-    static void handleSaveNetworkStatic() {
-        if (instance) {
-            instance->handleSaveNetwork();
-        }
-    }
-    
-    static void handleGetSettingsStatic() {
-        if (instance) {
-            instance->handleGetSettings();
-        }
-    }
-    
-    static void handleGetStatusStatic() {
-        if (instance) {
-            instance->handleGetStatus();
-        }
-    }
-    
-    static void handleSetAPModeStatic() {
-        if (instance) {
-            instance->handleSetAPMode();
-        }
-    }
-    
-    // OTA static wrappers
-    static void handleGetOTASettingsStatic() {
-        if (instance) {
-            instance->handleGetOTASettings();
-        }
-    }
-    
-    static void handleCheckOTAUpdateStatic() {
-        if (instance) {
-            instance->handleCheckOTAUpdate();
-        }
-    }
-    
-    static void handlePerformOTAUpdateStatic() {
-        if (instance) {
-            instance->handlePerformOTAUpdate();
-        }
-    }
-    
-    static void handleSaveOTASettingsStatic() {
-        if (instance) {
-            instance->handleSaveOTASettings();
-        }
-    }
-    
-    // Language static wrappers
-    static void handleGetLangStatic() {
-        if (instance) {
-            instance->handleGetLang();
-        }
-    }
-    
-    static void handleSetLangStatic() {
-        if (instance) {
-            instance->handleSetLang();
-        }
-    }
-    
-    static void handleGetCurrentLangStatic() {
-        if (instance) {
-            instance->handleGetCurrentLang();
-        }
-    }
-    
-    // Dimmer static wrappers
-    static void handleConnectDimmerStatic() {
-        if (instance) {
-            instance->handleConnectDimmer();
-        }
-    }
-    
-    static void handleDisconnectDimmerStatic() {
-        if (instance) {
-            instance->handleDisconnectDimmer();
-        }
-    }
-    
-    static void handleGetDimmerStatusStatic() {
-        if (instance) {
-            instance->handleGetDimmerStatus();
-        }
-    }
-    
-    static void handleSetDimmerRatioStatic() {
-        if (instance) {
-            instance->handleSetDimmerRatio();
-        }
-    }
-    
-    static void handleScanNetworkStatic() {
-        if (instance) {
-            instance->handleScanNetwork();
-        }
-    }
-    
-    static void handleStopScanStatic() {
-        if (instance) {
-            instance->handleStopScan();
-        }
-    }
-    
-    static void handleGetScanResultsStatic() {
-        if (instance) {
-            instance->handleGetScanResults();
-        }
-    }
-    
-    static void handleGetScanProgressStatic() {
-        if (instance) {
-            instance->handleGetScanProgress();
-        }
-    }
-    
-    static void handleGetSavedDevicesStatic() {
-        if (instance) {
-            instance->handleGetSavedDevices();
-        }
-    }
-    
-    static void handleRemoveSavedDeviceStatic() {
-        if (instance) {
-            instance->handleRemoveSavedDevice();
-        }
-    }
-    
-    // Shutter static wrappers
-    static void handleConnectShutterStatic() {
-        if (instance) {
-            instance->handleConnectShutter();
-        }
-    }
-    
-    static void handleDisconnectShutterStatic() {
-        if (instance) {
-            instance->handleDisconnectShutter();
-        }
-    }
-    
-    static void handleScanShutterNetworkStatic() {
-        if (instance) {
-            instance->handleScanShutterNetwork();
-        }
-    }
-    
-    static void handleGetShutterStatusStatic() {
-        if (instance) {
-            instance->handleGetShutterStatus();
-        }
-    }
-    
-    static void handleAdjustShutterStepStatic() {
-        if (instance) {
-            instance->handleAdjustShutterStep();
-        }
-    }
-    
-    // Mode manager static wrappers
-    static void handleGetCurrentModeStatic() {
-        if (instance) {
-            instance->handleGetCurrentMode();
-        }
-    }
-    
-    static void handleSetModeStatic() {
-        if (instance) {
-            instance->handleSetMode();
-        }
-    }
-    
-    static void handleGetSafeStatusStatic() {
-        if (instance) {
-            instance->handleGetSafeStatus();
-        }
-    }
-    
-    static void handleSetSafePasswordStatic() {
-        if (instance) {
-            instance->handleSetSafePassword();
-        }
-    }
-    
-    static void handleTestSafeApiStatic() {
-        if (instance) {
-            instance->handleTestSafeApi();
-        }
-    }
-    
-    static void handleRestartStatic() {
-        if (instance) {
-            instance->handleRestart();
-        }
-    }
-    
-    static void handleFactoryResetStatic() {
-        if (instance) {
-            instance->handleFactoryReset();
-        }
-    }
     
 public:
     SKWebServer() {
@@ -1168,61 +724,62 @@ public:
     void begin(String chip_id) {
         chipID = chip_id;
         
-        // Setup routes
-        server->on("/", handleRootStatic);
-        server->on("/style.css", HTTP_GET, handleCSSStatic);
-        server->on("/script.js", HTTP_GET, handleScriptStatic);
-        server->on("/favicon.ico", HTTP_GET, handleFaviconStatic);
-        server->on("/saveNetwork", HTTP_POST, handleSaveNetworkStatic);
-        server->on("/getSettings", HTTP_GET, handleGetSettingsStatic);
-        server->on("/getStatus", HTTP_GET, handleGetStatusStatic);
-        server->on("/setAPMode", HTTP_POST, handleSetAPModeStatic);
+        // Setup routes using lambda callbacks
+        server->on("/", [this]() { handleRoot(); });
+        server->on("/style.css", HTTP_GET, [this]() { handleCSS(); });
+        server->on("/script.js", HTTP_GET, [this]() { handleScript(); });
+        server->on("/favicon.ico", HTTP_GET, [this]() { handleFavicon(); });
+        server->on("/saveNetwork", HTTP_POST, [this]() { handleSaveNetwork(); });
+        server->on("/getSettings", HTTP_GET, [this]() { handleGetSettings(); });
+        server->on("/scanWiFi", HTTP_GET, [this]() { handleScanWiFi(); });
+        server->on("/getStatus", HTTP_GET, [this]() { handleGetStatus(); });
+        server->on("/setAPMode", HTTP_POST, [this]() { handleSetAPMode(); });
         
         // OTA routes
-        server->on("/getOTASettings", HTTP_GET, handleGetOTASettingsStatic);
-        server->on("/checkOTAUpdate", HTTP_POST, handleCheckOTAUpdateStatic);
-        server->on("/performOTAUpdate", HTTP_POST, handlePerformOTAUpdateStatic);
-        server->on("/saveOTASettings", HTTP_POST, handleSaveOTASettingsStatic);
+        server->on("/getOTASettings", HTTP_GET, [this]() { handleGetOTASettings(); });
+        server->on("/checkOTAUpdate", HTTP_POST, [this]() { handleCheckOTAUpdate(); });
+        server->on("/performOTAUpdate", HTTP_POST, [this]() { handlePerformOTAUpdate(); });
+        server->on("/saveOTASettings", HTTP_POST, [this]() { handleSaveOTASettings(); });
         
         // Language routes
-        server->on("/getLang", HTTP_GET, handleGetLangStatic);
-        server->on("/setLang", HTTP_POST, handleSetLangStatic);
-        server->on("/getCurrentLang", HTTP_GET, handleGetCurrentLangStatic);
+        server->on("/getLang", HTTP_GET, [this]() { handleGetLang(); });
+        server->on("/setLang", HTTP_POST, [this]() { handleSetLang(); });
+        server->on("/getCurrentLang", HTTP_GET, [this]() { handleGetCurrentLang(); });
         
         // Dimmer routes
-        server->on("/connectDimmer", HTTP_POST, handleConnectDimmerStatic);
-        server->on("/disconnectDimmer", HTTP_POST, handleDisconnectDimmerStatic);
-        server->on("/getDimmerStatus", HTTP_GET, handleGetDimmerStatusStatic);
-        server->on("/setDimmerRatio", HTTP_POST, handleSetDimmerRatioStatic);
-        server->on("/scanNetwork", HTTP_POST, handleScanNetworkStatic);
-        server->on("/stopScan", HTTP_POST, handleStopScanStatic);
-        server->on("/getScanResults", HTTP_GET, handleGetScanResultsStatic);
-        server->on("/getScanProgress", HTTP_GET, handleGetScanProgressStatic);
-        server->on("/getSavedDevices", HTTP_GET, handleGetSavedDevicesStatic);
-        server->on("/removeSavedDevice", HTTP_POST, handleRemoveSavedDeviceStatic);
+        server->on("/connectDimmer", HTTP_POST, [this]() { handleConnectDimmer(); });
+        server->on("/disconnectDimmer", HTTP_POST, [this]() { handleDisconnectDimmer(); });
+        server->on("/getDimmerStatus", HTTP_GET, [this]() { handleGetDimmerStatus(); });
+        server->on("/setDimmerRatio", HTTP_POST, [this]() { handleSetDimmerRatio(); });
+        server->on("/scanNetwork", HTTP_POST, [this]() { handleScanNetwork(); });
+        server->on("/stopScan", HTTP_POST, [this]() { handleStopScan(); });
+        server->on("/getScanResults", HTTP_GET, [this]() { handleGetScanResults(); });
+        server->on("/getScanProgress", HTTP_GET, [this]() { handleGetScanProgress(); });
+        server->on("/getSavedDevices", HTTP_GET, [this]() { handleGetSavedDevices(); });
+        server->on("/removeSavedDevice", HTTP_POST, [this]() { handleRemoveSavedDevice(); });
         
         // Shutter routes
-        server->on("/connectShutter", HTTP_POST, handleConnectShutterStatic);
-        server->on("/disconnectShutter", HTTP_POST, handleDisconnectShutterStatic);
-        server->on("/scanShutterNetwork", HTTP_POST, handleScanShutterNetworkStatic);
-        server->on("/getShutterStatus", HTTP_GET, handleGetShutterStatusStatic);
-        server->on("/adjustShutterStep", HTTP_POST, handleAdjustShutterStepStatic);
+        server->on("/connectShutter", HTTP_POST, [this]() { handleConnectShutter(); });
+        server->on("/disconnectShutter", HTTP_POST, [this]() { handleDisconnectShutter(); });
+        server->on("/scanShutterNetwork", HTTP_POST, [this]() { handleScanShutterNetwork(); });
+        server->on("/getShutterStatus", HTTP_GET, [this]() { handleGetShutterStatus(); });
+        server->on("/adjustShutterStep", HTTP_POST, [this]() { handleAdjustShutterStep(); });
         
         // Mode manager routes
-        server->on("/getCurrentMode", HTTP_GET, handleGetCurrentModeStatic);
-        server->on("/setMode", HTTP_POST, handleSetModeStatic);
+        server->on("/getCurrentMode", HTTP_GET, [this]() { handleGetCurrentMode(); });
+        server->on("/setMode", HTTP_POST, [this]() { handleSetMode(); });
         
         // Safe mode routes
-        server->on("/getSafeStatus", HTTP_GET, handleGetSafeStatusStatic);
-        server->on("/saveSafePassword", HTTP_POST, handleSetSafePasswordStatic);
-        server->on("/setSafePassword", HTTP_POST, handleSetSafePasswordStatic);
-        server->on("/testSafeApi", HTTP_POST, handleTestSafeApiStatic);
+        server->on("/getSafeStatus", HTTP_GET, [this]() { handleGetSafeStatus(); });
+        server->on("/saveSafePassword", HTTP_POST, [this]() { handleSetSafePassword(); });
+        server->on("/setSafePassword", HTTP_POST, [this]() { handleSetSafePassword(); });
+        server->on("/testSafeApi", HTTP_POST, [this]() { handleTestSafeApi(); });
         
         // System action routes
-        server->on("/restart", HTTP_POST, handleRestartStatic);
-        server->on("/factoryReset", HTTP_POST, handleFactoryResetStatic);
+        server->on("/restart", HTTP_POST, [this]() { handleRestart(); });
+        server->on("/factoryReset", HTTP_POST, [this]() { handleFactoryReset(); });
         
-        server->onNotFound(handleNotFoundStatic);
+        server->onNotFound([this]() { handleNotFound(); });
         
         // Start server
         server->begin();

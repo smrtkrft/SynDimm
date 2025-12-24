@@ -314,6 +314,34 @@ public:
         DEBUG_PRINTLN("[WiFi] Power Save Mode DEVRE DISI - Tam performans");
     }
     
+    // Scan available WiFi networks and return as JSON
+    String getScannedNetworksJSON() {
+        DEBUG_PRINTLN("[WiFi] Scanning available networks...");
+        int networksFound = WiFi.scanNetworks();
+        
+        JsonDocument doc;
+        JsonArray networks = doc["networks"].to<JsonArray>();
+        
+        if (networksFound > 0) {
+            DEBUG_PRINTF("[WiFi] Found %d networks\n", networksFound);
+            for (int i = 0; i < networksFound; i++) {
+                JsonObject net = networks.add<JsonObject>();
+                net["ssid"] = WiFi.SSID(i);
+                net["rssi"] = WiFi.RSSI(i);
+                net["encryption"] = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "open" : "secured";
+            }
+        } else {
+            DEBUG_PRINTLN("[WiFi] No networks found or scan error");
+        }
+        
+        doc["count"] = networksFound > 0 ? networksFound : 0;
+        WiFi.scanDelete();
+        
+        String output;
+        serializeJson(doc, output);
+        return output;
+    }
+    
     // Get Device ID (son 6 karakter - kalıcı, NVS'te saklanır)
     String getChipID() {
         if (chipID.length() == 0) {

@@ -200,7 +200,15 @@ const char LANG_DE_JSON[] PROGMEM = R"rawliteral({
     "validation_password": "Passwort muss 8-63 Zeichen haben",
     "validation_ip": "Ungültige statische IP",
     "validation_mdns": "mDNS max. 63 Zeichen",
-    "validation_wifi_required": "Mindestens ein WLAN-Netzwerk erforderlich"
+    "validation_wifi_required": "Mindestens ein WLAN-Netzwerk erforderlich",
+    "scan": "Scannen",
+    "scan_wifi": "WLAN-Netzwerke scannen",
+    "scanning": "Scannen...",
+    "no_networks": "Keine Netzwerke gefunden",
+    "rescan": "Erneut scannen",
+    "wifi_open": "Offen",
+    "wifi_secured": "Gesichert",
+    "wifi_selected": "'{ssid}' ausgewählt"
   },
   
   "info": {

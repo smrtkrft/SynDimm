@@ -200,7 +200,15 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
     "validation_password": "Şifre 8-63 karakter olmalı",
     "validation_ip": "Geçersiz Statik IP",
     "validation_mdns": "mDNS max 63 karakter",
-    "validation_wifi_required": "En az bir WiFi ağı gerekli"
+    "validation_wifi_required": "En az bir WiFi ağı gerekli",
+    "scan": "Tara",
+    "scan_wifi": "WiFi Ağlarını Tara",
+    "scanning": "Taranıyor...",
+    "no_networks": "Ağ bulunamadı",
+    "rescan": "Yeniden Tara",
+    "wifi_open": "Açık",
+    "wifi_secured": "Şifreli",
+    "wifi_selected": "'{ssid}' seçildi"
   },
   
   "info": {
