@@ -318,7 +318,18 @@ public:
     // Scan available WiFi networks and return as JSON
     String getScannedNetworksJSON() {
         DEBUG_PRINTLN("[WiFi] Scanning available networks...");
-        int networksFound = WiFi.scanNetworks();
+        
+        // AP modundayken tarama yapabilmek için STA modunu da aktifleştir
+        wifi_mode_t currentMode;
+        esp_wifi_get_mode(&currentMode);
+        if (currentMode == WIFI_MODE_AP) {
+            WiFi.mode(WIFI_AP_STA);
+            delay(100);
+            DEBUG_PRINTLN("[WiFi] Switched to AP+STA mode for scanning");
+        }
+        
+        // Senkron tarama yap (true = gizli ağları da tara)
+        int networksFound = WiFi.scanNetworks(false, true);
         
         JsonDocument doc;
         JsonArray networks = doc["networks"].to<JsonArray>();
@@ -326,20 +337,32 @@ public:
         if (networksFound > 0) {
             DEBUG_PRINTF("[WiFi] Found %d networks\n", networksFound);
             for (int i = 0; i < networksFound; i++) {
-                JsonObject net = networks.add<JsonObject>();
-                net["ssid"] = WiFi.SSID(i);
-                net["rssi"] = WiFi.RSSI(i);
-                net["encryption"] = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "open" : "secured";
+                String ssid = WiFi.SSID(i);
+                if (ssid.length() > 0) {  // Boş SSID'leri atla
+                    JsonObject net = networks.add<JsonObject>();
+                    net["ssid"] = ssid;
+                    net["rssi"] = WiFi.RSSI(i);
+                    net["encryption"] = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "open" : "secured";
+                }
             }
+        } else if (networksFound == 0) {
+            DEBUG_PRINTLN("[WiFi] No networks found");
         } else {
-            DEBUG_PRINTLN("[WiFi] No networks found or scan error");
+            DEBUG_PRINTF("[WiFi] Scan error: %d\n", networksFound);
         }
         
-        doc["count"] = networksFound > 0 ? networksFound : 0;
+        doc["count"] = networks.size();
         WiFi.scanDelete();
+        
+        // Eğer sadece AP modundaydık, geri dön
+        if (currentMode == WIFI_MODE_AP) {
+            WiFi.mode(WIFI_MODE_AP);
+            DEBUG_PRINTLN("[WiFi] Switched back to AP mode");
+        }
         
         String output;
         serializeJson(doc, output);
+        DEBUG_PRINTLN("[WiFi] Scan result: " + output);
         return output;
     }
     
