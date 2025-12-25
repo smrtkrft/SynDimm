@@ -117,7 +117,14 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
     "info_text": "Shutter encoder ile kontrol edilir. Tarayıcınızdan sadece hız kalibrasyonu yapabilirsiniz. Teorik olarak tamamlanmış ancak gerçek panjur üzerinde test edilmemiştir.",
     "calibration_warning": "Shutter aygıtınız kalibre edilmediği için encoder dönüşü geçici olarak devre dışı. Ancak encoder butonu ile tam açma, kapama ve durdurma yapabilirsiniz.",
     "warning_encoder": "Shutter encoder ile kontrol edilir. Tarayıcınızdan sadece hız kalibrasyonu yapabilirsiniz. Teorik olarak tamamlanmış ancak gerçek dünyada panjur üzerinde test işlemi gerçekleştirilmemiştir.",
-    "warning_calibration": "Shutter aygıtınız kalibre edilmediği için encoder dönüş hareketleri geçici olarak devre dışı. Ancak yine de encoder butonu ile tam açma, tam kapatma ve durdurma işlemlerini gerçekleştirmeye devam edebilirsiniz."
+    "warning_calibration": "Shutter aygıtınız kalibre edilmediği için encoder dönüş hareketleri geçici olarak devre dışı. Ancak yine de encoder butonu ile tam açma, tam kapatma ve durdurma işlemlerini gerçekleştirmeye devam edebilirsiniz.",
+    "shelly_shutter": "Shelly Shutter",
+    "stopped": "Durdu",
+    "moving_up": "Yukarı Çıkıyor",
+    "moving_down": "Aşağı İniyor",
+    "open": "Açık",
+    "closed": "Kapalı",
+    "no_device_connected": "Cihaz bağlı değil"
   },
   
   "safe": {

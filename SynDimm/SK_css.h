@@ -173,6 +173,32 @@ body.light-theme .dimmer-inline-form input { background: var(--bg-card); border-
 body.light-theme .dimmer-inline-form input::placeholder { color: var(--text-muted); }
 body.light-theme .dimmer-inline-form input:focus { border-color: rgba(59, 130, 246, 0.4); }
 body.light-theme .saved-device-empty { color: var(--text-muted); }
+
+/* Light Theme - Shutter Hero */
+body.light-theme .shutter-hero { background: radial-gradient(ellipse at center, rgba(6, 182, 212, 0.1) 0%, transparent 70%); }
+body.light-theme .shutter-hero.disconnected { background: radial-gradient(ellipse at center, rgba(239, 68, 68, 0.1) 0%, transparent 70%); }
+body.light-theme .shutter-hero.moving-up { background: radial-gradient(ellipse at center, rgba(34, 197, 94, 0.12) 0%, transparent 70%); }
+body.light-theme .shutter-hero.moving-down { background: radial-gradient(ellipse at center, rgba(251, 191, 36, 0.12) 0%, transparent 70%); }
+body.light-theme .shutter-position-display { color: var(--text-primary); }
+body.light-theme .shutter-position-display span { color: var(--text-muted); }
+body.light-theme .shutter-hero.disconnected .shutter-position-display { color: var(--text-muted); }
+body.light-theme .shutter-movement-status { color: rgb(6, 182, 212); }
+body.light-theme .shutter-hero.disconnected .shutter-movement-status { color: rgb(239, 68, 68); }
+body.light-theme .shutter-hero.moving-up .shutter-movement-status { color: rgb(34, 197, 94); }
+body.light-theme .shutter-hero.moving-down .shutter-movement-status { color: rgb(217, 119, 6); }
+body.light-theme .shutter-status-dot { color: var(--text-muted); }
+body.light-theme .shutter-connection-status { color: rgb(16, 185, 129); }
+body.light-theme .shutter-ip-display { color: var(--text-muted); }
+body.light-theme .shutter-cal-btn { background: var(--bg-card); border-color: var(--border-light); color: var(--text-primary); }
+body.light-theme .shutter-cal-btn:hover:not(:disabled) { border-color: rgb(6, 182, 212); background: rgba(6, 182, 212, 0.1); }
+body.light-theme .shutter-cal-value { color: rgb(6, 182, 212); }
+body.light-theme .shutter-hero.disconnected .shutter-cal-value { color: var(--text-muted); }
+body.light-theme .shutter-cal-label { color: var(--text-muted); }
+body.light-theme .shutter-compact-form { background: rgba(0, 0, 0, 0.02); border-color: var(--border-color); }
+body.light-theme .shutter-inline-form input { background: var(--bg-card); border-color: var(--border-light); color: var(--text-primary); }
+body.light-theme .shutter-inline-form input::placeholder { color: var(--text-muted); }
+body.light-theme .shutter-inline-form input:focus { border-color: rgba(6, 182, 212, 0.4); }
+body.light-theme .shutter-warning { background: rgba(251, 191, 36, 0.1); border-color: rgba(217, 119, 6, 0.4); color: rgb(180, 83, 9); }
 body.light-theme .saved-device-item { background: var(--bg-card); border-color: var(--border-light); }
 body.light-theme .saved-device-ip { color: var(--text-primary); }
 body.light-theme .saved-device-type { color: var(--text-muted); }
@@ -795,7 +821,48 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .dimmer-inline-form .btn-secondary { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; }
 .dimmer-inline-form .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
 
-/* Shutter Status Bar (kept for shutter mode) */
+/* ========================================
+   SHUTTER HERO DISPLAY (Dimmer ile ayni yapi)
+   ======================================== */
+.shutter-hero { text-align: center; padding: 30px 20px; background: radial-gradient(ellipse at center, rgba(6, 182, 212, 0.15) 0%, transparent 70%); border-radius: 8px; margin-bottom: 20px; }
+.shutter-hero.disconnected { background: radial-gradient(ellipse at center, rgba(239, 68, 68, 0.1) 0%, transparent 70%); }
+.shutter-hero.moving-up { background: radial-gradient(ellipse at center, rgba(34, 197, 94, 0.18) 0%, transparent 70%); }
+.shutter-hero.moving-down { background: radial-gradient(ellipse at center, rgba(251, 191, 36, 0.18) 0%, transparent 70%); }
+.shutter-hero.open { background: radial-gradient(ellipse at center, rgba(16, 185, 129, 0.15) 0%, transparent 70%); }
+.shutter-hero.closed { background: radial-gradient(ellipse at center, rgba(107, 114, 128, 0.15) 0%, transparent 70%); }
+.shutter-position-display { font-size: 4em; font-weight: 200; color: #fff; line-height: 1; }
+.shutter-position-display span { font-size: 0.4em; color: rgba(255, 255, 255, 0.5); }
+.shutter-hero.disconnected .shutter-position-display { color: rgba(255, 255, 255, 0.3); }
+.shutter-status-row { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.9em; }
+.shutter-movement-status { color: rgb(6, 182, 212); font-weight: 500; }
+.shutter-hero.disconnected .shutter-movement-status { color: rgb(239, 68, 68); }
+.shutter-hero.moving-up .shutter-movement-status { color: rgb(34, 197, 94); }
+.shutter-hero.moving-down .shutter-movement-status { color: rgb(251, 191, 36); }
+.shutter-hero.open .shutter-movement-status { color: rgb(16, 185, 129); }
+.shutter-hero.closed .shutter-movement-status { color: rgb(156, 163, 175); }
+.shutter-status-dot { color: rgba(255, 255, 255, 0.5); }
+.shutter-hero.disconnected .shutter-status-dot { display: none; }
+.shutter-connection-status { color: rgb(16, 185, 129); }
+.shutter-ip-display { margin-top: 5px; color: rgba(255, 255, 255, 0.5); font-size: 0.85em; }
+.shutter-hero.disconnected .shutter-ip-display { color: rgba(255, 255, 255, 0.3); }
+.shutter-calibration-controls { display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 20px; }
+.shutter-cal-btn { width: 50px; height: 50px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.03); color: #fff; font-size: 1.5em; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; }
+.shutter-cal-btn:hover:not(:disabled) { border-color: rgb(6, 182, 212); background: rgba(6, 182, 212, 0.15); }
+.shutter-cal-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.shutter-cal-center { text-align: center; }
+.shutter-cal-value { font-size: 2em; font-weight: 600; min-width: 50px; text-align: center; color: rgb(6, 182, 212); line-height: 1; }
+.shutter-hero.disconnected .shutter-cal-value { color: rgba(255, 255, 255, 0.3); }
+.shutter-cal-label { font-size: 0.75em; color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; }
+.shutter-compact-form { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 20px; }
+.shutter-compact-form .section-title { font-size: 0.85em; font-weight: 600; color: rgba(255, 255, 255, 0.6); margin: 0 0 12px 0; padding: 0; border: none; text-transform: uppercase; letter-spacing: 0.5px; }
+.shutter-inline-form { display: flex; gap: 10px; margin-bottom: 15px; }
+.shutter-inline-form input { flex: 1; padding: 12px 15px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; color: #fff; font-size: 1em; }
+.shutter-inline-form input:focus { outline: none; border-color: rgba(6, 182, 212, 0.3); background: rgba(255, 255, 255, 0.08); }
+.shutter-inline-form input::placeholder { color: rgba(255, 255, 255, 0.3); }
+.shutter-warning { padding: 12px 16px; border-radius: 6px; font-size: 0.85em; line-height: 1.5; margin-top: 15px; background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.4); color: rgb(251, 191, 36); }
+.shutter-warning .warning-icon { margin-right: 8px; }
+
+/* Shutter Status Bar (legacy - can be removed later) */
 .shutter-status-bar { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 20px 25px; margin-bottom: 25px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
 .shutter-info-text { padding: 12px 16px; border-radius: 6px; font-size: 0.85em; line-height: 1.5; margin-top: 15px; }
 .shutter-info-text.warning { background: rgba(255, 193, 7, 0.15); border: 1px solid rgba(255, 193, 7, 0.4); color: #ffc107; }

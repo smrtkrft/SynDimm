@@ -87,6 +87,13 @@ enum DimmerType {
     // DALI Protocol
     DIMMER_SHELLY_DALI = 50,          // Shelly DALI Dimmer Gateway
     
+    // Shelly Gen4 Series (RPC API - same as Gen3)
+    DIMMER_SHELLY_DIMMER_GEN4 = 60,   // Shelly Dimmer Gen4
+    DIMMER_SHELLY_PLUS_1_GEN4 = 61,   // Shelly Plus 1 Gen4 (with dimming)
+    DIMMER_SHELLY_PM_MINI_GEN4 = 62,  // Shelly PM Mini Gen4
+    DIMMER_SHELLY_1_MINI_GEN4 = 63,   // Shelly 1 Mini Gen4
+    DIMMER_SHELLY_DIMMER_0_10V_GEN4 = 64, // Shelly 0-10V Dimmer Gen4
+    
     // Other brands
     DIMMER_TASMOTA = 100,
     DIMMER_GENERIC = 200
@@ -276,6 +283,16 @@ DimmerEndpoints getEndpointsForModel(DimmerType type) {
     }
     // Plus Series
     else if (type >= 40 && type < 50) {
+        endpoints.useRPC = true;
+        endpoints.getStatus = "/rpc/Light.GetStatus?id=0";
+        endpoints.setBrightness = "/rpc/Light.Set?id=0&brightness=";
+        endpoints.toggle = "/rpc/Light.Toggle?id=0";
+        endpoints.getInfo = "/rpc/Shelly.GetDeviceInfo";
+        endpoints.getSettings = "/rpc/Light.GetConfig?id=0";
+        endpoints.defaultChannel = 0;
+    }
+    // Gen4 Series (same RPC API as Gen3)
+    else if (type >= 60 && type < 70) {
         endpoints.useRPC = true;
         endpoints.getStatus = "/rpc/Light.GetStatus?id=0";
         endpoints.setBrightness = "/rpc/Light.Set?id=0&brightness=";
@@ -590,7 +607,25 @@ bool connectToDimmer(String ip) {
     
     if (device.category == CATEGORY_DIMMER) {
         DimmerType detectedType = DIMMER_UNKNOWN;
-        if (device.modelName == "SNSW-001P16EU") detectedType = DIMMER_SHELLY_DIMMER_2_GEN3;
+        
+        // Gen4 detection (check for g4 suffix or Gen4 in name)
+        bool isGen4 = device.modelName.indexOf("g4") >= 0 || 
+                      device.modelName.indexOf("G4") >= 0 || 
+                      device.modelName.indexOf("Gen4") >= 0 ||
+                      device.displayName.indexOf("Gen4") >= 0;
+        
+        if (isGen4) {
+            // Gen4 devices
+            if (device.modelName.indexOf("dimmer") >= 0 || device.modelName.indexOf("Dimmer") >= 0) {
+                if (device.modelName.indexOf("0-10") >= 0) detectedType = DIMMER_SHELLY_DIMMER_0_10V_GEN4;
+                else detectedType = DIMMER_SHELLY_DIMMER_GEN4;
+            }
+            else if (device.modelName.indexOf("plus1") >= 0 || device.modelName.indexOf("Plus 1") >= 0) detectedType = DIMMER_SHELLY_PLUS_1_GEN4;
+            else if (device.modelName.indexOf("pmminig4") >= 0 || device.modelName.indexOf("PM Mini") >= 0) detectedType = DIMMER_SHELLY_PM_MINI_GEN4;
+            else if (device.modelName.indexOf("1minig4") >= 0 || device.modelName.indexOf("1 Mini") >= 0) detectedType = DIMMER_SHELLY_1_MINI_GEN4;
+            else detectedType = DIMMER_SHELLY_DIMMER_GEN4; // Default Gen4
+        }
+        else if (device.modelName == "SNSW-001P16EU") detectedType = DIMMER_SHELLY_DIMMER_2_GEN3;
         else if (device.modelName.indexOf("0-10V") >= 0 || device.modelName.indexOf("SNDM-0013") >= 0) detectedType = DIMMER_SHELLY_DIMMER_0_10V;
         else if (device.modelName.indexOf("1-10V") >= 0) detectedType = DIMMER_SHELLY_DIMMER_1_10V;
         else if (device.modelName.indexOf("Plus") >= 0 && device.modelName.indexOf("Dimmer") >= 0) detectedType = DIMMER_SHELLY_PLUS_DIMMER;
@@ -604,7 +639,8 @@ bool connectToDimmer(String ip) {
         dimmerDevice.type = detectedType;
         dimmerDevice.modelName = device.modelName;
         dimmerDevice.displayName = device.displayName;
-        dimmerDevice.generation = (detectedType >= 20) ? 3 : 1;
+        // Generation detection: 60+ = Gen4, 20-59 = Gen3/Gen2, 10-19 = Gen1
+        dimmerDevice.generation = (detectedType >= 60) ? 4 : (detectedType >= 20) ? 3 : 1;
         dimmerDevice.firmwareVersion = "";
         dimmerDevice.name = device.displayName;
         dimmerDevice.endpoints = getEndpointsForModel(detectedType);
@@ -742,6 +778,7 @@ String getDimmerStatusJSON() {
     doc["hostname"] = dimmerDevice.hostname;
     doc["name"] = dimmerDevice.name;
     doc["type"] = (int)dimmerDevice.type;
+    doc["deviceType"] = dimmerDevice.displayName.length() > 0 ? dimmerDevice.displayName : dimmerDevice.name;
     doc["brightness"] = dimmerDevice.brightness;
     doc["isOn"] = dimmerDevice.isOn;
     doc["ratio"] = dimmerConfig.dimmerRatio;

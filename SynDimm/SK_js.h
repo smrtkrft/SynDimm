@@ -623,20 +623,57 @@ function loadDimmerStatus() {
     api('/getDimmerStatus').then(d => updateDimmerUI(d)).catch(() => {});
 }
 function updateDimmerUI(d) {
-    const ip = $('dimmer-status-ip'), br = $('dimmer-status-brightness'), pw = $('dimmer-status-power'), cal = $('dimmer-status-calibration');
-    const btnC = $('btn-connect'), btnD = $('btn-disconnect');
+    // Hero Display elements (new Design 3)
+    const hero = $('dimmer-hero');
+    const brightnessDisplay = $('dimmer-brightness-display');
+    const powerStatus = $('dimmer-power-status');
+    const connectionStatus = $('dimmer-connection-status');
+    const ipDisplay = $('dimmer-ip-display');
+    const calValue = $('dimmer-cal-value');
+    const calBtnMinus = $('cal-btn-minus');
+    const calBtnPlus = $('cal-btn-plus');
+    
     if(d.connected) {
-        setText('dimmer-status-ip', d.ip || '-');
-        setText('dimmer-status-brightness', (d.brightness || 0) + '%');
-        setText('dimmer-status-power', d.isOn ? ' ' + t('common.on') : ' ' + t('common.off'));
-        setText('dimmer-status-calibration', d.ratio || 3);
-        if(btnC) btnC.style.display = 'none'; if(btnD) btnD.style.display = 'block';
+        // Update hero class for CSS styling
+        if(hero) hero.className = 'dimmer-hero' + (d.isOn ? '' : ' connected-off');
+        
+        // Update brightness display
+        if(brightnessDisplay) brightnessDisplay.innerHTML = (d.brightness || 0) + '<span>%</span>';
+        
+        // Update power status
+        if(powerStatus) powerStatus.textContent = d.isOn ? t('common.on') : t('common.off');
+        
+        // Update connection status
+        if(connectionStatus) connectionStatus.textContent = t('dimmer.connected');
+        
+        // Update IP + device type display
+        if(ipDisplay) {
+            const deviceInfo = d.deviceType ? (d.ip + ' - ' + d.deviceType) : d.ip;
+            ipDisplay.textContent = deviceInfo;
+        }
+        
+        // Update calibration value
+        if(calValue) calValue.textContent = d.ratio || 3;
+        
+        // Enable calibration buttons
+        if(calBtnMinus) calBtnMinus.disabled = (d.ratio || 3) <= 1;
+        if(calBtnPlus) calBtnPlus.disabled = (d.ratio || 3) >= 5;
+        
     } else {
-        setText('dimmer-status-ip', '-'); setText('dimmer-status-brightness', '0%');
-        setText('dimmer-status-power', ' ' + t('common.off')); setText('dimmer-status-calibration', '1-5');
-        if(btnC) btnC.style.display = 'block'; if(btnD) btnD.style.display = 'none';
+        // Update hero class for disconnected state
+        if(hero) hero.className = 'dimmer-hero disconnected';
+        
+        // Not connected state
+        if(brightnessDisplay) brightnessDisplay.innerHTML = '--<span>%</span>';
+        if(powerStatus) powerStatus.textContent = t('common.off');
+        if(connectionStatus) connectionStatus.textContent = t('dimmer.not_connected');
+        if(ipDisplay) ipDisplay.textContent = t('dimmer.no_device_connected');
+        if(calValue) calValue.textContent = '-';
+        
+        // Disable calibration buttons
+        if(calBtnMinus) calBtnMinus.disabled = true;
+        if(calBtnPlus) calBtnPlus.disabled = true;
     }
-    if(d.ratio && cal) cal.textContent = d.ratio;
 }
 function updateCalibrationValue(v) { setText('calibration-value', v); }
 function adjustCalibration(delta) {
@@ -771,15 +808,70 @@ function disconnectShutter() {
     post('/disconnectShutter', {}).then(d => { if(d.success) { showNotification(t('shutter.disconnected'), 'success'); loadShutterStatus(); } }).catch(() => {});
 }
 function loadShutterStatus() {
-    api('/getShutterStatus').then(d => {
-        setText('shutter-status-ip', d.ip || '-');
-        setText('shutter-status-text', d.connected ? t('shutter.connected') : t('shutter.not_connected'));
-        const bar = $('shutter-position-bar'); if(bar) bar.style.width = (d.position || 0) + '%';
-        setText('shutter-position-percent', (d.position || 0) + '%');
-        setText('shutter-encoder-step', d.encoderStep || 3);
-        const warn = $('shutter-calibration-warning');
-        if(warn) warn.style.display = (d.connected && !d.isCalibrated) ? 'block' : 'none';
-    }).catch(() => {});
+    api('/getShutterStatus').then(d => updateShutterUI(d)).catch(() => {});
+}
+function updateShutterUI(d) {
+    // Hero Display elements (same structure as Dimmer)
+    const hero = $('shutter-hero');
+    const positionDisplay = $('shutter-position-display');
+    const movementStatus = $('shutter-movement-status');
+    const connectionStatus = $('shutter-connection-status');
+    const ipDisplay = $('shutter-ip-display');
+    const calValue = $('shutter-cal-value');
+    const calBtnMinus = $('shutter-cal-btn-minus');
+    const calBtnPlus = $('shutter-cal-btn-plus');
+    
+    if(d.connected) {
+        // Determine movement state for hero class
+        let heroClass = 'shutter-hero';
+        if(d.status === 'moving_up') heroClass += ' moving-up';
+        else if(d.status === 'moving_down') heroClass += ' moving-down';
+        else if(d.position === 0) heroClass += ' open';
+        else if(d.position === 100) heroClass += ' closed';
+        if(hero) hero.className = heroClass;
+        
+        // Update position display
+        if(positionDisplay) positionDisplay.innerHTML = (d.position || 0) + '<span>%</span>';
+        
+        // Update movement status
+        if(movementStatus) {
+            let statusText = t('shutter.stopped');
+            if(d.status === 'moving_up') statusText = '↑ ' + t('shutter.moving_up');
+            else if(d.status === 'moving_down') statusText = '↓ ' + t('shutter.moving_down');
+            else if(d.position === 0) statusText = t('shutter.open');
+            else if(d.position === 100) statusText = t('shutter.closed');
+            movementStatus.textContent = statusText;
+        }
+        
+        // Update connection status
+        if(connectionStatus) connectionStatus.textContent = t('shutter.connected');
+        
+        // Update IP + device type display
+        if(ipDisplay) {
+            const deviceInfo = d.model ? (d.ip + ' - ' + d.model) : d.ip;
+            ipDisplay.textContent = deviceInfo;
+        }
+        
+        // Update calibration value
+        if(calValue) calValue.textContent = d.encoderStep || 3;
+        
+        // Enable calibration buttons
+        if(calBtnMinus) calBtnMinus.disabled = (d.encoderStep || 3) <= 1;
+        if(calBtnPlus) calBtnPlus.disabled = (d.encoderStep || 3) >= 5;
+        
+    } else {
+        // Not connected state
+        if(hero) hero.className = 'shutter-hero disconnected';
+        if(positionDisplay) positionDisplay.innerHTML = '--<span>%</span>';
+        if(movementStatus) movementStatus.textContent = t('shutter.not_connected');
+        if(connectionStatus) connectionStatus.textContent = '';
+        if(ipDisplay) ipDisplay.textContent = t('shutter.no_device_connected');
+        if(calValue) calValue.textContent = '-';
+        
+        // Disable calibration buttons
+        if(calBtnMinus) calBtnMinus.disabled = true;
+        if(calBtnPlus) calBtnPlus.disabled = true;
+    }
 }
 function adjustShutterStep(delta) {
     const el = $('shutter-encoder-step'); if(!el) return;

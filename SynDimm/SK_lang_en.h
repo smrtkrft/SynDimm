@@ -117,7 +117,14 @@ const char LANG_EN_JSON[] PROGMEM = R"rawliteral({
     "info_text": "Shutter is controlled by encoder. You can only calibrate speed from your browser. Theoretically complete but not tested on real shutter.",
     "calibration_warning": "Your shutter device is not calibrated, encoder rotation is temporarily disabled. However, you can still perform full open, full close and stop operations with the encoder button.",
     "warning_encoder": "Shutter is controlled via encoder. You can only adjust speed calibration from your browser. Theoretically complete but not tested on a real shutter in the real world.",
-    "warning_calibration": "Your shutter device is not calibrated, so encoder rotation movements are temporarily disabled. However, you can still perform full open, full close and stop operations using the encoder button."
+    "warning_calibration": "Your shutter device is not calibrated, so encoder rotation movements are temporarily disabled. However, you can still perform full open, full close and stop operations using the encoder button.",
+    "shelly_shutter": "Shelly Shutter",
+    "stopped": "Stopped",
+    "moving_up": "Moving Up",
+    "moving_down": "Moving Down",
+    "open": "Open",
+    "closed": "Closed",
+    "no_device_connected": "No device connected"
   },
   
   "safe": {

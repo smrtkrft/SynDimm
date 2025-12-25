@@ -142,59 +142,40 @@ String generateHTML(String chipID, String version) {
                         
                         <!-- SHUTTER Yapılandırması -->
                         <div class="mode-config-panel" id="config-panel-shutter" style="display: none;">
-                            <!-- Shutter Mod Açıklama -->
-                            <div class="mode-info-text" data-lang="shutter.description">
-                                Control your Shelly Shutter with the encoder. Easily adjust curtain and blind positions.
-                            </div>
-                            
-                            <!-- Status Info Bar -->
-                            <div class="shutter-status-bar">
-                                <div class="status-col">
-                                    <div class="status-col-label" data-lang="shutter.ip_address">IP ADDRESS</div>
-                                    <div class="status-col-value" id="quick-shutter-ip">-</div>
+                            <!-- Hero Display (Dimmer ile aynı tasarım) -->
+                            <div class="shutter-hero disconnected" id="shutter-hero">
+                                <div class="shutter-position-display" id="shutter-position-display">--<span>%</span></div>
+                                <div class="shutter-status-row">
+                                    <span class="shutter-movement-status" id="shutter-movement-status" data-lang="shutter.stopped">Stopped</span>
+                                    <span class="shutter-status-dot">•</span>
+                                    <span class="shutter-connection-status" id="shutter-connection-status" data-lang="shutter.not_connected">Not Connected</span>
                                 </div>
-                                <div class="status-col">
-                                    <div class="status-col-label" data-lang="shutter.status">STATUS</div>
-                                    <div class="status-col-value">
-                                        <span class="shutter-status-text" id="quick-shutter-status" data-lang="shutter.not_connected">Not Connected</span>
+                                <div class="shutter-ip-display" id="shutter-ip-display" data-lang="shutter.no_device_connected">No device connected</div>
+                                <div class="shutter-calibration-controls">
+                                    <button class="shutter-cal-btn" id="shutter-cal-btn-minus" onclick="adjustShutterStep(-1)" disabled>−</button>
+                                    <div class="shutter-cal-center">
+                                        <div class="shutter-cal-value" id="shutter-cal-value">-</div>
+                                        <div class="shutter-cal-label" data-lang="dimmer.sensitivity">Sensitivity</div>
                                     </div>
-                                </div>
-                                <div class="status-col">
-                                    <div class="status-col-label" data-lang="shutter.position">POSITION</div>
-                                    <div class="status-col-value">
-                                        <div class="position-display">
-                                            <div class="position-bar-container">
-                                                <div class="position-bar" id="quick-shutter-position-bar" style="width: 0%;"></div>
-                                            </div>
-                                            <span class="position-percent" id="quick-shutter-position">0%</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="status-col status-col-action">
-                                    <div class="status-col-label" data-lang="shutter.encoder_step">ENCODER STEP</div>
-                                    <div class="calibration-controls">
-                                        <button class="btn-cal-up" onclick="adjustShutterStep(1)" data-lang-title="common.increase">▲</button>
-                                        <span class="calibration-value-display" id="quick-shutter-step">3</span>
-                                        <button class="btn-cal-down" onclick="adjustShutterStep(-1)" data-lang-title="common.decrease">▼</button>
-                                    </div>
+                                    <button class="shutter-cal-btn" id="shutter-cal-btn-plus" onclick="adjustShutterStep(1)" disabled>+</button>
                                 </div>
                             </div>
                             
                             <!-- Connection Section -->
-                            <div class="shutter-config-section">
-                                <h4 class="shutter-section-title" data-lang="shutter.device_connection">Device Connection</h4>
-                                <div class="form-group">
-                                    <label data-lang="shutter.manual_ip">Manual IP Entry</label>
-                                    <input type="text" id="quick-shutter-ip-input" placeholder="192.168.1.100" class="input-full">
+                            <div class="shutter-compact-form">
+                                <div class="section-title" data-lang="shutter.device_connection">Device Connection</div>
+                                <div class="shutter-inline-form">
+                                    <input type="text" id="quick-shutter-ip-input" placeholder="IP Adresi">
+                                    <button class="btn btn-primary" onclick="connectShutterFromQuick()" data-lang="common.connect">Connect</button>
+                                    <button class="btn btn-secondary" onclick="startShutterNetworkScan()" data-lang="shutter.scan">Scan</button>
                                 </div>
-                                <div class="form-actions-row">
-                                    <button class="btn-primary" onclick="connectShutterFromQuick()" data-lang="common.connect">Connect</button>
-                                    <button class="btn-secondary" onclick="startShutterNetworkScan()" data-lang="shutter.scan_network">Scan Network</button>
+                                <div class="saved-devices-list" id="shutter-saved-devices-list">
+                                    <div class="saved-device-empty" data-lang="shutter.no_devices">No saved devices yet.</div>
                                 </div>
                             </div>
                             
-                            <div class="shutter-info-text warning">
-                                <span class="warning-icon">&#9888;</span> <span data-lang="shutter.info_text">Shutter is controlled by encoder.</span>
+                            <div class="shutter-warning">
+                                <span class="warning-icon">⚠</span> <span data-lang="shutter.info_text">Shutter is controlled by encoder.</span>
                             </div>
                         </div>
                         

@@ -117,7 +117,14 @@ const char LANG_DE_JSON[] PROGMEM = R"rawliteral({
     "info_text": "Der Rolladen wird über den Encoder gesteuert. Sie können nur die Geschwindigkeitskalibrierung über Ihren Browser anpassen. Theoretisch vollständig, aber nicht an einem echten Rolladen getestet.",
     "calibration_warning": "Ihr Rolladengerät ist nicht kalibriert, Encoder-Drehung ist vorübergehend deaktiviert. Sie können jedoch weiterhin Vollständig öffnen, schließen und stoppen mit der Encoder-Taste ausführen.",
     "warning_encoder": "Der Rolladen wird über den Encoder gesteuert. Sie können nur die Geschwindigkeitskalibrierung über Ihren Browser anpassen. Theoretisch vollständig, aber nicht an einem echten Rolladen in der realen Welt getestet.",
-    "warning_calibration": "Ihr Rolladengerät ist nicht kalibriert, daher sind die Encoder-Drehbewegungen vorübergehend deaktiviert. Sie können jedoch weiterhin die Funktionen Vollständig öffnen, Vollständig schließen und Stopp über die Encoder-Taste ausführen."
+    "warning_calibration": "Ihr Rolladengerät ist nicht kalibriert, daher sind die Encoder-Drehbewegungen vorübergehend deaktiviert. Sie können jedoch weiterhin die Funktionen Vollständig öffnen, Vollständig schließen und Stopp über die Encoder-Taste ausführen.",
+    "shelly_shutter": "Shelly Rolladen",
+    "stopped": "Gestoppt",
+    "moving_up": "Nach oben",
+    "moving_down": "Nach unten",
+    "open": "Offen",
+    "closed": "Geschlossen",
+    "no_device_connected": "Kein Gerät verbunden"
   },
   
   "safe": {
