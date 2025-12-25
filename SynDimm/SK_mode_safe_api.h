@@ -1,7 +1,7 @@
 /**
  * SK_mode_safe_api.h
  * SmartKraft SynDimm - Safe Lock API Handler
- * Version: v1.2.0
+ * Version: v1.3.0
  * 
  * ========================================
  * SAFE MOD - API TETİKLEYİCİ
@@ -10,6 +10,8 @@
  * - WiFi bağlantısı kontrolü (AP Mode'da ÇALIŞMAZ!)
  * - 1 deneme, 1 saniye timeout (watchdog güvenliği)
  * - Kendi IP'sine istek engeli
+ * - LittleFS'ten lazy-load API config
+ * - Sınırsız URL/Header/Body desteği
  * 
  * KRİTİK: API tetiklemesi ESP32C6 tarafından yapılır!
  * ========================================
@@ -47,8 +49,41 @@ class SafeLockAPIHandler {
 private:
   SafeLock* safeLock;
   
+  // Custom headers'ı parse et ve http'ye ekle
+  void parseAndAddHeaders(HTTPClient& http, const String& customHeaders) {
+    if (customHeaders.length() == 0) return;
+    
+    int start = 0;
+    int end = customHeaders.indexOf('\n');
+    
+    while (start < (int)customHeaders.length()) {
+      String line;
+      if (end == -1) {
+        line = customHeaders.substring(start);
+        start = customHeaders.length();
+      } else {
+        line = customHeaders.substring(start, end);
+        start = end + 1;
+        end = customHeaders.indexOf('\n', start);
+      }
+      
+      line.trim();
+      if (line.length() == 0) continue;
+      
+      int colonPos = line.indexOf(':');
+      if (colonPos > 0) {
+        String headerName = line.substring(0, colonPos);
+        String headerValue = line.substring(colonPos + 1);
+        headerName.trim();
+        headerValue.trim();
+        http.addHeader(headerName, headerValue);
+        DEBUG_PRINTF("[SafeAPI] Header: %s\n", headerName.c_str());
+      }
+    }
+  }
+  
   SafeApiResponseStatus sendHttpRequest(const SafeApiConfig& apiConfig, int& httpCode) {
-    if (strlen(apiConfig.url) == 0) {
+    if (apiConfig.url.length() == 0) {
       return SAFE_API_INVALID_CONFIG;
     }
     
@@ -63,27 +98,45 @@ private:
       return SAFE_API_ERROR;
     }
     
-    // Custom header
-    if (strlen(apiConfig.header) > 0) {
-      String headerStr = String(apiConfig.header);
-      int colonPos = headerStr.indexOf(':');
-      if (colonPos > 0) {
-        String headerName = headerStr.substring(0, colonPos);
-        String headerValue = headerStr.substring(colonPos + 1);
-        headerName.trim();
-        headerValue.trim();
-        http.addHeader(headerName, headerValue);
-      }
+    // Authorization header
+    if (apiConfig.authorization.length() > 0) {
+      http.addHeader("Authorization", apiConfig.authorization);
+      DEBUG_PRINTLN("[SafeAPI] Authorization header eklendi");
     }
+    
+    // Custom headers (çok satırlı destekli)
+    parseAndAddHeaders(http, apiConfig.customHeaders);
     
     yield();
     
-    if (apiConfig.method == SAFE_HTTP_POST) {
-      http.addHeader("Content-Type", "application/json");
-      String body = strlen(apiConfig.body) > 0 ? String(apiConfig.body) : "{}";
-      httpCode = http.POST(body);
-    } else {
-      httpCode = http.GET();
+    // HTTP Method'a göre istek gönder
+    switch (apiConfig.method) {
+      case SAFE_HTTP_POST:
+        if (apiConfig.contentType.length() > 0) {
+          http.addHeader("Content-Type", apiConfig.contentType);
+        } else {
+          http.addHeader("Content-Type", "application/json");
+        }
+        httpCode = http.POST(apiConfig.body.length() > 0 ? apiConfig.body : "{}");
+        break;
+        
+      case SAFE_HTTP_PUT:
+        if (apiConfig.contentType.length() > 0) {
+          http.addHeader("Content-Type", apiConfig.contentType);
+        } else {
+          http.addHeader("Content-Type", "application/json");
+        }
+        httpCode = http.PUT(apiConfig.body.length() > 0 ? apiConfig.body : "{}");
+        break;
+        
+      case SAFE_HTTP_DELETE:
+        httpCode = http.sendRequest("DELETE");
+        break;
+        
+      case SAFE_HTTP_GET:
+      default:
+        httpCode = http.GET();
+        break;
     }
     
     yield();
@@ -121,8 +174,7 @@ public:
     }
     
     // Kendi IP kontrolü
-    String url = String(apiConfig.url);
-    if (url.indexOf(myIP) != -1) {
+    if (apiConfig.url.indexOf(myIP) != -1) {
       ERROR_PRINTLN("[SafeAPI] Kendi IP'sine istek engellendi!");
       return SAFE_API_ERROR;
     }
@@ -134,6 +186,7 @@ public:
   static void onPasswordMatch(uint8_t passwordIndex, SafeLock* safeLock, SafeLockAPIHandler* apiHandler) {
     DEBUG_PRINTF("[SafeAPI] Password #%d matched, triggering API...\n", passwordIndex);
     
+    // LittleFS'ten lazy-load API config
     SafeApiConfig apiConfig = safeLock->getApiConfig(passwordIndex);
     
     // GÜVENLİK: URL Serial'e loglanmıyor
@@ -162,20 +215,20 @@ public:
     DEBUG_PRINTF("[SafeAPI] Sonuc: %d\n", status);
   }
   
-  bool testApi(const String& url, SafeHttpMethod method, const String& header = "", const String& body = "") {
+  // Test API (String parametrelerle)
+  bool testApi(const String& url, SafeHttpMethod method, 
+               const String& contentType = "", 
+               const String& authorization = "",
+               const String& customHeaders = "", 
+               const String& body = "") {
     SafeApiConfig testConfig;
     
-    url.toCharArray(testConfig.url, SAFE_API_URL_MAX);
+    testConfig.url = url;
     testConfig.method = method;
-    
-    if (header.length() > 0) {
-      header.toCharArray(testConfig.header, SAFE_API_HEADER_MAX);
-    }
-    
-    if (body.length() > 0) {
-      body.toCharArray(testConfig.body, SAFE_API_BODY_MAX);
-    }
-    
+    testConfig.contentType = contentType;
+    testConfig.authorization = authorization;
+    testConfig.customHeaders = customHeaders;
+    testConfig.body = body;
     testConfig.enabled = true;
     
     DEBUG_PRINTLN("[SafeAPI] Test istegi...");

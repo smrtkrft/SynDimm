@@ -288,12 +288,33 @@ function updateQuickSafePanel() {
             d.passwords.forEach((p, i) => {
                 const pwdEl = $('quick-safe-pwd-' + i);
                 const enabledEl = $('quick-safe-pwd-' + i + '-enabled');
-                const urlEl = $('quick-safe-api-' + i + '-url');
+                const apiStatusEl = $('quick-safe-api-' + i + '-status');
                 if(pwdEl) pwdEl.value = p.password || '';
                 if(enabledEl) enabledEl.checked = p.active || false;
-                if(urlEl) urlEl.value = p.apiUrl || '';
+                // API config lazy-load olacak - sadece hasApiConfig göster
+                if(apiStatusEl) apiStatusEl.textContent = p.hasApiConfig ? '✓ API' : '';
+                // API config'i ayrı yükle
+                if(p.hasApiConfig) loadSafeApiConfig(i);
             });
         }
+    }).catch(() => {});
+}
+
+// Tek bir şifre için API config yükle (lazy-load)
+function loadSafeApiConfig(idx) {
+    fetch('/getSafeApiConfig?index=' + idx).then(r => r.json()).then(cfg => {
+        const urlEl = $('quick-safe-api-' + idx + '-url');
+        const methodEl = $('quick-safe-api-' + idx + '-method');
+        const contentTypeEl = $('quick-safe-api-' + idx + '-contentType');
+        const authEl = $('quick-safe-api-' + idx + '-auth');
+        const headersEl = $('quick-safe-api-' + idx + '-headers');
+        const bodyEl = $('quick-safe-api-' + idx + '-body');
+        if(urlEl) urlEl.value = cfg.url || '';
+        if(methodEl) methodEl.value = cfg.method || 0;
+        if(contentTypeEl) contentTypeEl.value = cfg.contentType || 'application/json';
+        if(authEl) authEl.value = cfg.authorization || '';
+        if(headersEl) headersEl.value = cfg.customHeaders || '';
+        if(bodyEl) bodyEl.value = cfg.body || '';
     }).catch(() => {});
 }
 
@@ -441,10 +462,12 @@ function loadSafePasswords() {
                 d.passwords.forEach((p, i) => {
                     const pwdEl = $('quick-safe-pwd-' + i);
                     const enabledEl = $('quick-safe-pwd-' + i + '-enabled');
-                    const urlEl = $('quick-safe-api-' + i + '-url');
+                    const apiStatusEl = $('quick-safe-api-' + i + '-status');
                     if(pwdEl) pwdEl.value = p.password || '';
                     if(enabledEl) enabledEl.checked = p.active || false;
-                    if(urlEl) urlEl.value = p.apiUrl || '';
+                    if(apiStatusEl) apiStatusEl.textContent = p.hasApiConfig ? '✓ API' : '';
+                    // Lazy-load API config
+                    if(p.hasApiConfig) loadSafeApiConfig(i);
                 });
             }
         })
@@ -455,21 +478,143 @@ function saveSafePassword(idx) {
     const pwd = $('quick-safe-pwd-' + idx) ? $('quick-safe-pwd-' + idx).value : '';
     const enabled = $('quick-safe-pwd-' + idx + '-enabled') ? $('quick-safe-pwd-' + idx + '-enabled').checked : false;
     const url = $('quick-safe-api-' + idx + '-url') ? $('quick-safe-api-' + idx + '-url').value : '';
+    const method = $('quick-safe-api-' + idx + '-method') ? $('quick-safe-api-' + idx + '-method').value : 'GET';
+    const contentType = $('quick-safe-api-' + idx + '-contentType') ? $('quick-safe-api-' + idx + '-contentType').value : 'application/json';
+    const authorization = $('quick-safe-api-' + idx + '-auth') ? $('quick-safe-api-' + idx + '-auth').value : '';
+    const customHeaders = $('quick-safe-api-' + idx + '-headers') ? $('quick-safe-api-' + idx + '-headers').value : '';
+    const body = $('quick-safe-api-' + idx + '-body') ? $('quick-safe-api-' + idx + '-body').value : '';
+    
     if(enabled && !pwd) { showNotification(t('safe.password_empty'), 'error'); return; }
     if(enabled && !/^([LRB]\d*-)*[LRB]\d*$/.test(pwd)) { showNotification(t('safe.invalid_format'), 'error'); return; }
-    if(enabled && !url) { showNotification(t('safe.api_empty'), 'error'); return; }
+    
     showNotification(t('safe.saving'), 'info');
-    post('/saveSafePassword', { index: idx, password: pwd, pwdEnabled: enabled, api: { url, method: 'GET', header: '', enabled } })
+    post('/saveSafePassword', { 
+        index: idx, 
+        password: pwd, 
+        pwdEnabled: enabled, 
+        api: { 
+            url, 
+            method, 
+            contentType, 
+            authorization, 
+            customHeaders, 
+            body, 
+            enabled: url.length > 0 
+        } 
+    })
         .then(r => showNotification(r.success ? t('safe.saved') : t('safe.save_failed') + ': ' + (r.message || ''), r.success ? 'success' : 'error'))
         .catch(e => showNotification(t('notifications.connection_error') + ': ' + e, 'error'));
 }
 function testSafeApi(idx) {
     const url = $('quick-safe-api-' + idx + '-url') ? $('quick-safe-api-' + idx + '-url').value : '';
+    const method = $('quick-safe-api-' + idx + '-method') ? $('quick-safe-api-' + idx + '-method').value : 'GET';
+    const contentType = $('quick-safe-api-' + idx + '-contentType') ? $('quick-safe-api-' + idx + '-contentType').value : 'application/json';
+    const authorization = $('quick-safe-api-' + idx + '-auth') ? $('quick-safe-api-' + idx + '-auth').value : '';
+    const customHeaders = $('quick-safe-api-' + idx + '-headers') ? $('quick-safe-api-' + idx + '-headers').value : '';
+    const body = $('quick-safe-api-' + idx + '-body') ? $('quick-safe-api-' + idx + '-body').value : '';
+    
     if(!url) { showNotification(t('safe.api_empty'), 'error'); return; }
     showNotification(t('safe.testing'), 'info');
-    post('/testSafeApi', { url, method: 'GET', header: '' })
-        .then(r => showNotification(r.success ? t('safe.test_success') + ' ' + r.httpCode : t('safe.test_failed') + ': ' + (r.message || ''), r.success ? 'success' : 'error'))
+    post('/testSafeApi', { url, method, contentType, authorization, customHeaders, body })
+        .then(r => showNotification(r.success ? t('safe.test_success') : t('safe.test_failed') + ': ' + (r.message || ''), r.success ? 'success' : 'error'))
         .catch(e => showNotification(t('notifications.connection_error') + ': ' + e, 'error'));
+}
+
+// === TEACHING MODE (SAFE PASSWORD) ===
+let teachingInterval = null;
+let teachingStartTime = 0;
+let teachingIndex = -1;
+const TEACHING_TIMEOUT = 15000;
+
+function startTeachPassword(idx) {
+    showNotification(t('safe.teaching_starting'), 'info');
+    post('/startSafeTeaching', { index: idx })
+        .then(r => {
+            if(r.success) {
+                teachingIndex = idx;
+                teachingStartTime = Date.now();
+                showTeachingOverlay(idx);
+                startTeachingPolling(idx);
+                showNotification(t('safe.teaching_started'), 'success');
+            } else {
+                showNotification(t('safe.teaching_failed') + ': ' + (r.message || ''), 'error');
+            }
+        })
+        .catch(e => showNotification(t('notifications.connection_error') + ': ' + e, 'error'));
+}
+
+function cancelTeachPassword(idx) {
+    post('/cancelSafeTeaching', {})
+        .then(() => {
+            hideTeachingOverlay(idx);
+            stopTeachingPolling();
+            showNotification(t('safe.teaching_cancelled'), 'info');
+        })
+        .catch(e => showNotification(t('notifications.connection_error') + ': ' + e, 'error'));
+}
+
+function showTeachingOverlay(idx) {
+    const overlay = $('teaching-overlay-' + idx);
+    if(overlay) {
+        overlay.style.display = 'flex';
+        overlay.classList.add('active');
+    }
+}
+
+function hideTeachingOverlay(idx) {
+    const overlay = $('teaching-overlay-' + idx);
+    if(overlay) {
+        overlay.style.display = 'none';
+        overlay.classList.remove('active');
+    }
+    teachingIndex = -1;
+}
+
+function startTeachingPolling(idx) {
+    stopTeachingPolling();
+    teachingInterval = setInterval(() => {
+        // Timer update
+        const elapsed = Date.now() - teachingStartTime;
+        const remaining = Math.max(0, Math.ceil((TEACHING_TIMEOUT - elapsed) / 1000));
+        const timerEl = $('teaching-timer-' + idx);
+        if(timerEl) timerEl.textContent = remaining + 's';
+        
+        // Timeout check
+        if(remaining <= 0) {
+            hideTeachingOverlay(idx);
+            stopTeachingPolling();
+            showNotification(t('safe.teaching_timeout'), 'warning');
+            return;
+        }
+        
+        // Poll status
+        fetch('/getTeachingStatus')
+            .then(r => r.json())
+            .then(data => {
+                const patternEl = $('teaching-pattern-' + idx);
+                if(patternEl) patternEl.textContent = data.pattern || '-';
+                
+                // Teaching completed (server stopped teaching)
+                if(!data.teaching && teachingIndex === idx) {
+                    hideTeachingOverlay(idx);
+                    stopTeachingPolling();
+                    if(data.pattern && data.pattern.length > 0) {
+                        // Put pattern in input field
+                        const pwdInput = $('quick-safe-pwd-' + idx);
+                        if(pwdInput) pwdInput.value = data.pattern;
+                        showNotification(t('safe.teaching_complete') + ': ' + data.pattern, 'success');
+                    }
+                }
+            })
+            .catch(() => {});
+    }, 300);
+}
+
+function stopTeachingPolling() {
+    if(teachingInterval) {
+        clearInterval(teachingInterval);
+        teachingInterval = null;
+    }
 }
 
 // === NETWORK VALIDATION & SAVE ===
@@ -874,14 +1019,14 @@ function updateShutterUI(d) {
     }
 }
 function adjustShutterStep(delta) {
-    const el = $('shutter-encoder-step'); if(!el) return;
+    const el = $('shutter-cal-value'); if(!el) return;
     let cur = parseInt(el.textContent) || 3, nv = Math.max(1, Math.min(5, cur + delta));
     post('/adjustShutterStep', { step: nv }).then(d => { if(d.success) loadShutterStatus(); }).catch(() => {});
 }
 let shutterScanProgressInterval = null;
 function startShutterNetworkScan() {
     showNotification(t('notifications.scanning'), 'info');
-    post('/startShutterScan', {}).then(d => {
+    post('/scanShutterNetwork', {}).then(d => {
         if(d.success) { showNotification(t('notifications.scan_started'), 'success'); setDisplay('btn-stop-shutter-scan', true); pollShutterScanProgress(); }
         else showNotification(t('notifications.scan_failed'), 'error');
     }).catch(() => showNotification(t('common.error'), 'error'));
@@ -889,7 +1034,7 @@ function startShutterNetworkScan() {
 function pollShutterScanProgress() {
     if(shutterScanProgressInterval) clearInterval(shutterScanProgressInterval);
     shutterScanProgressInterval = setInterval(() => {
-        api('/getShutterScanProgress').then(d => {
+        api('/getScanProgress').then(d => {
             if(d.scanning) showNotification(t('notifications.scan_progress', {percent: d.percentage, scanned: d.scannedIPs, total: d.totalIPs, count: d.shutterCount}), 'info');
             else {
                 clearInterval(shutterScanProgressInterval); shutterScanProgressInterval = null;
@@ -901,7 +1046,7 @@ function pollShutterScanProgress() {
 }
 function stopShutterNetworkScan() {
     if(!confirm(t('notifications.confirm_stop_scan'))) return;
-    post('/stopShutterScan', {}).then(d => {
+    post('/stopScan', {}).then(d => {
         if(d.success) { showNotification(t('notifications.scan_stopped'), 'info'); if(shutterScanProgressInterval) { clearInterval(shutterScanProgressInterval); shutterScanProgressInterval = null; } setDisplay('btn-stop-shutter-scan', false); }
     }).catch(() => {});
 }

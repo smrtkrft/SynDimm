@@ -1,7 +1,7 @@
 /**
  * SK_mode_safe.h
  * SmartKraft SynDimm - Safe Lock Mode
- * Version: v1.2.0
+ * Version: v1.3.0
  * 
  * ========================================
  * SAFE MOD - KASA KİLİDİ MANTİĞI
@@ -9,12 +9,14 @@
  * SK_encoder.h'den gelen L/R/B verilerini işleyerek şifre sistemi oluşturur.
  * - 5 farklı şifre desteği
  * - Her şifre 3-6 adım uzunluğunda (örn: R5-L3-R2-B)
- * - EEPROM'da kalıcı saklama
+ * - Şifre pattern'leri NVS'te (küçük), API config'ler LittleFS'te (sınırsız)
  * - Buzzer feedback (syndimm_buzzer.h entegrasyonu)
- * - Şifre eşleşince callback tetiklenir
+ * - Şifre eşleşince lazy-loading ile API config okunur
  * 
  * Mimari:
  * SK_encoder (ham L/R/B) → SK_mode_safe (şifre kontrolü) → Callback (API tetikleme)
+ * 
+ * v1.3.0 - LittleFS tabanlı sınırsız API config desteği
  * ========================================
  */
 
@@ -22,8 +24,9 @@
 #define SK_MODE_SAFE_H
 
 #include <Arduino.h>
-#include <EEPROM.h>
 #include <Preferences.h>
+#include <LittleFS.h>
+#include <ArduinoJson.h>
 #include "SK_config.h"
 
 // ==================== YAPILANDIRMA ====================
@@ -34,20 +37,19 @@
 #define SAFE_MAX_TICKS_PER_STEP 50      // Her adımda maksimum 50 tık
 #define SAFE_MIN_TICKS_PER_STEP 1       // Her adımda minimum 1 tık
 
-// API Konfigürasyon Limitleri
-#define SAFE_API_URL_MAX 128            // Maksimum URL uzunluğu
-#define SAFE_API_HEADER_MAX 64          // Maksimum header uzunluğu
-#define SAFE_API_BODY_MAX 128           // Maksimum body uzunluğu
-
-// EEPROM Magic Number (validasyon için)
-#define SAFE_EEPROM_MAGIC 0x5AFE        // "SAFE" benzeri hex değer
+// LittleFS API Config Dizini
+#define SAFE_API_CONFIG_DIR "/safe"
+#define SAFE_API_CONFIG_PREFIX "/safe/api_"
+#define SAFE_API_CONFIG_SUFFIX ".json"
 
 // ==================== VERI YAPILARI ====================
 
 // HTTP Method
 enum SafeHttpMethod {
   SAFE_HTTP_GET = 0,
-  SAFE_HTTP_POST = 1
+  SAFE_HTTP_POST = 1,
+  SAFE_HTTP_PUT = 2,
+  SAFE_HTTP_DELETE = 3
 };
 
 // Hareket yönü (SK_encoder.h ile uyumlu)
@@ -90,8 +92,9 @@ struct __attribute__((packed)) SafePassword {
   uint8_t stepCount;                                // Toplam adım sayısı
   bool requireButton;                               // Son adımda B gerekli mi?
   bool isActive;                                    // Şifre aktif mi?
+  bool hasApiConfig;                                // LittleFS'te API config var mı?
   
-  SafePassword() : stepCount(0), requireButton(false), isActive(false) {
+  SafePassword() : stepCount(0), requireButton(false), isActive(false), hasApiConfig(false) {
     for (int i = 0; i < SAFE_MAX_PASSWORD_STEPS; i++) {
       steps[i] = SafePasswordStep();
     }
@@ -162,61 +165,58 @@ struct __attribute__((packed)) SafePassword {
   }
 };
 
-// API Konfigürasyonu (her şifre için)
-struct __attribute__((packed)) SafeApiConfig {
-  char url[SAFE_API_URL_MAX];           // API endpoint URL
-  SafeHttpMethod method;                // GET veya POST
-  char header[SAFE_API_HEADER_MAX];     // Custom header (örn: "X-API-Key: abc123")
-  char body[SAFE_API_BODY_MAX];         // POST body (JSON)
+// API Konfigürasyonu - LittleFS'ten lazy-load edilir (sınırsız boyut)
+struct SafeApiConfig {
+  String url;                           // API endpoint URL (sınırsız)
+  SafeHttpMethod method;                // GET, POST, PUT, DELETE
+  String contentType;                   // Content-Type header
+  String authorization;                 // Authorization header (Bearer token vb.)
+  String customHeaders;                 // Ek headerlar (satır satır: "X-Key: value\nX-Key2: value2")
+  String body;                          // Request body (JSON - sınırsız)
   bool enabled;                         // API aktif mi?
   
-  SafeApiConfig() : method(SAFE_HTTP_GET), enabled(false) {
-    memset(url, 0, SAFE_API_URL_MAX);
-    memset(header, 0, SAFE_API_HEADER_MAX);
-    memset(body, 0, SAFE_API_BODY_MAX);
-  }
+  SafeApiConfig() : method(SAFE_HTTP_GET), contentType("application/json"), enabled(false) {}
   
   bool isValid() const {
     if (!enabled) return false;
-    if (strlen(url) == 0) return false;
+    if (url.length() == 0) return false;
     return true;
   }
-};
-
-// EEPROM Konfigürasyonu
-struct __attribute__((packed)) SafeEEPROMConfig {
-  uint16_t magicNumber;                              // Validasyon için
-  SafePassword passwords[SAFE_MAX_PASSWORDS];        // 5 şifre
-  SafeApiConfig apiConfigs[SAFE_MAX_PASSWORDS];      // Her şifre için API config
-  uint8_t checksum;                                  // Veri bütünlüğü kontrolü
   
-  SafeEEPROMConfig() : magicNumber(SAFE_EEPROM_MAGIC), checksum(0) {}
-  
-  // Checksum hesapla
-  uint8_t calculateChecksum() const {
-    uint8_t sum = 0;
-    const uint8_t* data = (const uint8_t*)this;
-    size_t size = sizeof(SafeEEPROMConfig) - sizeof(checksum);
+  // JSON'a çevir
+  String toJson() const {
+    JsonDocument doc;
+    doc["enabled"] = enabled;
+    doc["method"] = (int)method;
+    doc["url"] = url;
+    doc["contentType"] = contentType;
+    doc["authorization"] = authorization;
+    doc["customHeaders"] = customHeaders;
+    doc["body"] = body;
     
-    for (size_t i = 0; i < size; i++) {
-      sum ^= data[i]; // XOR checksum
+    String output;
+    serializeJson(doc, output);
+    return output;
+  }
+  
+  // JSON'dan oluştur
+  bool fromJson(const String& json) {
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, json);
+    if (error) {
+      DEBUG_PRINTF("[SafeApiConfig] JSON parse error: %s\n", error.c_str());
+      return false;
     }
-    return sum;
-  }
-  
-  // Checksum'ı güncelle
-  void updateChecksum() {
-    checksum = calculateChecksum();
-  }
-  
-  // Checksum geçerli mi?
-  bool isChecksumValid() const {
-    return (checksum == calculateChecksum());
-  }
-  
-  // Konfigürasyon geçerli mi?
-  bool isValid() const {
-    return (magicNumber == SAFE_EEPROM_MAGIC && isChecksumValid());
+    
+    enabled = doc["enabled"] | false;
+    method = (SafeHttpMethod)(doc["method"] | 0);
+    url = doc["url"] | "";
+    contentType = doc["contentType"] | "application/json";
+    authorization = doc["authorization"] | "";
+    customHeaders = doc["customHeaders"] | "";
+    body = doc["body"] | "";
+    
+    return true;
   }
 };
 
@@ -224,9 +224,10 @@ struct __attribute__((packed)) SafeEEPROMConfig {
 
 class SafeLock {
 private:
-  // Konfigürasyon
-  SafeEEPROMConfig config;
+  // Konfigürasyon - sadece şifre pattern'leri NVS'te
+  SafePassword passwords[SAFE_MAX_PASSWORDS];
   bool initialized;
+  bool littleFsReady;
   Preferences safePrefs;
   
   // Sliding window buffer - son 8 hareket
@@ -238,8 +239,25 @@ private:
   uint8_t currentTicks;      // Şu anki tık sayısı
   bool movementStarted;      // Hareket başladı mı?
   
-  // Callback fonksiyonu (şifre eşleştiğinde)
+  // Teaching Mode (Şifre Öğretme)
+  bool teachingActive;                              // Teaching mode aktif mi?
+  uint8_t teachingPasswordIndex;                    // Hangi şifre öğretiliyor?
+  unsigned long teachingStartTime;                  // Teaching başlangıç zamanı
+  SafeMovement teachBuffer[SAFE_MAX_PASSWORD_STEPS]; // Öğretilen hareketler
+  uint8_t teachBufferCount;                         // Öğretilen hareket sayısı
+  bool teachingRequiresButton;                      // Teaching B ile mi bitti?
+  String lastCompletedPattern;                      // Son tamamlanan pattern
+  static const unsigned long TEACHING_TIMEOUT = 15000; // 15 saniye timeout
+  
+  // Callback fonksiyonları
   void (*onPasswordMatchCallback)(uint8_t passwordIndex);
+  void (*onTeachingCompleteCallback)(uint8_t passwordIndex, const String& pattern);
+  void (*onTeachingCancelledCallback)(uint8_t passwordIndex, const char* reason);
+  
+  // API Config dosya yolunu oluştur
+  String getApiConfigPath(uint8_t index) {
+    return String(SAFE_API_CONFIG_PREFIX) + String(index) + String(SAFE_API_CONFIG_SUFFIX);
+  }
   
   // Buffer'a hareket ekle (sliding window)
   void addMovementToBuffer(char direction, uint8_t ticks) {
@@ -302,13 +320,13 @@ private:
     SafeMovement tempMoves[SAFE_MAX_PASSWORD_STEPS];
     
     for (uint8_t pwdIdx = 0; pwdIdx < SAFE_MAX_PASSWORDS; pwdIdx++) {
-      if (!config.passwords[pwdIdx].isValid()) continue;
+      if (!passwords[pwdIdx].isValid()) continue;
       
       // B ile biten şifre sadece buton basılınca kontrol edilir
-      if (config.passwords[pwdIdx].requireButton && !buttonPressed) continue;
+      if (passwords[pwdIdx].requireButton && !buttonPressed) continue;
       
-      uint8_t moveCount = config.passwords[pwdIdx].stepCount;
-      if (config.passwords[pwdIdx].requireButton) moveCount--;
+      uint8_t moveCount = passwords[pwdIdx].stepCount;
+      if (passwords[pwdIdx].requireButton) moveCount--;
       
       // Mevcut hareketi dahil edecek miyiz?
       uint8_t effectiveBufferCount = bufferCount;
@@ -337,7 +355,7 @@ private:
           }
         }
         
-        if (valid && matchMovements(tempMoves, moveCount, config.passwords[pwdIdx])) {
+        if (valid && matchMovements(tempMoves, moveCount, passwords[pwdIdx])) {
           DEBUG_PRINTF("[SafeLock] >>> SIFRE #%d ESLESTI! <<<\n", pwdIdx);
           onPasswordMatched(pwdIdx);
           return;
@@ -359,44 +377,52 @@ private:
   }
   
 public:
-  SafeLock() : initialized(false), bufferCount(0), 
+  SafeLock() : initialized(false), littleFsReady(false), bufferCount(0), 
                currentDirection(0), currentTicks(0), movementStarted(false),
-               onPasswordMatchCallback(nullptr) {}
+               teachingActive(false), teachingPasswordIndex(0), teachingStartTime(0),
+               teachBufferCount(0), teachingRequiresButton(false), lastCompletedPattern(""),
+               onPasswordMatchCallback(nullptr), onTeachingCompleteCallback(nullptr),
+               onTeachingCancelledCallback(nullptr) {}
   
-  // Başlat (Preferences'dan yükle)
+  // Başlat (NVS'den şifreleri, LittleFS'ten API config'leri yükle)
   void begin() {
     DEBUG_PRINTLN("[SafeLock] Baslatiliyor...");
     
+    // LittleFS başlat
+    if (!LittleFS.begin(true)) {
+      DEBUG_PRINTLN("[SafeLock] LittleFS baslatilamadi!");
+      littleFsReady = false;
+    } else {
+      littleFsReady = true;
+      DEBUG_PRINTLN("[SafeLock] LittleFS hazir");
+      
+      // /safe dizinini oluştur
+      if (!LittleFS.exists(SAFE_API_CONFIG_DIR)) {
+        LittleFS.mkdir(SAFE_API_CONFIG_DIR);
+        DEBUG_PRINTLN("[SafeLock] /safe dizini olusturuldu");
+      }
+    }
+    
+    // NVS'ten şifre pattern'lerini yükle
     safePrefs.begin("safelock", false);
     
-    // Her şifre için ayarları yükle
     for (uint8_t i = 0; i < SAFE_MAX_PASSWORDS; i++) {
       String keyPwd = "pwd" + String(i);
       String keyActive = "active" + String(i);
-      String keyApiEnabled = "apiEn" + String(i);
-      String keyApiUrl = "apiUrl" + String(i);
-      String keyApiHeader = "apiHdr" + String(i);
-      String keyApiMethod = "apiMth" + String(i);
+      String keyHasApi = "hasApi" + String(i);
       
       String pwdStr = safePrefs.getString(keyPwd.c_str(), "");
-      config.passwords[i].isActive = safePrefs.getBool(keyActive.c_str(), false);
-      config.apiConfigs[i].enabled = safePrefs.getBool(keyApiEnabled.c_str(), false);
-      
-      String url = safePrefs.getString(keyApiUrl.c_str(), "");
-      String header = safePrefs.getString(keyApiHeader.c_str(), "");
-      url.toCharArray(config.apiConfigs[i].url, SAFE_API_URL_MAX);
-      header.toCharArray(config.apiConfigs[i].header, SAFE_API_HEADER_MAX);
-      config.apiConfigs[i].method = (SafeHttpMethod)safePrefs.getInt(keyApiMethod.c_str(), SAFE_HTTP_GET);
+      passwords[i].isActive = safePrefs.getBool(keyActive.c_str(), false);
+      passwords[i].hasApiConfig = safePrefs.getBool(keyHasApi.c_str(), false);
       
       // Şifreyi parse et
       if (pwdStr.length() > 0) {
-        config.passwords[i].fromString(pwdStr);
+        passwords[i].fromString(pwdStr);
       }
       
-      if (config.passwords[i].isActive || pwdStr.length() > 0) {
-        // GÜVENLİK: Şifre ve URL Serial'e loglanmıyor
-        DEBUG_PRINTF("[SafeLock] Slot #%d: configured (active=%d, apiEnabled=%d)\n", 
-                     i, config.passwords[i].isActive, config.apiConfigs[i].enabled);
+      if (passwords[i].isActive || pwdStr.length() > 0) {
+        DEBUG_PRINTF("[SafeLock] Slot #%d: configured (active=%d, hasApi=%d)\n", 
+                     i, passwords[i].isActive, passwords[i].hasApiConfig);
       }
     }
     
@@ -406,27 +432,100 @@ public:
     DEBUG_PRINTLN("[SafeLock] Baslatma tamamlandi");
   }
   
-  // Preferences'a kaydet
-  bool saveToEEPROM() {
+  // NVS'e şifreleri kaydet
+  bool savePasswords() {
     if (!initialized) return false;
     
     for (uint8_t i = 0; i < SAFE_MAX_PASSWORDS; i++) {
       String keyPwd = "pwd" + String(i);
       String keyActive = "active" + String(i);
-      String keyApiEnabled = "apiEn" + String(i);
-      String keyApiUrl = "apiUrl" + String(i);
-      String keyApiHeader = "apiHdr" + String(i);
-      String keyApiMethod = "apiMth" + String(i);
+      String keyHasApi = "hasApi" + String(i);
       
-      safePrefs.putString(keyPwd.c_str(), config.passwords[i].toString());
-      safePrefs.putBool(keyActive.c_str(), config.passwords[i].isActive);
-      safePrefs.putBool(keyApiEnabled.c_str(), config.apiConfigs[i].enabled);
-      safePrefs.putString(keyApiUrl.c_str(), String(config.apiConfigs[i].url));
-      safePrefs.putString(keyApiHeader.c_str(), String(config.apiConfigs[i].header));
-      safePrefs.putInt(keyApiMethod.c_str(), config.apiConfigs[i].method);
+      safePrefs.putString(keyPwd.c_str(), passwords[i].toString());
+      safePrefs.putBool(keyActive.c_str(), passwords[i].isActive);
+      safePrefs.putBool(keyHasApi.c_str(), passwords[i].hasApiConfig);
     }
     
-    DEBUG_PRINTLN("[SafeLock] Preferences'a kaydedildi");
+    DEBUG_PRINTLN("[SafeLock] NVS'e kaydedildi");
+    return true;
+  }
+  
+  // LittleFS'e API config kaydet
+  bool saveApiConfig(uint8_t index, const SafeApiConfig& config) {
+    if (index >= SAFE_MAX_PASSWORDS) return false;
+    if (!littleFsReady) {
+      DEBUG_PRINTLN("[SafeLock] LittleFS hazir degil!");
+      return false;
+    }
+    
+    String path = getApiConfigPath(index);
+    String json = config.toJson();
+    
+    File file = LittleFS.open(path, "w");
+    if (!file) {
+      DEBUG_PRINTF("[SafeLock] Dosya acilamadi: %s\n", path.c_str());
+      return false;
+    }
+    
+    size_t written = file.print(json);
+    file.close();
+    
+    if (written > 0) {
+      passwords[index].hasApiConfig = config.enabled;
+      savePasswords();
+      DEBUG_PRINTF("[SafeLock] API config kaydedildi: %s (%d byte)\n", path.c_str(), written);
+      return true;
+    }
+    
+    return false;
+  }
+  
+  // LittleFS'ten API config oku (lazy-load)
+  SafeApiConfig loadApiConfig(uint8_t index) {
+    SafeApiConfig config;
+    
+    if (index >= SAFE_MAX_PASSWORDS) return config;
+    if (!littleFsReady) return config;
+    if (!passwords[index].hasApiConfig) return config;
+    
+    String path = getApiConfigPath(index);
+    
+    if (!LittleFS.exists(path)) {
+      DEBUG_PRINTF("[SafeLock] API config dosyasi yok: %s\n", path.c_str());
+      return config;
+    }
+    
+    File file = LittleFS.open(path, "r");
+    if (!file) {
+      DEBUG_PRINTF("[SafeLock] Dosya acilamadi: %s\n", path.c_str());
+      return config;
+    }
+    
+    String json = file.readString();
+    file.close();
+    
+    if (config.fromJson(json)) {
+      DEBUG_PRINTF("[SafeLock] API config yuklendi: %s (%d byte)\n", path.c_str(), json.length());
+    }
+    
+    return config;
+  }
+  
+  // API config sil
+  bool deleteApiConfig(uint8_t index) {
+    if (index >= SAFE_MAX_PASSWORDS) return false;
+    if (!littleFsReady) return false;
+    
+    String path = getApiConfigPath(index);
+    
+    if (LittleFS.exists(path)) {
+      LittleFS.remove(path);
+    }
+    
+    passwords[index].hasApiConfig = false;
+    savePasswords();
+    
+    DEBUG_PRINTF("[SafeLock] API config silindi: %s\n", path.c_str());
     return true;
   }
   
@@ -448,6 +547,35 @@ public:
   // SK_encoder'dan hareket geldiğinde çağrılır (L veya R)
   void onEncoderMove(char direction, uint8_t ticks = 1) {
     if (direction != 'L' && direction != 'R') return;
+    
+    // Teaching Mode aktifse
+    if (teachingActive) {
+      // Timeout kontrolü
+      if (millis() - teachingStartTime > TEACHING_TIMEOUT) {
+        cancelTeaching("timeout");
+        return;
+      }
+      
+      // Teaching buffer'a hareket ekle
+      if (!movementStarted) {
+        currentDirection = direction;
+        currentTicks = ticks;
+        movementStarted = true;
+      } else if (currentDirection == direction) {
+        currentTicks += ticks;
+        if (currentTicks > SAFE_MAX_TICKS_PER_STEP) {
+          currentTicks = SAFE_MAX_TICKS_PER_STEP;
+        }
+      } else {
+        // Yön değişti - teaching buffer'a ekle
+        if (teachBufferCount < SAFE_MAX_PASSWORD_STEPS) {
+          teachBuffer[teachBufferCount++] = SafeMovement(currentDirection, currentTicks);
+        }
+        currentDirection = direction;
+        currentTicks = ticks;
+      }
+      return; // Teaching modda normal şifre kontrolü yapma
+    }
     
     if (!movementStarted) {
       // İlk hareket
@@ -477,6 +605,28 @@ public:
   void onEncoderButton() {
     DEBUG_PRINTLN("[SafeLock] BUTON");
     
+    // Teaching Mode aktifse - buton teaching'i tamamlar
+    if (teachingActive) {
+      // Timeout kontrolü
+      if (millis() - teachingStartTime > TEACHING_TIMEOUT) {
+        cancelTeaching("timeout");
+        return;
+      }
+      
+      // Mevcut hareketi teaching buffer'a ekle
+      if (movementStarted && currentTicks > 0) {
+        if (teachBufferCount < SAFE_MAX_PASSWORD_STEPS) {
+          teachBuffer[teachBufferCount++] = SafeMovement(currentDirection, currentTicks);
+        }
+        resetCurrentMovement();
+      }
+      
+      // Teaching'i tamamla
+      teachingRequiresButton = true;
+      completeTeaching();
+      return;
+    }
+    
     if (movementStarted && currentTicks > 0) {
       // Mevcut hareketi buffer'a ekle
       addMovementToBuffer(currentDirection, currentTicks);
@@ -496,10 +646,17 @@ public:
     
     // Boş şifre gelirse sadece API config ve active durumunu güncelle
     if (passwordStr.length() == 0) {
-      config.passwords[index].isActive = isActive;
-      config.apiConfigs[index] = apiConfig;
+      passwords[index].isActive = isActive;
+      
+      // API config varsa LittleFS'e kaydet
+      if (apiConfig.enabled) {
+        saveApiConfig(index, apiConfig);
+      } else {
+        deleteApiConfig(index);
+      }
+      
       DEBUG_PRINTF("[SafeLock] Sifre #%d sadece durum guncellendi: active=%d\n", index, isActive);
-      return saveToEEPROM();
+      return savePasswords();
     }
     
     SafePassword newPwd;
@@ -508,46 +665,204 @@ public:
       return false;
     }
     
-    config.passwords[index] = newPwd;
-    config.passwords[index].isActive = isActive;
-    config.apiConfigs[index] = apiConfig;
+    passwords[index] = newPwd;
+    passwords[index].isActive = isActive;
+    
+    // API config varsa LittleFS'e kaydet
+    if (apiConfig.enabled) {
+      passwords[index].hasApiConfig = true;
+      saveApiConfig(index, apiConfig);
+    } else {
+      deleteApiConfig(index);
+    }
     
     // GÜVENLİK: Şifre ve URL Serial'e loglanmıyor
     DEBUG_PRINTF("[SafeLock] Slot #%d configured (active=%d)\n", index, isActive);
     DEBUG_PRINTF("[SafeLock] API enabled: %d\n", apiConfig.enabled);
     
-    return saveToEEPROM();
+    return savePasswords();
   }
   
   // Şifre al
   String getPassword(uint8_t index) {
     if (index >= SAFE_MAX_PASSWORDS) return "";
-    return config.passwords[index].toString();
+    return passwords[index].toString();
   }
   
   // Şifreyi aktif/pasif yap
   bool setPasswordActive(uint8_t index, bool active) {
     if (index >= SAFE_MAX_PASSWORDS) return false;
     
-    config.passwords[index].isActive = active;
-    return saveToEEPROM();
+    passwords[index].isActive = active;
+    return savePasswords();
   }
   
   // Şifre aktif mi?
   bool isPasswordActive(uint8_t index) {
     if (index >= SAFE_MAX_PASSWORDS) return false;
-    return config.passwords[index].isActive;
+    return passwords[index].isActive;
   }
   
-  // API konfigürasyonu al
+  // API konfigürasyonu al (lazy-load from LittleFS)
   SafeApiConfig getApiConfig(uint8_t index) {
     if (index >= SAFE_MAX_PASSWORDS) return SafeApiConfig();
-    return config.apiConfigs[index];
+    return loadApiConfig(index);
   }
+  
+  // API config var mı? (dosya kontrolü yapmadan)
+  bool hasApiConfig(uint8_t index) {
+    if (index >= SAFE_MAX_PASSWORDS) return false;
+    return passwords[index].hasApiConfig;
+  }
+  
+  // LittleFS hazır mı?
+  bool isLittleFsReady() { return littleFsReady; }
   
   // Callback ayarla
   void setPasswordMatchCallback(void (*callback)(uint8_t)) {
     onPasswordMatchCallback = callback;
+  }
+  
+  // Teaching Mode callback'leri
+  void setTeachingCompleteCallback(void (*callback)(uint8_t, const String&)) {
+    onTeachingCompleteCallback = callback;
+  }
+  
+  void setTeachingCancelledCallback(void (*callback)(uint8_t, const char*)) {
+    onTeachingCancelledCallback = callback;
+  }
+  
+  // ==================== TEACHING MODE FUNCTIONS ====================
+  
+  // Teaching mode'u başlat
+  bool startTeaching(uint8_t passwordIndex) {
+    if (passwordIndex >= SAFE_MAX_PASSWORDS) {
+      DEBUG_PRINTLN("[SafeLock] Teaching: Invalid password index");
+      return false;
+    }
+    
+    if (teachingActive) {
+      DEBUG_PRINTLN("[SafeLock] Teaching: Already in teaching mode");
+      return false;
+    }
+    
+    // Teaching buffer'ı temizle
+    teachBufferCount = 0;
+    for (int i = 0; i < SAFE_MAX_PASSWORD_STEPS; i++) {
+      teachBuffer[i] = SafeMovement();
+    }
+    
+    // Mevcut hareketi sıfırla
+    resetCurrentMovement();
+    
+    // Normal buffer'ı temizle (karışmaması için)
+    clearBuffer();
+    
+    teachingActive = true;
+    teachingPasswordIndex = passwordIndex;
+    teachingStartTime = millis();
+    teachingRequiresButton = false;
+    
+    DEBUG_PRINTF("[SafeLock] Teaching started for password #%d\n", passwordIndex);
+    return true;
+  }
+  
+  // Teaching mode'u iptal et
+  void cancelTeaching(const char* reason = "cancelled") {
+    if (!teachingActive) return;
+    
+    uint8_t index = teachingPasswordIndex;
+    
+    teachingActive = false;
+    teachBufferCount = 0;
+    resetCurrentMovement();
+    
+    DEBUG_PRINTF("[SafeLock] Teaching cancelled: %s\n", reason);
+    
+    if (onTeachingCancelledCallback != nullptr) {
+      onTeachingCancelledCallback(index, reason);
+    }
+  }
+  
+  // Teaching mode'u tamamla
+  void completeTeaching() {
+    if (!teachingActive) return;
+    
+    uint8_t index = teachingPasswordIndex;
+    
+    // Minimum adım kontrolü
+    if (teachBufferCount < SAFE_MIN_PASSWORD_STEPS - (teachingRequiresButton ? 1 : 0)) {
+      cancelTeaching("too_short");
+      return;
+    }
+    
+    // Şifre string'i oluştur
+    String pattern = "";
+    for (uint8_t i = 0; i < teachBufferCount; i++) {
+      if (i > 0) pattern += "-";
+      pattern += String(teachBuffer[i].direction);
+      pattern += String(teachBuffer[i].ticks);
+    }
+    
+    // Eğer butonla tamamlandıysa B ekle
+    if (teachingRequiresButton) {
+      pattern += "-B";
+    }
+    
+    DEBUG_PRINTF("[SafeLock] Teaching complete: %s\n", pattern.c_str());
+    
+    // Pattern'i sakla (client alana kadar)
+    lastCompletedPattern = pattern;
+    
+    teachingActive = false;
+    teachBufferCount = 0;
+    
+    if (onTeachingCompleteCallback != nullptr) {
+      onTeachingCompleteCallback(index, pattern);
+    }
+  }
+  
+  // Teaching mode durumu
+  bool isTeaching() const { return teachingActive; }
+  uint8_t getTeachingIndex() const { return teachingPasswordIndex; }
+  
+  // Son tamamlanan pattern'i al ve temizle
+  String getLastCompletedPattern() {
+    String pattern = lastCompletedPattern;
+    lastCompletedPattern = "";
+    return pattern;
+  }
+  
+  // Teaching timeout kontrolü (loop'ta çağrılmalı)
+  void checkTeachingTimeout() {
+    if (teachingActive && millis() - teachingStartTime > TEACHING_TIMEOUT) {
+      cancelTeaching("timeout");
+    }
+  }
+  
+  // Teaching buffer'daki mevcut pattern
+  String getTeachingPattern() const {
+    if (!teachingActive) return "";
+    
+    String pattern = "";
+    for (uint8_t i = 0; i < teachBufferCount; i++) {
+      if (i > 0) pattern += "-";
+      pattern += String(teachBuffer[i].direction);
+      pattern += String(teachBuffer[i].ticks);
+    }
+    
+    // Devam eden hareket varsa onu da göster
+    if (movementStarted && currentTicks > 0) {
+      if (pattern.length() > 0) pattern += "-";
+      pattern += String(currentDirection);
+      pattern += String(currentTicks);
+    }
+    
+    return pattern;
+  }
+  
+  uint8_t getTeachingStepCount() const {
+    return teachBufferCount + (movementStarted ? 1 : 0);
   }
 };
 

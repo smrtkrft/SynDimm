@@ -527,18 +527,18 @@ String getShutterStatusJSON() {
     doc["isMoving"] = shutterDevice.isMoving;
     doc["isCalibrated"] = shutterDevice.isCalibrated;
     
-    // Status string
-    String statusStr = "Disconnected";
+    // Status string (short keys for JS compatibility)
+    String statusStr = "disconnected";
     if (shutterDevice.isConnected) {
         switch (shutterDevice.status) {
-            case SHUTTER_MOVING_UP:    statusStr = "Moving Up ↑"; break;
-            case SHUTTER_MOVING_DOWN:  statusStr = "Moving Down ↓"; break;
-            case SHUTTER_STOPPED:      statusStr = "Stopped"; break;
-            case SHUTTER_OPEN:         statusStr = "Open (100%)"; break;
-            case SHUTTER_CLOSED:       statusStr = "Closed (0%)"; break;
-            case SHUTTER_PARTIAL:      statusStr = "Partial"; break;
-            case SHUTTER_ERROR:        statusStr = "Error"; break;
-            default:                   statusStr = "Connected"; break;
+            case SHUTTER_MOVING_UP:    statusStr = "moving_up"; break;
+            case SHUTTER_MOVING_DOWN:  statusStr = "moving_down"; break;
+            case SHUTTER_STOPPED:      statusStr = "stopped"; break;
+            case SHUTTER_OPEN:         statusStr = "open"; break;
+            case SHUTTER_CLOSED:       statusStr = "closed"; break;
+            case SHUTTER_PARTIAL:      statusStr = "partial"; break;
+            case SHUTTER_ERROR:        statusStr = "error"; break;
+            default:                   statusStr = "connected"; break;
         }
     }
     doc["status"] = statusStr;

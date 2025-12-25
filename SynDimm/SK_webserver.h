@@ -584,19 +584,105 @@ private:
             pwd["index"] = i;
             pwd["password"] = safeLockPtr->getPassword(i);
             pwd["active"] = safeLockPtr->isPasswordActive(i);
+            pwd["hasApiConfig"] = safeLockPtr->hasApiConfig(i);
             
-            SafeApiConfig cfg = safeLockPtr->getApiConfig(i);
-            pwd["apiEnabled"] = cfg.enabled;
-            pwd["apiUrl"] = String(cfg.url);
-            pwd["apiMethod"] = cfg.method == SAFE_HTTP_POST ? "POST" : "GET";
-            pwd["apiHeader"] = String(cfg.header);
+            // API config'i sadece istendiğinde yükle (lazy-load)
+            // Listelemede sadece hasApiConfig kullanılır
         }
+        
+        doc["littleFsReady"] = safeLockPtr->isLittleFsReady();
         
         String output;
         serializeJson(doc, output);
         server->send(200, "application/json", output);
     }
     
+    // Tek bir şifrenin API config'ini getir (lazy-load)
+    void handleGetSafeApiConfig() {
+        if (!safeLockPtr) {
+            sendError(500, "Safe Lock not initialized");
+            return;
+        }
+        
+        if (!server->hasArg("index")) {
+            sendError(400, "Index required");
+            return;
+        }
+        
+        uint8_t index = server->arg("index").toInt();
+        if (index >= SAFE_MAX_PASSWORDS) {
+            sendError(400, "Invalid index");
+            return;
+        }
+        
+        SafeApiConfig cfg = safeLockPtr->getApiConfig(index);
+        String json = cfg.toJson();
+        server->send(200, "application/json", json);
+    }
+    
+    // Teaching Mode - Şifre öğretmeyi başlat
+    void handleStartSafeTeaching() {
+        if (!safeLockPtr) {
+            sendError(500, "Safe Lock not initialized");
+            return;
+        }
+        
+        JsonDocument doc;
+        if (!parseJsonBody(doc)) return;
+        DEBUG_PRINTLN("[WebServer] /startSafeTeaching request received");
+        
+        uint8_t index = doc["index"] | 0;
+        if (index >= SAFE_MAX_PASSWORDS) {
+            sendError(400, "Invalid password index");
+            return;
+        }
+        
+        if (safeLockPtr->startTeaching(index)) {
+            sendSuccess("Teaching started");
+        } else {
+            sendError(400, "Could not start teaching mode");
+        }
+    }
+    
+    // Teaching Mode - Şifre öğretmeyi iptal et
+    void handleCancelSafeTeaching() {
+        if (!safeLockPtr) {
+            sendError(500, "Safe Lock not initialized");
+            return;
+        }
+        
+        DEBUG_PRINTLN("[WebServer] /cancelSafeTeaching request received");
+        safeLockPtr->cancelTeaching("user_cancelled");
+        sendSuccess("Teaching cancelled");
+    }
+    
+    // Teaching Mode - Durumu getir
+    void handleGetTeachingStatus() {
+        if (!safeLockPtr) {
+            sendError(500, "Safe Lock not initialized");
+            return;
+        }
+        
+        JsonDocument doc;
+        bool isTeaching = safeLockPtr->isTeaching();
+        doc["teaching"] = isTeaching;
+        doc["index"] = safeLockPtr->getTeachingIndex();
+        
+        // Teaching devam ediyorsa canlı pattern, bitttiyse son tamamlanan pattern
+        if (isTeaching) {
+            doc["pattern"] = safeLockPtr->getTeachingPattern();
+            doc["stepCount"] = safeLockPtr->getTeachingStepCount();
+        } else {
+            // Teaching bitti - son tamamlanan pattern'i al
+            doc["pattern"] = safeLockPtr->getLastCompletedPattern();
+            doc["stepCount"] = 0;
+        }
+        
+        String output;
+        serializeJson(doc, output);
+        server->send(200, "application/json", output);
+    }
+
     void handleSetSafePassword() {
         if (!safeLockPtr) {
             sendError(500, "Safe Lock not initialized");
@@ -613,13 +699,22 @@ private:
             return;
         }
         
+        // Yeni String tabanlı SafeApiConfig
         JsonObject api = doc["api"];
         SafeApiConfig apiConfig;
-        String(api["url"] | "").toCharArray(apiConfig.url, SAFE_API_URL_MAX);
-        apiConfig.method = (String(api["method"] | "GET") == "POST") ? SAFE_HTTP_POST : SAFE_HTTP_GET;
-        String(api["header"] | "").toCharArray(apiConfig.header, SAFE_API_HEADER_MAX);
-        String(api["body"] | "").toCharArray(apiConfig.body, SAFE_API_BODY_MAX);
+        apiConfig.url = api["url"] | "";
+        apiConfig.contentType = api["contentType"] | "application/json";
+        apiConfig.authorization = api["authorization"] | "";
+        apiConfig.customHeaders = api["customHeaders"] | "";
+        apiConfig.body = api["body"] | "";
         apiConfig.enabled = api["enabled"] | false;
+        
+        // HTTP Method parsing
+        String methodStr = api["method"] | "GET";
+        if (methodStr == "POST") apiConfig.method = SAFE_HTTP_POST;
+        else if (methodStr == "PUT") apiConfig.method = SAFE_HTTP_PUT;
+        else if (methodStr == "DELETE") apiConfig.method = SAFE_HTTP_DELETE;
+        else apiConfig.method = SAFE_HTTP_GET;
         
         if (safeLockPtr->setPassword(index, doc["password"] | "", apiConfig, doc["pwdEnabled"] | false)) {
             sendSuccess("Password saved");
@@ -643,8 +738,21 @@ private:
             return;
         }
         
-        SafeHttpMethod method = (String(doc["method"] | "GET") == "POST") ? SAFE_HTTP_POST : SAFE_HTTP_GET;
-        if (safeApiHandlerPtr->testApi(url, method, doc["header"] | "", doc["body"] | "")) {
+        // Method parsing
+        String methodStr = doc["method"] | "GET";
+        SafeHttpMethod method = SAFE_HTTP_GET;
+        if (methodStr == "POST") method = SAFE_HTTP_POST;
+        else if (methodStr == "PUT") method = SAFE_HTTP_PUT;
+        else if (methodStr == "DELETE") method = SAFE_HTTP_DELETE;
+        
+        if (safeApiHandlerPtr->testApi(
+            url, 
+            method, 
+            doc["contentType"] | "", 
+            doc["authorization"] | "",
+            doc["customHeaders"] | "", 
+            doc["body"] | ""
+        )) {
             sendSuccess("API test successful");
         } else {
             server->send(200, "application/json", "{\"success\":false,\"message\":\"API test failed\"}");
@@ -771,9 +879,15 @@ public:
         
         // Safe mode routes
         server->on("/getSafeStatus", HTTP_GET, [this]() { handleGetSafeStatus(); });
+        server->on("/getSafeApiConfig", HTTP_GET, [this]() { handleGetSafeApiConfig(); });
         server->on("/saveSafePassword", HTTP_POST, [this]() { handleSetSafePassword(); });
         server->on("/setSafePassword", HTTP_POST, [this]() { handleSetSafePassword(); });
         server->on("/testSafeApi", HTTP_POST, [this]() { handleTestSafeApi(); });
+        
+        // Safe teaching mode routes
+        server->on("/startSafeTeaching", HTTP_POST, [this]() { handleStartSafeTeaching(); });
+        server->on("/cancelSafeTeaching", HTTP_POST, [this]() { handleCancelSafeTeaching(); });
+        server->on("/getTeachingStatus", HTTP_GET, [this]() { handleGetTeachingStatus(); });
         
         // System action routes
         server->on("/restart", HTTP_POST, [this]() { handleRestart(); });

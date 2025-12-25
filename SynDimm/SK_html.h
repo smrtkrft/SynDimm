@@ -203,20 +203,62 @@ String generateHTML(String chipID, String version) {
                                         <span class="toggle-slider"></span>
                                     </label>
                                     <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
+                                    <span id="quick-safe-api-0-status" class="api-status-badge"></span>
                                 </div>
                                 <div class="safe-config-section">
                                     <div class="form-group">
                                         <label data-lang="safe.password_label">Password</label>
                                         <input type="text" id="quick-safe-pwd-0" placeholder="L3-R2-L1-R3">
                                     </div>
-                                    <div class="form-group">
-                                        <label data-lang="safe.api_url">API URL</label>
-                                        <input type="text" id="quick-safe-api-0-url" placeholder="http://192.168.1.100/rpc/switch.toggle?id=0">
-                                    </div>
+                                    <details class="api-details">
+                                        <summary data-lang="safe.api_settings">API Settings</summary>
+                                        <div class="form-group">
+                                            <label data-lang="safe.api_url">URL</label>
+                                            <input type="text" id="quick-safe-api-0-url" placeholder="http://192.168.1.100/api/action">
+                                        </div>
+                                        <div class="form-row">
+                                            <div class="form-group half">
+                                                <label data-lang="safe.api_method">Method</label>
+                                                <select id="quick-safe-api-0-method">
+                                                    <option value="GET">GET</option>
+                                                    <option value="POST">POST</option>
+                                                    <option value="PUT">PUT</option>
+                                                    <option value="DELETE">DELETE</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group half">
+                                                <label data-lang="safe.content_type">Content-Type</label>
+                                                <input type="text" id="quick-safe-api-0-contentType" value="application/json">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.authorization">Authorization</label>
+                                            <input type="text" id="quick-safe-api-0-auth" placeholder="Bearer token...">
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.custom_headers">Custom Headers</label>
+                                            <textarea id="quick-safe-api-0-headers" rows="2" placeholder="X-Key: value"></textarea>
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.request_body">Body (JSON)</label>
+                                            <textarea id="quick-safe-api-0-body" rows="3" placeholder='{"action":"trigger"}'></textarea>
+                                        </div>
+                                    </details>
                                 </div>
                                 <div class="form-actions">
-                                    <button class="btn-save" onclick="saveSafePassword(0)" data-lang="safe.save_password">Save Password</button>
+                                    <button class="btn-save" onclick="saveSafePassword(0)" data-lang="safe.save_password">Save</button>
+                                    <button class="btn-teach" onclick="startTeachPassword(0)" data-lang="safe.teach_password">Teach</button>
                                     <button class="btn-test" onclick="testSafeApi(0)" data-lang="safe.test_api">Test API</button>
+                                </div>
+                                <div class="teaching-overlay" id="teaching-overlay-0" style="display:none;">
+                                    <div class="teaching-content">
+                                        <div class="teaching-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
+                                        <div class="teaching-title" data-lang="safe.teaching_title">Teaching Mode</div>
+                                        <div class="teaching-pattern" id="teaching-pattern-0">-</div>
+                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder... Press button to save</div>
+                                        <div class="teaching-timer" id="teaching-timer-0">15s</div>
+                                        <button class="btn-cancel-teach" onclick="cancelTeachPassword(0)" data-lang="safe.cancel_teaching">Cancel</button>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -227,20 +269,62 @@ String generateHTML(String chipID, String version) {
                                         <span class="toggle-slider"></span>
                                     </label>
                                     <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
+                                    <span id="quick-safe-api-1-status" class="api-status-badge"></span>
                                 </div>
                                 <div class="safe-config-section">
                                     <div class="form-group">
                                         <label data-lang="safe.password_label">Password</label>
                                         <input type="text" id="quick-safe-pwd-1" placeholder="L3-R2-L1-R3">
                                     </div>
-                                    <div class="form-group">
-                                        <label data-lang="safe.api_url">API URL</label>
-                                        <input type="text" id="quick-safe-api-1-url" placeholder="http://192.168.1.100/rpc/switch.toggle?id=0">
-                                    </div>
+                                    <details class="api-details">
+                                        <summary data-lang="safe.api_settings">API Settings</summary>
+                                        <div class="form-group">
+                                            <label data-lang="safe.api_url">URL</label>
+                                            <input type="text" id="quick-safe-api-1-url" placeholder="http://192.168.1.100/api/action">
+                                        </div>
+                                        <div class="form-row">
+                                            <div class="form-group half">
+                                                <label data-lang="safe.api_method">Method</label>
+                                                <select id="quick-safe-api-1-method">
+                                                    <option value="GET">GET</option>
+                                                    <option value="POST">POST</option>
+                                                    <option value="PUT">PUT</option>
+                                                    <option value="DELETE">DELETE</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group half">
+                                                <label data-lang="safe.content_type">Content-Type</label>
+                                                <input type="text" id="quick-safe-api-1-contentType" value="application/json">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.authorization">Authorization</label>
+                                            <input type="text" id="quick-safe-api-1-auth" placeholder="Bearer token...">
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.custom_headers">Custom Headers</label>
+                                            <textarea id="quick-safe-api-1-headers" rows="2" placeholder="X-Key: value"></textarea>
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.request_body">Body (JSON)</label>
+                                            <textarea id="quick-safe-api-1-body" rows="3" placeholder='{"action":"trigger"}'></textarea>
+                                        </div>
+                                    </details>
                                 </div>
                                 <div class="form-actions">
-                                    <button class="btn-save" onclick="saveSafePassword(1)" data-lang="safe.save_password">Save Password</button>
+                                    <button class="btn-save" onclick="saveSafePassword(1)" data-lang="safe.save_password">Save</button>
+                                    <button class="btn-teach" onclick="startTeachPassword(1)" data-lang="safe.teach_password">Teach</button>
                                     <button class="btn-test" onclick="testSafeApi(1)" data-lang="safe.test_api">Test API</button>
+                                </div>
+                                <div class="teaching-overlay" id="teaching-overlay-1" style="display:none;">
+                                    <div class="teaching-content">
+                                        <div class="teaching-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
+                                        <div class="teaching-title" data-lang="safe.teaching_title">Teaching Mode</div>
+                                        <div class="teaching-pattern" id="teaching-pattern-1">-</div>
+                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder... Press button to save</div>
+                                        <div class="teaching-timer" id="teaching-timer-1">15s</div>
+                                        <button class="btn-cancel-teach" onclick="cancelTeachPassword(1)" data-lang="safe.cancel_teaching">Cancel</button>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -251,20 +335,62 @@ String generateHTML(String chipID, String version) {
                                         <span class="toggle-slider"></span>
                                     </label>
                                     <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
+                                    <span id="quick-safe-api-2-status" class="api-status-badge"></span>
                                 </div>
                                 <div class="safe-config-section">
                                     <div class="form-group">
                                         <label data-lang="safe.password_label">Password</label>
                                         <input type="text" id="quick-safe-pwd-2" placeholder="L3-R2-L1-R3">
                                     </div>
-                                    <div class="form-group">
-                                        <label data-lang="safe.api_url">API URL</label>
-                                        <input type="text" id="quick-safe-api-2-url" placeholder="http://192.168.1.100/rpc/switch.toggle?id=0">
-                                    </div>
+                                    <details class="api-details">
+                                        <summary data-lang="safe.api_settings">API Settings</summary>
+                                        <div class="form-group">
+                                            <label data-lang="safe.api_url">URL</label>
+                                            <input type="text" id="quick-safe-api-2-url" placeholder="http://192.168.1.100/api/action">
+                                        </div>
+                                        <div class="form-row">
+                                            <div class="form-group half">
+                                                <label data-lang="safe.api_method">Method</label>
+                                                <select id="quick-safe-api-2-method">
+                                                    <option value="GET">GET</option>
+                                                    <option value="POST">POST</option>
+                                                    <option value="PUT">PUT</option>
+                                                    <option value="DELETE">DELETE</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group half">
+                                                <label data-lang="safe.content_type">Content-Type</label>
+                                                <input type="text" id="quick-safe-api-2-contentType" value="application/json">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.authorization">Authorization</label>
+                                            <input type="text" id="quick-safe-api-2-auth" placeholder="Bearer token...">
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.custom_headers">Custom Headers</label>
+                                            <textarea id="quick-safe-api-2-headers" rows="2" placeholder="X-Key: value"></textarea>
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.request_body">Body (JSON)</label>
+                                            <textarea id="quick-safe-api-2-body" rows="3" placeholder='{"action":"trigger"}'></textarea>
+                                        </div>
+                                    </details>
                                 </div>
                                 <div class="form-actions">
-                                    <button class="btn-save" onclick="saveSafePassword(2)" data-lang="safe.save_password">Save Password</button>
+                                    <button class="btn-save" onclick="saveSafePassword(2)" data-lang="safe.save_password">Save</button>
+                                    <button class="btn-teach" onclick="startTeachPassword(2)" data-lang="safe.teach_password">Teach</button>
                                     <button class="btn-test" onclick="testSafeApi(2)" data-lang="safe.test_api">Test API</button>
+                                </div>
+                                <div class="teaching-overlay" id="teaching-overlay-2" style="display:none;">
+                                    <div class="teaching-content">
+                                        <div class="teaching-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
+                                        <div class="teaching-title" data-lang="safe.teaching_title">Teaching Mode</div>
+                                        <div class="teaching-pattern" id="teaching-pattern-2">-</div>
+                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder... Press button to save</div>
+                                        <div class="teaching-timer" id="teaching-timer-2">15s</div>
+                                        <button class="btn-cancel-teach" onclick="cancelTeachPassword(2)" data-lang="safe.cancel_teaching">Cancel</button>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -275,20 +401,62 @@ String generateHTML(String chipID, String version) {
                                         <span class="toggle-slider"></span>
                                     </label>
                                     <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
+                                    <span id="quick-safe-api-3-status" class="api-status-badge"></span>
                                 </div>
                                 <div class="safe-config-section">
                                     <div class="form-group">
                                         <label data-lang="safe.password_label">Password</label>
                                         <input type="text" id="quick-safe-pwd-3" placeholder="L3-R2-L1-R3">
                                     </div>
-                                    <div class="form-group">
-                                        <label data-lang="safe.api_url">API URL</label>
-                                        <input type="text" id="quick-safe-api-3-url" placeholder="http://192.168.1.100/rpc/switch.toggle?id=0">
-                                    </div>
+                                    <details class="api-details">
+                                        <summary data-lang="safe.api_settings">API Settings</summary>
+                                        <div class="form-group">
+                                            <label data-lang="safe.api_url">URL</label>
+                                            <input type="text" id="quick-safe-api-3-url" placeholder="http://192.168.1.100/api/action">
+                                        </div>
+                                        <div class="form-row">
+                                            <div class="form-group half">
+                                                <label data-lang="safe.api_method">Method</label>
+                                                <select id="quick-safe-api-3-method">
+                                                    <option value="GET">GET</option>
+                                                    <option value="POST">POST</option>
+                                                    <option value="PUT">PUT</option>
+                                                    <option value="DELETE">DELETE</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group half">
+                                                <label data-lang="safe.content_type">Content-Type</label>
+                                                <input type="text" id="quick-safe-api-3-contentType" value="application/json">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.authorization">Authorization</label>
+                                            <input type="text" id="quick-safe-api-3-auth" placeholder="Bearer token...">
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.custom_headers">Custom Headers</label>
+                                            <textarea id="quick-safe-api-3-headers" rows="2" placeholder="X-Key: value"></textarea>
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.request_body">Body (JSON)</label>
+                                            <textarea id="quick-safe-api-3-body" rows="3" placeholder='{"action":"trigger"}'></textarea>
+                                        </div>
+                                    </details>
                                 </div>
                                 <div class="form-actions">
-                                    <button class="btn-save" onclick="saveSafePassword(3)" data-lang="safe.save_password">Save Password</button>
+                                    <button class="btn-save" onclick="saveSafePassword(3)" data-lang="safe.save_password">Save</button>
+                                    <button class="btn-teach" onclick="startTeachPassword(3)" data-lang="safe.teach_password">Teach</button>
                                     <button class="btn-test" onclick="testSafeApi(3)" data-lang="safe.test_api">Test API</button>
+                                </div>
+                                <div class="teaching-overlay" id="teaching-overlay-3" style="display:none;">
+                                    <div class="teaching-content">
+                                        <div class="teaching-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
+                                        <div class="teaching-title" data-lang="safe.teaching_title">Teaching Mode</div>
+                                        <div class="teaching-pattern" id="teaching-pattern-3">-</div>
+                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder... Press button to save</div>
+                                        <div class="teaching-timer" id="teaching-timer-3">15s</div>
+                                        <button class="btn-cancel-teach" onclick="cancelTeachPassword(3)" data-lang="safe.cancel_teaching">Cancel</button>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -299,20 +467,62 @@ String generateHTML(String chipID, String version) {
                                         <span class="toggle-slider"></span>
                                     </label>
                                     <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
+                                    <span id="quick-safe-api-4-status" class="api-status-badge"></span>
                                 </div>
                                 <div class="safe-config-section">
                                     <div class="form-group">
                                         <label data-lang="safe.password_label">Password</label>
                                         <input type="text" id="quick-safe-pwd-4" placeholder="L3-R2-L1-R3">
                                     </div>
-                                    <div class="form-group">
-                                        <label data-lang="safe.api_url">API URL</label>
-                                        <input type="text" id="quick-safe-api-4-url" placeholder="http://192.168.1.100/rpc/switch.toggle?id=0">
-                                    </div>
+                                    <details class="api-details">
+                                        <summary data-lang="safe.api_settings">API Settings</summary>
+                                        <div class="form-group">
+                                            <label data-lang="safe.api_url">URL</label>
+                                            <input type="text" id="quick-safe-api-4-url" placeholder="http://192.168.1.100/api/action">
+                                        </div>
+                                        <div class="form-row">
+                                            <div class="form-group half">
+                                                <label data-lang="safe.api_method">Method</label>
+                                                <select id="quick-safe-api-4-method">
+                                                    <option value="GET">GET</option>
+                                                    <option value="POST">POST</option>
+                                                    <option value="PUT">PUT</option>
+                                                    <option value="DELETE">DELETE</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group half">
+                                                <label data-lang="safe.content_type">Content-Type</label>
+                                                <input type="text" id="quick-safe-api-4-contentType" value="application/json">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.authorization">Authorization</label>
+                                            <input type="text" id="quick-safe-api-4-auth" placeholder="Bearer token...">
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.custom_headers">Custom Headers</label>
+                                            <textarea id="quick-safe-api-4-headers" rows="2" placeholder="X-Key: value"></textarea>
+                                        </div>
+                                        <div class="form-group">
+                                            <label data-lang="safe.request_body">Body (JSON)</label>
+                                            <textarea id="quick-safe-api-4-body" rows="3" placeholder='{"action":"trigger"}'></textarea>
+                                        </div>
+                                    </details>
                                 </div>
                                 <div class="form-actions">
-                                    <button class="btn-save" onclick="saveSafePassword(4)" data-lang="safe.save_password">Save Password</button>
+                                    <button class="btn-save" onclick="saveSafePassword(4)" data-lang="safe.save_password">Save</button>
+                                    <button class="btn-teach" onclick="startTeachPassword(4)" data-lang="safe.teach_password">Teach</button>
                                     <button class="btn-test" onclick="testSafeApi(4)" data-lang="safe.test_api">Test API</button>
+                                </div>
+                                <div class="teaching-overlay" id="teaching-overlay-4" style="display:none;">
+                                    <div class="teaching-content">
+                                        <div class="teaching-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
+                                        <div class="teaching-title" data-lang="safe.teaching_title">Teaching Mode</div>
+                                        <div class="teaching-pattern" id="teaching-pattern-4">-</div>
+                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder... Press button to save</div>
+                                        <div class="teaching-timer" id="teaching-timer-4">15s</div>
+                                        <button class="btn-cancel-teach" onclick="cancelTeachPassword(4)" data-lang="safe.cancel_teaching">Cancel</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
