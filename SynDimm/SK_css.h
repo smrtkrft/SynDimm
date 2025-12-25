@@ -147,8 +147,37 @@ body.light-theme .scan-progress-text { color: var(--text-secondary); }
 body.light-theme .scan-progress-bar { background: var(--border-color); }
 body.light-theme .devices-list-title { color: var(--text-secondary); }
 
-/* Light Theme - Status Bar */
-body.light-theme .dimmer-status-bar-new { background: var(--bg-card); border-color: var(--border-color); }
+/* Light Theme - Dimmer Hero */
+body.light-theme .dimmer-hero { background: radial-gradient(ellipse at center, rgba(59, 130, 246, 0.1) 0%, transparent 70%); }
+body.light-theme .dimmer-hero.connected-on { background: radial-gradient(ellipse at center, rgba(16, 185, 129, 0.1) 0%, transparent 70%); }
+body.light-theme .dimmer-hero.connected-off { background: radial-gradient(ellipse at center, rgba(59, 130, 246, 0.1) 0%, transparent 70%); }
+body.light-theme .dimmer-hero.disconnected { background: radial-gradient(ellipse at center, rgba(239, 68, 68, 0.1) 0%, transparent 70%); }
+body.light-theme .dimmer-brightness-display { color: var(--text-primary); }
+body.light-theme .dimmer-brightness-display span { color: var(--text-muted); }
+body.light-theme .dimmer-hero.connected-off .dimmer-brightness-display { color: var(--text-muted); }
+body.light-theme .dimmer-hero.disconnected .dimmer-brightness-display { color: var(--text-muted); }
+body.light-theme .dimmer-power-status { color: rgb(16, 185, 129); }
+body.light-theme .dimmer-hero.connected-off .dimmer-power-status { color: var(--text-muted); }
+body.light-theme .dimmer-hero.disconnected .dimmer-power-status { color: var(--text-muted); }
+body.light-theme .dimmer-status-dot { color: var(--text-muted); }
+body.light-theme .dimmer-connection-status { color: rgb(16, 185, 129); }
+body.light-theme .dimmer-hero.disconnected .dimmer-connection-status { color: rgb(239, 68, 68); }
+body.light-theme .dimmer-ip-display { color: var(--text-muted); }
+body.light-theme .dimmer-cal-btn { background: var(--bg-card); border-color: var(--border-light); color: var(--text-primary); }
+body.light-theme .dimmer-cal-btn:hover:not(:disabled) { border-color: rgb(59, 130, 246); background: rgba(59, 130, 246, 0.1); }
+body.light-theme .dimmer-cal-value { color: rgb(59, 130, 246); }
+body.light-theme .dimmer-cal-label { color: var(--text-muted); }
+body.light-theme .dimmer-compact-form { background: rgba(0, 0, 0, 0.02); border-color: var(--border-color); }
+body.light-theme .dimmer-section-title { color: var(--text-secondary); }
+body.light-theme .dimmer-inline-form input { background: var(--bg-card); border-color: var(--border-light); color: var(--text-primary); }
+body.light-theme .dimmer-inline-form input::placeholder { color: var(--text-muted); }
+body.light-theme .dimmer-inline-form input:focus { border-color: rgba(59, 130, 246, 0.4); }
+body.light-theme .saved-device-empty { color: var(--text-muted); }
+body.light-theme .saved-device-item { background: var(--bg-card); border-color: var(--border-light); }
+body.light-theme .saved-device-ip { color: var(--text-primary); }
+body.light-theme .saved-device-type { color: var(--text-muted); }
+
+/* Light Theme - Status Bar (shutter) */
 body.light-theme .shutter-status-bar { background: var(--bg-card); border-color: var(--border-color); }
 body.light-theme .status-col { border-right-color: var(--border-light); }
 body.light-theme .status-col-label { color: var(--text-muted); }
@@ -727,8 +756,46 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
     .status-bar-item { width: 100%; text-align: center; }
 }
 
-/* Status Bar - 4 Column Layout */
-.dimmer-status-bar-new { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 20px 25px; margin-bottom: 25px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
+/* Dimmer Hero Display */
+.dimmer-hero { text-align: center; padding: 30px 20px; background: radial-gradient(ellipse at center, rgba(59, 130, 246, 0.15) 0%, transparent 70%); border-radius: 8px; margin-bottom: 20px; }
+.dimmer-hero.connected-on { background: radial-gradient(ellipse at center, rgba(16, 185, 129, 0.15) 0%, transparent 70%); }
+.dimmer-hero.connected-off { background: radial-gradient(ellipse at center, rgba(59, 130, 246, 0.15) 0%, transparent 70%); }
+.dimmer-hero.disconnected { background: radial-gradient(ellipse at center, rgba(239, 68, 68, 0.15) 0%, transparent 70%); }
+.dimmer-brightness-display { font-size: 4em; font-weight: 200; color: #fff; line-height: 1; }
+.dimmer-brightness-display span { font-size: 0.4em; color: rgba(255, 255, 255, 0.5); }
+.dimmer-hero.connected-off .dimmer-brightness-display { color: rgba(255, 255, 255, 0.5); }
+.dimmer-hero.disconnected .dimmer-brightness-display { color: rgba(255, 255, 255, 0.3); }
+.dimmer-status-row { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.9em; }
+.dimmer-power-status { color: rgb(16, 185, 129); font-weight: 500; }
+.dimmer-hero.connected-off .dimmer-power-status { color: rgba(255, 255, 255, 0.5); }
+.dimmer-hero.disconnected .dimmer-power-status { color: rgba(255, 255, 255, 0.4); }
+.dimmer-status-dot { color: rgba(255, 255, 255, 0.5); }
+.dimmer-connection-status { color: rgb(16, 185, 129); }
+.dimmer-hero.disconnected .dimmer-connection-status { color: rgb(239, 68, 68); }
+.dimmer-ip-display { margin-top: 5px; color: rgba(255, 255, 255, 0.5); font-size: 0.85em; }
+.dimmer-calibration-controls { display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 20px; }
+.dimmer-cal-btn { width: 50px; height: 50px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.03); color: #fff; font-size: 1.5em; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; }
+.dimmer-cal-btn:hover:not(:disabled) { border-color: rgb(59, 130, 246); background: rgba(59, 130, 246, 0.15); }
+.dimmer-cal-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.dimmer-cal-center { text-align: center; }
+.dimmer-cal-value { font-size: 2em; font-weight: 600; min-width: 50px; text-align: center; color: rgb(59, 130, 246); line-height: 1; }
+.dimmer-cal-label { font-size: 0.75em; color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; }
+
+/* Dimmer Compact Form */
+.dimmer-compact-form { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 20px; }
+.dimmer-compact-form .section-title { font-size: 0.85em; font-weight: 600; color: rgba(255, 255, 255, 0.6); margin: 0 0 12px 0; padding: 0; border: none; text-transform: uppercase; letter-spacing: 0.5px; }
+.dimmer-section-title { font-size: 0.85em; font-weight: 600; color: rgba(255, 255, 255, 0.6); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+.dimmer-inline-form { display: flex; gap: 10px; margin-bottom: 15px; }
+.dimmer-inline-form input { flex: 1; padding: 12px 15px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; color: #fff; font-size: 1em; }
+.dimmer-inline-form input:focus { outline: none; border-color: rgba(59, 130, 246, 0.3); background: rgba(255, 255, 255, 0.08); }
+.dimmer-inline-form input::placeholder { color: rgba(255, 255, 255, 0.3); }
+.dimmer-inline-form button { padding: 10px 20px; border: none; border-radius: 6px; font-size: 0.9em; font-weight: 500; cursor: pointer; transition: all 0.2s ease; }
+.dimmer-inline-form .btn-primary { background: rgb(59, 130, 246); color: #fff; }
+.dimmer-inline-form .btn-primary:hover { background: rgb(37, 99, 235); }
+.dimmer-inline-form .btn-secondary { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; }
+.dimmer-inline-form .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
+
+/* Shutter Status Bar (kept for shutter mode) */
 .shutter-status-bar { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 20px 25px; margin-bottom: 25px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
 .shutter-info-text { padding: 12px 16px; border-radius: 6px; font-size: 0.85em; line-height: 1.5; margin-top: 15px; }
 .shutter-info-text.warning { background: rgba(255, 193, 7, 0.15); border: 1px solid rgba(255, 193, 7, 0.4); color: #ffc107; }
@@ -739,32 +806,40 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .status-col-value { font-size: 1.1em; color: #ffffff; font-weight: 400; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .status-power-text { font-size: 0.85em; color: rgba(255, 255, 255, 0.6); margin-top: 2px; }
 
-/* Calibration Controls */
-.calibration-controls { display: flex; align-items: center; gap: 6px; justify-content: center; }
-.calibration-value-display { font-size: 1.4em; font-weight: 500; color: #ffffff; min-width: 22px; text-align: center; }
-.btn-cal-up, .btn-cal-down { background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.7); font-size: 0.75em; width: 20px; height: 20px; border-radius: 3px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
-.btn-cal-up:hover, .btn-cal-down:hover { background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.3); color: #ffffff; }
-.btn-cal-up:active, .btn-cal-down:active { transform: scale(0.9); }
-.btn-cal-up:disabled, .btn-cal-down:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
-.btn-status-connect, .btn-status-disconnect { padding: 8px 16px; border: none; border-radius: var(--radius-sm); font-size: 0.85em; font-weight: 500; cursor: pointer; transition: var(--transition-fast); white-space: nowrap; }
-.btn-status-connect { background: var(--hover-bg); color: var(--text-primary); border: 1px solid var(--border-light); }
-.btn-status-connect:hover { background: var(--shadow-hover); border-color: var(--border-light); }
-.btn-status-disconnect { background: var(--color-error-bg-light); color: var(--color-error); border: 1px solid var(--color-error-border); }
-.btn-status-disconnect:hover { background: rgba(239, 68, 68, 0.3); border-color: rgba(239, 68, 68, 0.5); }
+/* Saved Devices List */
+.saved-devices-list { display: flex; flex-direction: column; gap: 8px; }
+.saved-device-empty { color: rgba(255, 255, 255, 0.4); font-size: 0.9em; text-align: center; padding: 15px; }
+.saved-device-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 15px; background: rgba(0, 0, 0, 0.2); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.06); }
+.saved-device-info { display: flex; flex-direction: column; gap: 2px; }
+.saved-device-ip { font-family: monospace; color: #fff; font-size: 0.95em; }
+.saved-device-type { font-size: 0.75em; color: rgba(255, 255, 255, 0.4); }
+.saved-device-actions { display: flex; gap: 8px; }
+.saved-device-btn { padding: 6px 12px; border-radius: 6px; font-size: 0.8em; cursor: pointer; transition: all 0.2s ease; }
+.saved-device-btn.connect { background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); color: #22c55e; }
+.saved-device-btn.connect:hover { background: rgba(34, 197, 94, 0.25); }
+.saved-device-btn.delete { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; }
+.saved-device-btn.delete:hover { background: rgba(239, 68, 68, 0.25); }
 
-/* Status Bar Responsive */
+/* Status Bar Responsive (for shutter) */
 @media (max-width: 768px) {
-    .dimmer-status-bar-new, .shutter-status-bar { grid-template-columns: repeat(2, 1fr); gap: 20px 0; padding: 15px 20px; }
+    .shutter-status-bar { grid-template-columns: repeat(2, 1fr); gap: 20px 0; padding: 15px 20px; }
     .status-col { border-right: none; border-bottom: none; padding: 0 10px; }
     .status-col:nth-child(odd) { border-right: 1px solid var(--border-light); }
+    .dimmer-inline-form { flex-direction: column; }
+    .dimmer-inline-form button { width: 100%; }
+    .dimmer-brightness-display { font-size: 3.5em; }
 }
 @media (max-width: 480px) {
-    .dimmer-status-bar-new, .shutter-status-bar { grid-template-columns: 1fr; gap: 15px; padding: 15px; }
+    .shutter-status-bar { grid-template-columns: 1fr; gap: 15px; padding: 15px; }
     .status-col { padding: 10px 0; border-bottom: 1px solid var(--border-color); }
     .status-col:nth-child(odd) { border-right: none; }
     .status-col:last-child { border-bottom: none; }
     .status-col-label { font-size: 0.7em; }
     .status-col-value { font-size: 1em; }
+    .dimmer-hero { padding: 30px 20px 25px; }
+    .dimmer-brightness-display { font-size: 3em; }
+    .dimmer-calibration-controls { gap: 15px; max-width: 200px; }
+    .dimmer-cal-btn { width: 40px; height: 40px; font-size: 1.2em; }
 }
 
 /* Calibration Slider */
@@ -798,6 +873,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .saved-device-empty { text-align: center; padding: 30px 20px; color: var(--text-muted); font-size: 0.9em; font-style: italic; }
 .saved-device-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--card-hover); border: 1px solid var(--border-color); border-radius: var(--radius-lg); transition: var(--transition-normal); }
 .saved-device-item:hover { background: var(--input-bg-focus); border-color: var(--border-light); }
+.saved-device-item.discovered { border-left: 3px solid var(--color-success); }
+.discovered-header { font-size: 0.9em; font-weight: 500; color: var(--color-success); padding: 8px 0; border-bottom: 1px solid var(--border-color); margin-bottom: 8px; }
 .saved-device-info { display: flex; flex-direction: column; gap: 5px; }
 .saved-device-ip { font-size: 1em; color: var(--text-primary); font-weight: 500; }
 .saved-device-type { font-size: 0.85em; color: var(--text-muted); }

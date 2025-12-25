@@ -210,15 +210,40 @@ function updateModeConfigPanel(mode) {
 
 function updateQuickDimmerPanel() {
     api('/getDimmerStatus').then(d => {
-        setText('quick-dimmer-ip', d.connected ? (d.ip || '-') : '-');
-        setText('quick-dimmer-brightness', (d.brightness || 0) + '%');
-        setText('quick-dimmer-power', d.isOn ? ' ' + t('common.on') : ' ' + t('common.off'));
-        setText('quick-dimmer-calibration', d.ratio || 3);
-        const btnC = $('quick-btn-connect'), btnD = $('quick-btn-disconnect');
-        if(d.connected) {
-            if(btnC) btnC.style.display = 'none'; if(btnD) btnD.style.display = 'block';
-        } else {
-            if(btnC) btnC.style.display = 'block'; if(btnD) btnD.style.display = 'none';
+        const hero = $('dimmer-hero');
+        const brightness = d.brightness || 0;
+        const isOn = d.isOn;
+        const connected = d.connected;
+        
+        // Update brightness display
+        const brightnessEl = $('dimmer-brightness-display');
+        if(brightnessEl) brightnessEl.innerHTML = connected ? brightness + '<span>%</span>' : '--<span>%</span>';
+        
+        // Update power status text
+        setText('dimmer-power-status', isOn ? t('common.on') : t('common.off'));
+        
+        // Update connection status
+        setText('dimmer-connection-status', connected ? t('dimmer.connected') : t('dimmer.not_connected'));
+        
+        // Update IP display
+        const deviceTypes = { 0: t('dimmer.unknown'), 1: t('dimmer.shelly_dimmer'), 2: t('dimmer.shelly_dali'), 3: t('dimmer.tasmota') };
+        const deviceTypeName = deviceTypes[d.deviceType] || t('dimmer.unknown');
+        const ipText = connected ? (d.ip || '-') + ' • ' + deviceTypeName : t('dimmer.no_device_connected');
+        setText('dimmer-ip-display', ipText);
+        
+        // Update calibration value and buttons
+        const ratio = d.ratio || 3;
+        setText('dimmer-cal-value', ratio);
+        const btnMinus = $('cal-btn-minus'), btnPlus = $('cal-btn-plus');
+        if(btnMinus) btnMinus.disabled = !connected || ratio <= 1;
+        if(btnPlus) btnPlus.disabled = !connected || ratio >= 5;
+        
+        // Update hero state class
+        if(hero) {
+            hero.classList.remove('connected-on', 'connected-off', 'disconnected');
+            if(connected && isOn) hero.classList.add('connected-on');
+            else if(connected && !isOn) hero.classList.add('connected-off');
+            else hero.classList.add('disconnected');
         }
     }).catch(() => {});
     // Update saved devices in quick panel
@@ -615,9 +640,14 @@ function updateDimmerUI(d) {
 }
 function updateCalibrationValue(v) { setText('calibration-value', v); }
 function adjustCalibration(delta) {
-    const el = $('dimmer-status-calibration'), cur = parseInt(el.textContent);
+    const el = $('dimmer-cal-value'), cur = parseInt(el.textContent);
+    if(isNaN(cur)) return;
     let nv = Math.max(1, Math.min(5, cur + delta));
     el.textContent = nv;
+    // Update button states
+    const btnMinus = $('cal-btn-minus'), btnPlus = $('cal-btn-plus');
+    if(btnMinus) btnMinus.disabled = nv <= 1;
+    if(btnPlus) btnPlus.disabled = nv >= 5;
     post('/setDimmerRatio', { ratio: nv }).then(d => { if(!d.success) { showNotification(t('dimmer.calibration_failed'), 'error'); el.textContent = cur; } })
         .catch(() => { showNotification(t('notifications.connection_error'), 'error'); el.textContent = cur; });
 }
@@ -661,13 +691,31 @@ function saveDimmerSettings() {
 function loadSavedDevices() {
     api('/getSavedDevices').then(d => displaySavedDevices(d.devices || [])).catch(() => {});
 }
+function loadDiscoveredDevices() {
+    api('/getScanResults').then(d => {
+        if(d.devices && d.devices.length > 0) displayDiscoveredDevices(d.devices);
+        else loadSavedDevices();
+    }).catch(() => loadSavedDevices());
+}
+function displayDiscoveredDevices(devs) {
+    const c = $('quick-saved-devices-list');
+    if(!c) return;
+    const cats = { 1: t('dimmer.shelly_dimmer'), 2: t('shutter.shelly_shutter'), 3: t('dimmer.switch') };
+    c.innerHTML = '<div class="discovered-header">' + t('dimmer.found_devices') + ' (' + devs.length + ')</div>' + 
+        devs.map(d => `<div class="saved-device-item discovered"><div class="saved-device-info"><div class="saved-device-ip">${d.ip}</div><div class="saved-device-type">${d.displayName || cats[d.category] || t('dimmer.unknown')}</div></div><div class="saved-device-actions"><button class="btn-device-connect" onclick="connectToDiscoveredDevice('${d.ip}', ${d.category})">${t('common.connect')}</button></div></div>`).join('');
+}
+function connectToDiscoveredDevice(ip, category) {
+    if(category === 2) { $('shutter-ip-input').value = ip; connectShutter(ip); }
+    else { $('quick-dimmer-ip-input').value = ip; connectDimmerFromQuick(); }
+}
 function displaySavedDevices(devs) {
-    const c = $('saved-devices-list');
+    const c = $('quick-saved-devices-list');
+    if(!c) return;
     if(!devs.length) { c.innerHTML = '<div class="saved-device-empty">' + t('dimmer.no_saved_devices') + '</div>'; return; }
     const types = { 0: t('dimmer.unknown'), 1: t('dimmer.shelly_dimmer'), 2: t('dimmer.shelly_dali'), 3: t('dimmer.tasmota') };
     c.innerHTML = devs.map(d => `<div class="saved-device-item"><div class="saved-device-info"><div class="saved-device-ip">${d.ip}</div><div class="saved-device-type">${types[d.type] || t('dimmer.unknown')}</div></div><div class="saved-device-actions"><button class="btn-device-connect" onclick="connectToSavedDevice('${d.ip}')">${t('common.connect')}</button><button class="btn-device-remove" onclick="removeSavedDevice('${d.ip}')">${t('dimmer.remove')}</button></div></div>`).join('');
 }
-function connectToSavedDevice(ip) { $('dimmer-ip-input').value = ip; connectDimmer(ip); }
+function connectToSavedDevice(ip) { $('quick-dimmer-ip-input').value = ip; connectDimmerFromQuick(); }
 function removeSavedDevice(ip) {
     if(!confirm(t('notifications.confirm_remove'))) return;
     post('/removeSavedDevice', { ip }).then(d => { if(d.success) { showNotification(t('dimmer.device_removed'), 'success'); loadSavedDevices(); } else showNotification(t('dimmer.remove_failed'), 'error'); })
@@ -691,7 +739,7 @@ function pollScanProgress() {
                 clearInterval(scanProgressInterval); scanProgressInterval = null;
                 setDisplay('btn-stop-scan', false);
                 showNotification(d.dimmerCount > 0 ? t('notifications.scan_complete', {count: d.dimmerCount}) : t('notifications.scan_complete_none'), d.dimmerCount > 0 ? 'success' : 'info');
-                loadSavedDevices();
+                loadDiscoveredDevices();
             }
         }).catch(() => { clearInterval(scanProgressInterval); scanProgressInterval = null; setDisplay('btn-stop-scan', false); });
     }, 1000);

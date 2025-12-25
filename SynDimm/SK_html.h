@@ -107,57 +107,33 @@ String generateHTML(String chipID, String version) {
                         
                         <!-- DIMMER Yapılandırması -->
                         <div class="mode-config-panel" id="config-panel-dimmer">
-                            <!-- Dimmer Mod Açıklama -->
-                            <div class="mode-info-text" data-lang="dimmer.description">
-                                Control your Shelly Dimmer with the encoder. Adjust brightness and manage on/off operations.
-                            </div>
-                            
-                            <!-- Status Info Bar -->
-                            <div class="dimmer-status-bar-new">
-                                <div class="status-col">
-                                    <div class="status-col-label" data-lang="dimmer.ip_address">IP ADDRESS</div>
-                                    <div class="status-col-value" id="quick-dimmer-ip">-</div>
+                            <!-- Hero Display -->
+                            <div class="dimmer-hero" id="dimmer-hero">
+                                <div class="dimmer-brightness-display" id="dimmer-brightness-display">--<span>%</span></div>
+                                <div class="dimmer-status-row">
+                                    <span class="dimmer-power-status" id="dimmer-power-status" data-lang="common.off">Off</span>
+                                    <span class="dimmer-status-dot">•</span>
+                                    <span class="dimmer-connection-status" id="dimmer-connection-status" data-lang="dimmer.not_connected">Not Connected</span>
                                 </div>
-                                <div class="status-col">
-                                    <div class="status-col-label" data-lang="dimmer.status">STATUS</div>
-                                    <div class="status-col-value">
-                                        <span id="quick-dimmer-brightness">0%</span>
-                                        <span class="status-power-text" id="quick-dimmer-power" data-lang="common.off">Off</span>
+                                <div class="dimmer-ip-display" id="dimmer-ip-display" data-lang="dimmer.no_device_connected">No device connected</div>
+                                <div class="dimmer-calibration-controls">
+                                    <button class="dimmer-cal-btn" id="cal-btn-minus" onclick="adjustCalibration(-1)" disabled>−</button>
+                                    <div class="dimmer-cal-center">
+                                        <div class="dimmer-cal-value" id="dimmer-cal-value">-</div>
+                                        <div class="dimmer-cal-label" data-lang="dimmer.sensitivity">Sensitivity</div>
                                     </div>
-                                </div>
-                                <div class="status-col">
-                                    <div class="status-col-label" data-lang="dimmer.calibration">CALIBRATION</div>
-                                    <div class="calibration-controls">
-                                        <button class="btn-cal-up" onclick="adjustCalibration(1)" data-lang-title="common.increase">▲</button>
-                                        <span class="calibration-value-display" id="quick-dimmer-calibration">3</span>
-                                        <button class="btn-cal-down" onclick="adjustCalibration(-1)" data-lang-title="common.decrease">▼</button>
-                                    </div>
-                                </div>
-                                <div class="status-col status-col-action">
-                                    <div class="status-col-label" data-lang="dimmer.action">ACTION</div>
-                                    <div class="status-col-value">
-                                        <button class="btn-status-connect" id="quick-btn-connect" onclick="connectDimmer()" data-lang="common.connect">Connect</button>
-                                        <button class="btn-status-disconnect" id="quick-btn-disconnect" onclick="disconnectDimmer()" style="display: none;" data-lang="common.disconnect">Disconnect</button>
-                                    </div>
+                                    <button class="dimmer-cal-btn" id="cal-btn-plus" onclick="adjustCalibration(1)" disabled>+</button>
                                 </div>
                             </div>
                             
                             <!-- Connection Section -->
-                            <div class="dimmer-config-section">
-                                <h4 class="dimmer-section-title" data-lang="dimmer.device_connection">Device Connection</h4>
-                                <div class="form-group">
-                                    <label data-lang="dimmer.manual_ip">Manual IP Entry</label>
-                                    <input type="text" id="quick-dimmer-ip-input" placeholder="192.168.1.100" class="input-full">
+                            <div class="dimmer-compact-form">
+                                <div class="section-title" data-lang="dimmer.device_connection">Device Connection</div>
+                                <div class="dimmer-inline-form">
+                                    <input type="text" id="quick-dimmer-ip-input" placeholder="IP Adresi">
+                                    <button class="btn btn-primary" onclick="connectDimmerFromQuick()" data-lang="common.connect">Connect</button>
+                                    <button class="btn btn-secondary" onclick="startNetworkScan()" data-lang="dimmer.scan">Scan</button>
                                 </div>
-                                <div class="form-actions-row">
-                                    <button class="btn-primary" onclick="connectDimmerFromQuick()" data-lang="common.connect">Connect</button>
-                                    <button class="btn-secondary" onclick="startNetworkScan()" data-lang="dimmer.scan_network">Scan Network</button>
-                                </div>
-                            </div>
-                            
-                            <!-- Saved Devices -->
-                            <div class="dimmer-config-section">
-                                <h4 class="dimmer-section-title" data-lang="dimmer.saved_devices">Saved Devices</h4>
                                 <div class="saved-devices-list" id="quick-saved-devices-list">
                                     <div class="saved-device-empty" data-lang="dimmer.no_devices">No saved devices yet.</div>
                                 </div>
