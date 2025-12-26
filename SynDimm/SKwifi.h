@@ -1,7 +1,7 @@
 /**
  * SKwifi.h
  * SmartKraft SynDimm - WiFi & AP Mode Management
- * Version: v1.2.0
+ * Version: v1.3.0
  * 
  * ========================================
  * KRITIK KURAL - ASLA DEĞİŞTİRME!
@@ -18,10 +18,16 @@
 #define SKWIFI_H
 
 #include <WiFi.h>
+#include <DNSServer.h>
+#include <ESPmDNS.h>
 #include <Preferences.h>
 #include <esp_wifi.h>
 #include <ArduinoJson.h>
 #include "SK_config.h"
+
+// DNS Server for Captive Portal (AP mode mDNS alternative)
+static DNSServer dnsServer;
+static const byte DNS_PORT = 53;
 
 class SKWiFi {
 private:
@@ -57,7 +63,16 @@ private:
     bool connectedToWiFi;
     bool apModeActive;
     bool apModeEnabled;     // Kullanıcı tarafından AP Mode açık/kapalı ayarı
+    bool dnsServerActive;   // DNS Server durumu (AP mode captive portal için)
     unsigned long lastScanTime;
+    
+    // mDNS yönetimi
+    bool mdnsActive;                        // mDNS çalışıyor mu?
+    String currentMdnsHostname;             // Şu anki hostname
+    unsigned long lastMdnsCheck;            // Son sağlık kontrolü
+    uint8_t mdnsFailCount;                  // Ardışık başarısız deneme sayısı
+    static const unsigned long MDNS_CHECK_INTERVAL = 30000;  // 30 saniyede bir kontrol
+    static const uint8_t MDNS_MAX_RETRIES = 5;               // Max retry sayısı
     
     // WiFi restart değişkenleri
     unsigned long lastPingCheckTime;
@@ -65,6 +80,48 @@ private:
     unsigned long wifiConnectedSince;      // WiFi bağlantı başlangıç zamanı
     uint8_t pingFailCount;
     uint32_t wifiRestartCount;             // Toplam restart sayısı (debug için)
+    
+    // mDNS başlatma (internal)
+    bool startMDNS(const String& hostname) {
+        MDNS.end();  // Önce temizle
+        delay(50);
+        
+        if (MDNS.begin(hostname.c_str())) {
+            MDNS.addService("http", "tcp", 80);
+            MDNS.addService("syndimm", "tcp", 80);  // Custom service for discovery
+            mdnsActive = true;
+            currentMdnsHostname = hostname;
+            mdnsFailCount = 0;
+            DEBUG_PRINTLN("[mDNS] Started: " + hostname + ".local");
+            return true;
+        }
+        
+        mdnsActive = false;
+        mdnsFailCount++;
+        DEBUG_PRINTLN("[mDNS] Failed to start: " + hostname);
+        return false;
+    }
+    
+    // mDNS sağlık kontrolü
+    bool checkMDNSHealth() {
+        if (!mdnsActive) return false;
+        
+        // WiFi bağlantısı yoksa mDNS çalışamaz
+        if (!connectedToWiFi || WiFi.status() != WL_CONNECTED) {
+            return false;
+        }
+        
+        // IP adresi yoksa mDNS çalışamaz
+        if (WiFi.localIP() == IPAddress(0, 0, 0, 0)) {
+            DEBUG_PRINTLN("[mDNS] IP adresi yok - mDNS calismiyor");
+            return false;
+        }
+        
+        // ESP32 mDNS kütüphanesi durumu sorgulama API'si sağlamıyor
+        // Dolayısıyla WiFi sağlıklıysa mDNS'in de sağlıklı olduğunu varsayıyoruz
+        // Periyodik yenileme (saatlik) bu varsayımın riskini azaltır
+        return true;
+    }
     
     // WiFi stack sağlık kontrolü - İNTERNET GEREKTİRMEZ!
     // Sadece WiFi.status() ve temel network stack kontrolü
@@ -219,6 +276,7 @@ private:
                 wifiConnectedSince = millis();
                 lastWiFiRestartTime = millis();
                 lastPingCheckTime = millis();
+                lastMdnsCheck = millis();  // mDNS check timer da sıfırla
                 pingFailCount = 0;
                 
                 DEBUG_PRINTLN("========================================\n");
@@ -297,6 +355,11 @@ public:
         apSSID = "";
         connectedToWiFi = false;
         apModeActive = false;
+        dnsServerActive = false;
+        mdnsActive = false;
+        currentMdnsHostname = "dimm";
+        lastMdnsCheck = 0;
+        mdnsFailCount = 0;
         lastScanTime = 0;
         lastKeepAliveTime = 0;
         lastReconnectAttempt = 0;
@@ -390,6 +453,12 @@ public:
         DEBUG_PRINTLN("Password: None (Open Network)");
         
         WiFi.mode(WIFI_AP);
+        
+        // AP IP ve subnet ayarla (captive portal için gerekli)
+        IPAddress apIP(192, 168, 4, 1);
+        IPAddress subnet(255, 255, 255, 0);
+        WiFi.softAPConfig(apIP, apIP, subnet);  // Gateway = AP IP (captive portal)
+        
         WiFi.softAP(apSSID.c_str()); // No password - open network
         
         // Power Save'i devre dışı bırak
@@ -399,14 +468,16 @@ public:
         DEBUG_PRINT("AP IP address: ");
         DEBUG_PRINTLN(IP);
         
-        // Start mDNS for AP Mode
-        if (MDNS.begin("dimm")) {
-            DEBUG_PRINTLN("[OK] mDNS started: dimm.local");
-            MDNS.addService("http", "tcp", 80);
-        } else {
-            DEBUG_PRINTLN("[ERROR] mDNS failed to start");
-        }
+        // Start DNS Server for Captive Portal
+        // Tüm DNS sorgularını AP IP'sine yönlendir (dimm.local dahil)
+        dnsServer.start(DNS_PORT, "*", IP);
+        dnsServerActive = true;
+        DEBUG_PRINTLN("[OK] DNS Server started (Captive Portal)");
         
+        // Start mDNS for AP Mode (yedek olarak - bazı cihazlarda çalışır)
+        startMDNS("dimm");
+        
+        DEBUG_PRINTLN("[INFO] Access via: http://192.168.4.1 or http://dimm.local");
         DEBUG_PRINTLN("========================\n");
         
         apModeActive = true;
@@ -428,17 +499,98 @@ public:
         return WiFi.softAPgetStationNum();
     }
     
-    // mDNS'i yeniden baslat (uzun sure sonrasi erisim sorunu icin)
-    void refreshMDNS(const String& hostname = "dimm") {
-        MDNS.end();
-        delay(50);
-        if (MDNS.begin(hostname.c_str())) {
-            MDNS.addService("http", "tcp", 80);
-            DEBUG_PRINTLN("[WiFi] mDNS yenilendi: " + hostname + ".local");
-        }
+    // mDNS durumu
+    bool isMDNSActive() {
+        return mdnsActive;
     }
     
-    // Load network settings from preferences
+    // mDNS hostname
+    String getMDNSHostname() {
+        return currentMdnsHostname;
+    }
+    
+    // mDNS'i yeniden başlat (public API)
+    bool refreshMDNS(const String& hostname = "") {
+        String hn = hostname.length() > 0 ? hostname : currentMdnsHostname;
+        if (hn.length() == 0) hn = "dimm";
+        mdnsFailCount = 0;  // Retry sayacını sıfırla (manuel çağrılarda)
+        return startMDNS(hn);
+    }
+    
+    // mDNS'i zorla yeniden başlat (health check sonrası)
+    bool restartMDNS() {
+        DEBUG_PRINTLN("[mDNS] Zorla yeniden baslatiliyor...");
+        mdnsFailCount = 0;  // Retry sayacını sıfırla
+        return startMDNS(currentMdnsHostname.length() > 0 ? currentMdnsHostname : "dimm");
+    }
+    
+    // mDNS'i durdur
+    void stopMDNS() {
+        MDNS.end();
+        mdnsActive = false;
+        currentMdnsHostname = "";  // Hostname'i temizle
+        DEBUG_PRINTLN("[mDNS] Durduruldu");
+    }
+    
+    // mDNS sağlık kontrolü ve otomatik restart (handleWiFi içinden çağrılır)
+    void handleMDNS() {
+        unsigned long now = millis();
+        
+        // AP modunda sadece DNS captive portal kullanılıyor, mDNS yedek
+        // AP modunda mDNS kontrolü yapmaya gerek yok
+        if (apModeActive) {
+            return;
+        }
+        
+        // WiFi bağlı değilse mDNS'i durdur
+        if (!connectedToWiFi || WiFi.status() != WL_CONNECTED) {
+            if (mdnsActive) {
+                DEBUG_PRINTLN("[mDNS] WiFi baglantisi kesildi - mDNS durduruluyor");
+                stopMDNS();
+            }
+            mdnsFailCount = 0;  // Yeni bağlantıda tekrar deneyebilsin
+            return;
+        }
+        
+        // Periyodik kontrol (30 saniyede bir)
+        if (now - lastMdnsCheck < MDNS_CHECK_INTERVAL) return;
+        lastMdnsCheck = now;
+        
+        // mDNS aktif değilse başlat
+        if (!mdnsActive) {
+            if (mdnsFailCount < MDNS_MAX_RETRIES) {
+                // Hangi hostname kullanılacak?
+                String hostname = currentMdnsHostname;
+                if (hostname.length() == 0) {
+                    // Bağlı olduğumuz ağın mDNS ayarını kullan
+                    if (WiFi.SSID() == primaryNetwork.ssid && primaryNetwork.mdns.length() > 0) {
+                        hostname = primaryNetwork.mdns;
+                    } else if (WiFi.SSID() == backupNetwork.ssid && backupNetwork.mdns.length() > 0) {
+                        hostname = backupNetwork.mdns;
+                    } else {
+                        hostname = "dimm";
+                    }
+                }
+                
+                DEBUG_PRINTF("[mDNS] Aktif degil, baslatiliyor: %s (deneme %d/%d)\n", 
+                            hostname.c_str(), mdnsFailCount + 1, MDNS_MAX_RETRIES);
+                startMDNS(hostname);
+            } else if (mdnsFailCount == MDNS_MAX_RETRIES) {
+                // Sadece bir kez log bas
+                DEBUG_PRINTF("[mDNS] %d deneme basarisiz - mDNS devre disi!\n", MDNS_MAX_RETRIES);
+                DEBUG_PRINTLN("[mDNS] IP adresi ile erisim hala mumkun: " + WiFi.localIP().toString());
+                mdnsFailCount++;  // Bir daha log basma
+            }
+            return;
+        }
+        
+        // mDNS sağlık kontrolü
+        if (!checkMDNSHealth()) {
+            DEBUG_PRINTLN("[mDNS] Saglik kontrolu BASARISIZ - yeniden baslatiliyor");
+            restartMDNS();
+        }
+    }
+        // Load network settings from preferences
     void loadNetworkSettings() {
         prefs.begin(PREFS_NAMESPACE, true); // Read-only mode
         
@@ -551,20 +703,15 @@ public:
             // Power Save'i devre dışı bırak - her zaman erişilebilir ol
             disablePowerSave();
             
-            // Start mDNS if configured
-            if (network.mdns.length() > 0) {
-                if (MDNS.begin(network.mdns.c_str())) {
-                    DEBUG_PRINTLN("[OK] mDNS started: " + network.mdns + ".local");
-                    MDNS.addService("http", "tcp", 80);
-                } else {
-                    DEBUG_PRINTLN("[ERROR] mDNS failed to start");
-                }
-            } else {
-                DEBUG_PRINTLN("[INFO] mDNS not configured (using default: dimm.local)");
-                if (MDNS.begin("dimm")) {
-                    DEBUG_PRINTLN("[OK] mDNS started with default: dimm.local");
-                    MDNS.addService("http", "tcp", 80);
-                }
+            // Start mDNS with configured or default hostname
+            String mdnsHostname = network.mdns.length() > 0 ? network.mdns : "dimm";
+            startMDNS(mdnsHostname);
+            
+            // DNS Server'ı kapat (AP mode captive portal için kullanılıyordu)
+            if (dnsServerActive) {
+                dnsServer.stop();
+                dnsServerActive = false;
+                DEBUG_PRINTLN("[OK] DNS Server stopped (switching to STA mode)");
             }
             
             connectedToWiFi = true;
@@ -574,6 +721,7 @@ public:
             wifiConnectedSince = millis();
             lastWiFiRestartTime = millis();
             lastPingCheckTime = millis();
+            lastMdnsCheck = millis();  // mDNS check timer da sıfırla
             pingFailCount = 0;
             
             return true;
@@ -641,6 +789,14 @@ public:
     // Check WiFi status and handle reconnection
     void handleWiFi() {
         unsigned long currentTime = millis();
+        
+        // DNS Server işleme (AP modunda captive portal için)
+        if (dnsServerActive && apModeActive) {
+            dnsServer.processNextRequest();
+        }
+        
+        // mDNS sağlık kontrolü ve otomatik restart
+        handleMDNS();
         
         // ========================================
         // DURUM 1: WiFi'ye bağlıyken
@@ -782,6 +938,10 @@ public:
                     if (connectToWiFi(network, 15000)) {
                         DEBUG_PRINTLN("[OK] WiFi baglandi - AP Mode kapatiliyor");
                         WiFi.softAPdisconnect(true);
+                        if (dnsServerActive) {
+                            dnsServer.stop();
+                            dnsServerActive = false;
+                        }
                         apModeActive = false;
                         reconnectFailCount = 0;
                         apScanCount = 0;
@@ -820,6 +980,10 @@ public:
         // Eğer AP mode kapatıldıysa ve şu an aktifse, kapat
         if (!enabled && apModeActive && connectedToWiFi) {
             WiFi.softAPdisconnect(true);
+            if (dnsServerActive) {
+                dnsServer.stop();
+                dnsServerActive = false;
+            }
             apModeActive = false;
             DEBUG_PRINTLN("AP Mode deactivated");
         }
@@ -916,6 +1080,11 @@ public:
             json += "\"connectedTo\":\"none\",";
             json += "\"mdns\":\"\",";
         }
+        
+        // mDNS durumu
+        json += "\"mdnsActive\":" + String(mdnsActive ? "true" : "false") + ",";
+        json += "\"mdnsHostname\":\"" + currentMdnsHostname + "\",";
+        json += "\"dnsServerActive\":" + String(dnsServerActive ? "true" : "false") + ",";
         
         // Configuration status
         json += "\"primaryConfigured\":" + String(primaryNetwork.enabled ? "true" : "false") + ",";

@@ -34,6 +34,7 @@
 #define SK_ENCODER_H
 
 #include <Arduino.h>
+#include <LittleFS.h>
 #include "SK_config.h"
 
 class SKEncoder {
@@ -58,9 +59,9 @@ private:
   volatile int8_t encoderPosition;  // Ara pozisyon sayacı
   static const uint8_t STEPS_PER_DETENT = 4;  // EC11: 4 step = 1 tık
   
-  // Debug sayaçları
-  volatile int16_t leftCount;   // Sol tık sayısı
-  volatile int16_t rightCount;  // Sağ tık sayısı
+  // Debug sayaçları (int8_t for atomic read/write on RISC-V)
+  volatile int8_t leftCount;   // Sol tık sayısı (max 127)
+  volatile int8_t rightCount;  // Sağ tık sayısı (max 127)
   volatile bool debugPending;   // Yeni debug çıktısı bekliyor
   
   // Button state variables
@@ -68,10 +69,11 @@ private:
   unsigned long lastButtonTime;
   unsigned long buttonPressTime;
   bool buttonWasPressed;
+  bool buttonIsHeld;                            // Buton şu an basılı mı
+  bool modeChangeTriggered;                     // Basılı tutarken çevirme yapıldı mı
   const unsigned long buttonDebounceDelay = 50; // 50ms button debounce
-  const unsigned long longPressTime = 3000;     // 3 seconds = mode selection
-  const unsigned long rebootPressTime = 10000;  // 10 seconds = reboot
-  const unsigned long factoryResetTime = 20000; // 20 seconds = factory reset
+  const unsigned long rebootPressTime = 5000;   // 5 seconds = reboot
+  const unsigned long factoryResetTime = 10000; // 10 seconds = factory reset
   
   // Long press tracking
   bool rebootWarningShown;
@@ -150,7 +152,7 @@ public:
     : clkPin(ENCODER_CLK), dtPin(ENCODER_DT), swPin(ENCODER_SW), 
       lastButtonTime(0), buttonPressTime(0),
       bufferWriteIndex(0), bufferReadIndex(0),
-      lastDirection(0), buttonWasPressed(false),
+      lastDirection(0), buttonWasPressed(false), buttonIsHeld(false), modeChangeTriggered(false),
       encoderState(0), encoderPosition(0),
       leftCount(0), rightCount(0), debugPending(false),
       rebootWarningShown(false), factoryWarningShown(false) {
@@ -162,7 +164,7 @@ public:
     : clkPin(clk), dtPin(dt), swPin(sw), 
       lastButtonTime(0), buttonPressTime(0),
       bufferWriteIndex(0), bufferReadIndex(0),
-      lastDirection(0), buttonWasPressed(false),
+      lastDirection(0), buttonWasPressed(false), buttonIsHeld(false), modeChangeTriggered(false),
       encoderState(0), encoderPosition(0),
       leftCount(0), rightCount(0), debugPending(false),
       rebootWarningShown(false), factoryWarningShown(false) {
@@ -203,23 +205,31 @@ public:
     bool currentButtonState = digitalRead(swPin);
     unsigned long currentTime = millis();
     
+    // Update buttonIsHeld state for mode change detection
+    buttonIsHeld = (currentButtonState == LOW && buttonWasPressed);
+    
     // Button pressed - track duration while held
     if (currentButtonState == LOW && buttonWasPressed) {
       unsigned long holdDuration = currentTime - buttonPressTime;
       
-      // 20 saniye = Factory Reset (en yüksek öncelik)
-      if (holdDuration >= factoryResetTime && !factoryWarningShown) {
+      // Eğer encoder döndürüldüyse (mod değişikliği), reboot/factory reset iptal
+      if (modeChangeTriggered) {
+        rebootWarningShown = false;
+        factoryWarningShown = false;
+      }
+      // 10 saniye = Factory Reset (en yüksek öncelik)
+      else if (holdDuration >= factoryResetTime && !factoryWarningShown) {
         factoryWarningShown = true;
         Serial.println("\n========================================");
-        Serial.println("!!! FACTORY RESET AKTIF !!!");
+        Serial.println("!!! FACTORY RESET HAZIR !!!");
         Serial.println("Butonu birakin - Cihaz sifirlanacak...");
         Serial.println("========================================\n");
       }
-      // 10 saniye = Reboot uyarısı
+      // 5 saniye = Reboot uyarısı
       else if (holdDuration >= rebootPressTime && !rebootWarningShown) {
         rebootWarningShown = true;
-        Serial.println("\n[ENCODER] 10sn - REBOOT icin birakin");
-        Serial.println("[ENCODER] 20sn'ye kadar tutun = FACTORY RESET");
+        Serial.println("\n[ENCODER] 5sn - REBOOT icin birakin");
+        Serial.println("[ENCODER] 10sn'ye kadar tutun = FACTORY RESET");
       }
     }
     
@@ -227,9 +237,11 @@ public:
       if (currentTime - lastButtonTime > buttonDebounceDelay) {
         
         if (currentButtonState == LOW) {
-          // Button pressed
+          // Button pressed down
           buttonPressTime = currentTime;
           buttonWasPressed = true;
+          buttonIsHeld = true;
+          modeChangeTriggered = false;  // Reset mode change flag
           rebootWarningShown = false;
           factoryWarningShown = false;
           lastButtonTime = currentTime;
@@ -237,28 +249,30 @@ public:
         } else if (currentButtonState == HIGH && buttonWasPressed) {
           unsigned long pressDuration = currentTime - buttonPressTime;
           
-          // 20+ saniye = Factory Reset
-          if (pressDuration >= factoryResetTime) {
+          // Mod değişikliği yapıldıysa, reboot/factory reset iptal
+          if (modeChangeTriggered) {
+            addEvent('M');  // Mode confirmed
+          }
+          // 10+ saniye = Factory Reset (mod değişikliği yoksa)
+          else if (pressDuration >= factoryResetTime) {
             Serial.println("[ENCODER] FACTORY RESET baslatiliyor...");
             performEncoderFactoryReset();
             // Cihaz resetlenecek, buraya dönmeyecek
           }
-          // 10-20 saniye = Reboot
+          // 5-10 saniye = Reboot (mod değişikliği yoksa)
           else if (pressDuration >= rebootPressTime) {
             Serial.println("[ENCODER] REBOOT baslatiliyor...");
             delay(100);
             ESP.restart();
           }
-          // 3-10 saniye = Long press (P)
-          else if (pressDuration >= longPressTime) {
-            addEvent('P');
-          }
-          // < 3 saniye = Normal press (B)
+          // Normal kısa basış = Button press (B)
           else {
             addEvent('B');
           }
           
           buttonWasPressed = false;
+          buttonIsHeld = false;
+          modeChangeTriggered = false;
           rebootWarningShown = false;
           factoryWarningShown = false;
           lastButtonTime = currentTime;
@@ -269,6 +283,16 @@ public:
     lastButtonState = currentButtonState;
     
     return (bufferReadIndex != bufferWriteIndex);
+  }
+  
+  // Check if button is currently held (for mode change detection)
+  bool isButtonHeld() const {
+    return buttonIsHeld;
+  }
+  
+  // Mark that mode change was triggered while button held
+  void setModeChangeTriggered() {
+    modeChangeTriggered = true;
   }
   
   // Read next event
@@ -361,7 +385,7 @@ public:
     }
     
     // 5. Mode ayarları
-    if (prefs.begin("mode", false)) {
+    if (prefs.begin("mode_mgr", false)) {
       prefs.clear();
       prefs.end();
       Serial.println("[RESET] Mode settings cleared");
@@ -379,6 +403,25 @@ public:
       prefs.clear();
       prefs.end();
       Serial.println("[RESET] OTA settings cleared");
+    }
+    
+    // 8. Dil ayarları
+    if (prefs.begin("lang", false)) {
+      prefs.clear();
+      prefs.end();
+      Serial.println("[RESET] Language settings cleared");
+    }
+    
+    // 9. LittleFS - Safe Mode API config dosyaları
+    if (LittleFS.begin(true)) {
+      for (int i = 0; i < 5; i++) {
+        String path = "/safe/api_" + String(i) + ".json";
+        if (LittleFS.exists(path)) {
+          LittleFS.remove(path);
+          Serial.printf("[RESET] Removed: %s\n", path.c_str());
+        }
+      }
+      Serial.println("[RESET] LittleFS API configs cleared");
     }
     
     Serial.println("==========================================");

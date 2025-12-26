@@ -335,8 +335,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .mode-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 25px 15px; background: var(--bg-card); border: 2px solid var(--border-color); border-radius: 12px; cursor: pointer; transition: var(--transition-normal); color: var(--text-primary); position: relative; }
 .mode-btn:hover { border-color: var(--border-light); background: var(--hover-bg); transform: translateY(-2px); }
 .mode-btn.active { background: var(--hover-bg); border-color: var(--text-primary); }
-.mode-btn.preview { background: rgba(255, 200, 0, 0.25); border-color: #ffc800; box-shadow: 0 0 25px rgba(255, 200, 0, 0.6); animation: preview-pulse 1s ease-in-out infinite; }
-@keyframes preview-pulse { 0%, 100% { box-shadow: 0 0 25px rgba(255, 200, 0, 0.6); background: rgba(255, 200, 0, 0.25); } 50% { box-shadow: 0 0 40px rgba(255, 200, 0, 0.9), 0 0 50px rgba(255, 200, 0, 0.5); background: rgba(255, 200, 0, 0.35); } }
 .mode-btn-text { font-size: 1.1em; font-weight: 600; letter-spacing: 0.5px; }
 
 /* Info Tooltip Styles - Test Variants */
@@ -553,24 +551,31 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .btn-save { background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%); color: #0a0a0f; box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15); }
 .btn-save:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255, 255, 255, 0.25); }
 .btn-save:active { transform: translateY(0); }
-.btn-teach { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3); }
-.btn-teach:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4); }
+.btn-teach { background: linear-gradient(135deg, #1a1a1f 0%, #0a0a0f 100%); color: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.1); }
+.btn-teach:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5); border-color: rgba(255, 255, 255, 0.2); }
 .btn-teach:active { transform: translateY(0); }
 .btn-test { background: var(--input-bg-focus); color: var(--text-secondary); border: 1px solid var(--border-light); }
 .btn-test:hover { background: var(--hover-bg); color: var(--text-primary); border-color: #10b981; }
 .btn-test:active { transform: scale(0.98); }
 
 /* Teaching Mode Overlay */
-.teaching-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.9); display: flex; align-items: center; justify-content: center; border-radius: var(--radius-lg); z-index: 100; animation: fadeIn 0.3s ease; }
+.teaching-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.95); display: flex; align-items: center; justify-content: center; border-radius: var(--radius-lg); z-index: 100; animation: fadeIn 0.3s ease; }
 .teaching-content { text-align: center; padding: 30px; }
-.teaching-icon { margin-bottom: 15px; animation: pulse 1.5s infinite; color: #f59e0b; }
+.teaching-icon { margin-bottom: 15px; animation: pulse 1.5s infinite; color: #fff; }
 .teaching-icon svg { width: 48px; height: 48px; }
 @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } }
-.teaching-title { font-size: 1.3em; font-weight: 700; color: #f59e0b; margin-bottom: 15px; }
+.teaching-title { font-size: 1.3em; font-weight: 700; color: #fff; margin-bottom: 15px; }
 .teaching-pattern { font-size: 1.6em; font-weight: 700; color: #10b981; font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; padding: 15px 25px; background: rgba(16, 185, 129, 0.15); border: 2px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md); margin-bottom: 15px; min-width: 150px; min-height: 30px; display: inline-block; }
 .teaching-hint { font-size: 0.9em; color: var(--text-muted); margin-bottom: 15px; }
-.teaching-timer { font-size: 2em; font-weight: 700; color: #f59e0b; margin-bottom: 20px; }
-.btn-cancel-teach { padding: 12px 30px; background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: var(--radius-md); font-size: 0.9em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); }
+.teaching-timer { font-size: 2em; font-weight: 700; color: #fff; margin-bottom: 20px; }
+.teaching-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.btn-save-pattern { padding: 12px 24px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; border-radius: var(--radius-md); font-size: 0.9em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); }
+.btn-save-pattern:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
+.btn-save-pattern:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-save-with-button { padding: 12px 24px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; border: none; border-radius: var(--radius-md); font-size: 0.9em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); }
+.btn-save-with-button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); }
+.btn-save-with-button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-cancel-teach { padding: 12px 24px; background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: var(--radius-md); font-size: 0.9em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); }
 .btn-cancel-teach:hover { background: rgba(239, 68, 68, 0.3); border-color: #ef4444; }
 
 /* Quick Safe Tab Content - Relative for overlay */

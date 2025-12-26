@@ -760,11 +760,27 @@ void setDimmerRatio(int ratio) {
 }
 
 // Dimmer Loop (call in main loop)
+// Status update failure counter for auto-disconnect on unreachable device
+static uint8_t dimmerStatusFailCount = 0;
+static const uint8_t MAX_STATUS_FAILURES = 5;
+
 void dimmerLoop() {
     // Auto-update status every 2 seconds
     if (dimmerDevice.isConnected && (millis() - lastStatusUpdate > DIMMER_STATUS_UPDATE_INTERVAL)) {
-        updateDimmerStatus();
+        bool success = updateDimmerStatus();
         lastStatusUpdate = millis();
+        
+        // Track consecutive failures and auto-disconnect if device unreachable
+        if (!success) {
+            dimmerStatusFailCount++;
+            if (dimmerStatusFailCount >= MAX_STATUS_FAILURES) {
+                DEBUG_PRINTLN("[DIMMER] Device unreachable - auto disconnecting");
+                disconnectDimmer();
+                dimmerStatusFailCount = 0;
+            }
+        } else {
+            dimmerStatusFailCount = 0;  // Reset on success
+        }
     }
 }
 

@@ -54,14 +54,14 @@ Tık aralığı: 1-50
 
 ```
 SynDimm/
-├── safe_lock.h              # Ana kütüphane (buffer, şifre kontrolü)
-├── safe_lock_eeprom.h       # EEPROM yönetimi
-├── safe_lock_api.h          # API tetikleme modülü
-├── SynDimm.ino              # Ana program
-├── modes.h                  # Mod yönetimi (Safe Lock entegrasyonu)
-├── webui.h                  # Web arayüzü HTML
-├── webstyle.h               # Web arayüzü CSS
-└── webscript.h              # Web arayüzü JavaScript
+├── SK_mode_safe.h          # Ana kütüphane (buffer, şifre kontrolü, Preferences + LittleFS)
+├── SK_mode_safe_api.h      # API tetikleme modülü
+├── SynDimm.ino             # Ana program
+├── SK_mode_manager.h       # Mod yönetimi (Safe Lock entegrasyonu)
+├── SK_webserver.h          # Web arayüzü endpoint'leri
+├── SK_html.h               # Web arayüzü HTML
+├── SK_css.h                # Web arayüzü CSS
+└── SK_js.h                 # Web arayüzü JavaScript
 ```
 
 ## 🚀 Kurulum ve Kullanım
@@ -69,11 +69,9 @@ SynDimm/
 ### 1. İlk Kurulum
 ```cpp
 // SynDimm.ino içinde otomatik başlatılır
-safeLock.begin();
-safeLockEEPROM.begin();
-safeLockAPI.setSafeLock(&safeLock);
-safeLockEEPROM.loadToSafeLock(safeLock);
-modes.setSafeLock(&safeLock);
+safeLock.begin();                         // Preferences (NVS) + LittleFS başlat
+safeApiHandler.setSafeLock(&safeLock);    // API handler bağla
+webServer.setSafeLock(&safeLock);         // Web server bağla
 ```
 
 ### 2. Web Arayüzünden Şifre Oluşturma
@@ -172,18 +170,26 @@ GET /api/safe/password/toggle?index=0&enabled=true
 Response: {"success": true}
 ```
 
-## 🔧 EEPROM Yapısı
+## 🔧 Depolama Yapısı (Preferences + LittleFS)
 
+### NVS (Preferences) - Küçük Veriler
 ```cpp
-struct SafeLockConfig {
-  uint16_t magicNumber;                // 0xSAFE
-  Password passwords[5];                // 5 şifre
-  ApiConfig apiConfigs[5];              // 5 API config
-  uint8_t checksum;                     // XOR checksum
-}
+Namespace: "safelock"
+Keys:
+  pwd_0..4      : String  // Şifre pattern'leri ("L5-R3-B")
+  active_0..4   : Bool    // Şifre aktif mi?
+  hasapi_0..4   : Bool    // API config var mı?
+```
 
-EEPROM Başlangıç: 1024
-Toplam Boyut: ~2KB
+### LittleFS - Büyük Veriler (Sınırsız)
+```cpp
+Dizin: /safe/
+Dosyalar:
+  api_0.json    // Password 1 API config
+  api_1.json    // Password 2 API config
+  api_2.json    // Password 3 API config
+  api_3.json    // Password 4 API config
+  api_4.json    // Password 5 API config
 ```
 
 ## 🎨 Web Arayüzü Özellikleri
@@ -214,8 +220,9 @@ Toplam Boyut: ~2KB
 
 ### Serial Monitor Çıktıları
 ```
-[SafeLock] EEPROM yükleme başarılı
-[SafeLock] Şifre 0 yüklendi: L5-R3-L10-B (Aktif: Evet)
+[SafeLock] LittleFS hazir
+[SafeLock] Preferences yukleniyor...
+[SafeLock] Sifre 0 yuklendi: L5-R3-L10-B (Aktif: Evet)
 L5 Buffer (3/10): L5-R3-L10
 R3 Buffer (4/10): L5-R3-L10-R3
 [SafeLock] Password matched: #0
@@ -232,18 +239,19 @@ GET /api/safe/debug
 
 ## 📊 Performans
 
-- **Buffer Boyutu**: 10 hareket
+- **Buffer Boyutu**: 8 hareket (sliding window)
 - **Şifre Kontrolü**: Her harekette (real-time)
-- **API Timeout**: 2 saniye
-- **API Retry**: 3 deneme
-- **EEPROM Yazma**: Sadece konfigürasyon değişikliğinde
-- **RAM Kullanımı**: ~2KB (5 şifre + API config)
+- **API Timeout**: 1 saniye (watchdog güvenliği)
+- **API Retry**: 1 deneme
+- **Preferences Yazma**: Sadece konfigürasyon değişikliğinde
+- **LittleFS Yazma**: API config değişikliğinde
+- **RAM Kullanımı**: ~1KB (şifre pattern'leri NVS'te)
 
 ## ⚠️ Güvenlik Notları
 
-1. **Şifre Değiştirme**: Mevcut şifreyi değiştirmek için eski şifre gereklidir
-2. **EEPROM Encryption**: Şu anda plaintext, isterseniz XOR veya AES eklenebilir
-3. **Web Arayüzü**: WiFi bağlıysa erişilebilir, AP modunda şifresiz
+1. **Şifre Değiştirme**: Web arayüzünden kolayca değiştirilebilir
+2. **NVS Depolama**: Şifre pattern'leri plaintext, API config'ler LittleFS'te JSON
+3. **Web Arayüzü**: Sadece lokal AP üzerinden erişilebilir (internet erişimi YOK)
 4. **API Keys**: HTTPS kullanmanız önerilir
 
 ## 🎯 Örnek Kullanım Senaryoları
@@ -285,7 +293,7 @@ Body: {"value1": "Safe unlocked", "value2": "2025-10-25"}
 ## 📝 Geliştirme Notları
 
 ### Gelecek Özellikler (Opsiyonel)
-- [ ] EEPROM şifreleme (AES-128)
+- [ ] NVS şifreleme (AES-128)
 - [ ] Master şifre sistemi
 - [ ] Şifre geçmişi logları
 - [ ] Çoklu API tetikleme (1 şifre → N API)

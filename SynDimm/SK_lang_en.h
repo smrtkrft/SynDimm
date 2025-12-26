@@ -124,7 +124,12 @@ const char LANG_EN_JSON[] PROGMEM = R"rawliteral({
     "moving_down": "Moving Down",
     "open": "Open",
     "closed": "Closed",
-    "no_device_connected": "No device connected"
+    "no_device_connected": "No device connected",
+    "remove": "Remove",
+    "device_removed": "Shutter device removed",
+    "remove_failed": "Failed to remove device",
+    "shelly_25": "Shelly 2.5",
+    "shelly_plus_2pm": "Shelly Plus 2PM"
   },
   
   "safe": {
@@ -153,7 +158,7 @@ const char LANG_EN_JSON[] PROGMEM = R"rawliteral({
     "test_api": "Test API",
     "teach_password": "Teach",
     "teaching_title": "Teaching Mode",
-    "teaching_hint": "Rotate encoder... Press button to save",
+    "teaching_hint": "Rotate encoder to create pattern. Press button to add B.",
     "cancel_teaching": "Cancel",
     "teaching_starting": "Starting teaching mode...",
     "teaching_started": "Teaching mode active! Rotate the encoder.",
@@ -161,6 +166,7 @@ const char LANG_EN_JSON[] PROGMEM = R"rawliteral({
     "teaching_timeout": "Teaching timeout",
     "teaching_complete": "Password learned",
     "teaching_failed": "Could not start teaching",
+    "password_saved": "Password saved",
     "password_empty": "Password cannot be empty!",
     "invalid_format": "Invalid password format! Example: L3-R12-L11-R3-B",
     "api_empty": "API URL cannot be empty!",
@@ -349,6 +355,7 @@ const char LANG_EN_JSON[] PROGMEM = R"rawliteral({
   
   "notifications": {
     "connection_error": "Connection error",
+    "device_offline": "Device offline - retrying...",
     "scanning": "Scanning network...",
     "scan_started": "Scan started",
     "scan_stopped": "Scan stopped",

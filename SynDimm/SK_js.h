@@ -7,7 +7,55 @@
 
 const char SK_JS[] PROGMEM = R"rawliteral(
 // === HELPER FUNCTIONS ===
-const api = (url, opts = {}) => fetch(url, { headers: {'Content-Type': 'application/json'}, ...opts }).then(r => r.ok ? r.json() : Promise.reject('HTTP ' + r.status));
+// API call with retry logic and exponential backoff
+let connectionFailCount = 0;
+const MAX_FAIL_BEFORE_OFFLINE = 3;
+let isDeviceOnline = true;
+
+async function apiWithRetry(url, opts = {}, retries = 2) {
+    let delay = 500;
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const r = await fetch(url, { headers: {'Content-Type': 'application/json'}, ...opts });
+            if (r.ok) {
+                connectionFailCount = 0;
+                if (!isDeviceOnline) { isDeviceOnline = true; updateConnectionIndicator(); }
+                return r.json();
+            }
+            if (r.status >= 500 && i < retries) {
+                await new Promise(res => setTimeout(res, delay));
+                delay *= 2;
+                continue;
+            }
+            return Promise.reject('HTTP ' + r.status);
+        } catch (e) {
+            if (i < retries) {
+                await new Promise(res => setTimeout(res, delay));
+                delay *= 2;
+            } else {
+                connectionFailCount++;
+                if (connectionFailCount >= MAX_FAIL_BEFORE_OFFLINE && isDeviceOnline) {
+                    isDeviceOnline = false;
+                    updateConnectionIndicator();
+                }
+                throw e;
+            }
+        }
+    }
+}
+
+function updateConnectionIndicator() {
+    const indicator = $('connection-indicator');
+    if (indicator) {
+        indicator.className = isDeviceOnline ? 'connection-online' : 'connection-offline';
+        indicator.title = isDeviceOnline ? 'Online' : 'Offline - Trying to reconnect...';
+    }
+    if (!isDeviceOnline) {
+        showNotification(t('notifications.device_offline') || 'Device offline - retrying...', 'warning');
+    }
+}
+
+const api = (url, opts = {}) => apiWithRetry(url, opts, 2);
 const post = (url, data) => api(url, { method: 'POST', body: JSON.stringify(data) });
 const $ = id => document.getElementById(id);
 const setText = (id, txt) => { const el = $(id); if(el) el.textContent = txt; };
@@ -119,7 +167,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // Load language first, then other data
     initLanguage().then(() => {
         loadSavedSettings(); loadConnectionStatus(); loadOTASettings();
-        loadDimmerStatus(); loadShutterStatus(); loadSavedDevices(); loadCurrentMode(); updateQuickSettings();
+        loadDimmerStatus(); loadShutterStatus(); loadSavedDevices(); loadSavedShutterDevices(); loadCurrentMode(); updateQuickSettings();
         loadSafePasswords();
         // Initialize mode config panel based on current mode
         api('/getCurrentMode').then(d => {
@@ -149,27 +197,16 @@ function updateQuickSettings() {
 }
 
 // === MODE MANAGEMENT ===
-let lastSelectionModeState = false, lastActiveMode = null;
 function loadCurrentMode() {
     api('/getCurrentMode').then(d => {
-        const active = d.activeModeStr || d.mode, preview = d.previewModeStr, inSelection = d.inSelectionMode || false;
+        const active = d.activeModeStr || d.mode;
         const modes = ['dimmer','shutter','safe','alarm'];
         modes.forEach(m => {
             const badge = $(m + '-badge'), btn = $('mode-btn-' + m);
             const isActive = active === m.toUpperCase();
             if(badge) { badge.textContent = isActive ? t('modes.active') : t('modes.passive'); badge.className = 'badge badge-' + (isActive ? 'connected' : 'not-configured'); }
-            if(btn) { btn.classList.remove('active','preview'); }
+            if(btn) { btn.classList.remove('active'); if(isActive) btn.classList.add('active'); }
         });
-        lastActiveMode = active;
-        const activeBtn = $('mode-btn-' + active.toLowerCase());
-        if(inSelection && preview) {
-            const previewBtn = $('mode-btn-' + preview.toLowerCase());
-            if(previewBtn) previewBtn.classList.add('preview');
-            if(!lastSelectionModeState) { clearInterval(window.modePollingIntervalId); window.modePollingIntervalId = setInterval(loadCurrentMode, 500); lastSelectionModeState = true; }
-        } else {
-            if(activeBtn) activeBtn.classList.add('active');
-            if(lastSelectionModeState) { clearInterval(window.modePollingIntervalId); window.modePollingIntervalId = setInterval(loadCurrentMode, 3000); lastSelectionModeState = false; }
-        }
     }).catch(() => {
         ['dimmer','shutter','safe','alarm'].forEach(m => {
             const badge = $(m + '-badge');
@@ -225,9 +262,8 @@ function updateQuickDimmerPanel() {
         // Update connection status
         setText('dimmer-connection-status', connected ? t('dimmer.connected') : t('dimmer.not_connected'));
         
-        // Update IP display
-        const deviceTypes = { 0: t('dimmer.unknown'), 1: t('dimmer.shelly_dimmer'), 2: t('dimmer.shelly_dali'), 3: t('dimmer.tasmota') };
-        const deviceTypeName = deviceTypes[d.deviceType] || t('dimmer.unknown');
+        // Update IP display with device type (displayName from backend)
+        const deviceTypeName = d.deviceType || t('dimmer.unknown');
         const ipText = connected ? (d.ip || '-') + ' • ' + deviceTypeName : t('dimmer.no_device_connected');
         setText('dimmer-ip-display', ipText);
         
@@ -543,6 +579,22 @@ function startTeachPassword(idx) {
         .catch(e => showNotification(t('notifications.connection_error') + ': ' + e, 'error'));
 }
 
+function completeTeachPassword(idx) {
+    post('/completeSafeTeaching', {})
+        .then(r => {
+            if(r.success) {
+                const pwdInput = $('quick-safe-pwd-' + idx);
+                if(pwdInput) pwdInput.value = r.pattern || '';
+                hideTeachingOverlay(idx);
+                stopTeachingPolling();
+                showNotification(t('safe.password_saved') + ': ' + (r.pattern || ''), 'success');
+            } else {
+                showNotification(t('safe.save_failed') + ': ' + (r.message || ''), 'error');
+            }
+        })
+        .catch(e => showNotification(t('notifications.connection_error') + ': ' + e, 'error'));
+}
+
 function cancelTeachPassword(idx) {
     post('/cancelSafeTeaching', {})
         .then(() => {
@@ -763,7 +815,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // === DIMMER ===
-let selectedRatio = 3;
 function loadDimmerStatus() {
     api('/getDimmerStatus').then(d => updateDimmerUI(d)).catch(() => {});
 }
@@ -834,13 +885,13 @@ function adjustCalibration(delta) {
         .catch(() => { showNotification(t('notifications.connection_error'), 'error'); el.textContent = cur; });
 }
 function connectDimmerManual() {
-    const ip = $('dimmer-ip-input').value;
+    const ip = $('quick-dimmer-ip-input').value;
     if(!ip) { showNotification(t('dimmer.enter_ip'), 'error'); return; }
     if(!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) { showNotification(t('dimmer.invalid_ip'), 'error'); return; }
     connectDimmer(ip);
 }
 function connectDimmer(ip) {
-    ip = ip || $('dimmer-ip-input').value;
+    ip = ip || $('quick-dimmer-ip-input').value;
     showNotification(t('dimmer.connecting'), 'info');
     post('/connectDimmer', { ip }).then(d => {
         if(d.success) { showNotification(t('dimmer.connected'), 'success'); loadDimmerStatus(); loadSavedDevices(); }
@@ -850,25 +901,6 @@ function connectDimmer(ip) {
 function disconnectDimmer() {
     if(!confirm(t('notifications.confirm_disconnect'))) return;
     post('/disconnectDimmer', {}).then(d => { if(d.success) { showNotification(t('dimmer.disconnected'), 'success'); loadDimmerStatus(); } }).catch(() => {});
-}
-function selectRatio(r) { selectedRatio = r; updateRatioButtons(r); setText('dimmer-ratio-value', r); }
-function updateRatioButtons(active) {
-    document.querySelectorAll('.ratio-btn, .ratio-btn-compact').forEach(b => {
-        b.classList.toggle('active', parseInt(b.getAttribute('data-ratio')) === active);
-    });
-}
-function saveDimmerRatio() {
-    showNotification(t('dimmer.calibration_saved').replace('!', '...'), 'info');
-    post('/setDimmerRatio', { ratio: selectedRatio })
-        .then(d => showNotification(d.success ? t('dimmer.calibration_saved') : t('dimmer.calibration_failed'), d.success ? 'success' : 'error'))
-        .catch(e => showNotification(t('notifications.connection_error') + ': ' + e, 'error'));
-}
-function saveDimmerSettings() {
-    const v = parseInt($('calibration-slider').value);
-    showNotification(t('dimmer.calibration_saved').replace('!', '...'), 'info');
-    post('/setDimmerRatio', { ratio: v })
-        .then(d => showNotification(d.success ? t('dimmer.calibration_saved') : t('dimmer.calibration_failed'), d.success ? 'success' : 'error'))
-        .catch(e => showNotification(t('notifications.connection_error') + ': ' + e, 'error'));
 }
 function loadSavedDevices() {
     api('/getSavedDevices').then(d => displaySavedDevices(d.devices || [])).catch(() => {});
@@ -887,7 +919,7 @@ function displayDiscoveredDevices(devs) {
         devs.map(d => `<div class="saved-device-item discovered"><div class="saved-device-info"><div class="saved-device-ip">${d.ip}</div><div class="saved-device-type">${d.displayName || cats[d.category] || t('dimmer.unknown')}</div></div><div class="saved-device-actions"><button class="btn-device-connect" onclick="connectToDiscoveredDevice('${d.ip}', ${d.category})">${t('common.connect')}</button></div></div>`).join('');
 }
 function connectToDiscoveredDevice(ip, category) {
-    if(category === 2) { $('shutter-ip-input').value = ip; connectShutter(ip); }
+    if(category === 2) { $('quick-shutter-ip-input').value = ip; connectShutter(ip); }
     else { $('quick-dimmer-ip-input').value = ip; connectDimmerFromQuick(); }
 }
 function displaySavedDevices(devs) {
@@ -935,16 +967,16 @@ function stopNetworkScan() {
 
 // === SHUTTER ===
 function connectShutterManual() {
-    const ip = $('shutter-ip-input').value;
+    const ip = $('quick-shutter-ip-input').value;
     if(!ip) { showNotification(t('dimmer.enter_ip'), 'error'); return; }
     if(!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) { showNotification(t('dimmer.invalid_ip'), 'error'); return; }
     connectShutter(ip);
 }
 function connectShutter(ip) {
-    ip = ip || $('shutter-ip-input').value;
+    ip = ip || $('quick-shutter-ip-input').value;
     showNotification(t('shutter.connecting'), 'info');
     post('/connectShutter', { ip }).then(d => {
-        if(d.success) { showNotification(t('shutter.shutter_connected'), 'success'); loadShutterStatus(); }
+        if(d.success) { showNotification(t('shutter.shutter_connected'), 'success'); loadShutterStatus(); loadSavedShutterDevices(); }
         else showNotification(t('shutter.connection_failed') + ': ' + (d.message || ''), 'error');
     }).catch(e => showNotification(t('notifications.connection_error') + ': ' + e, 'error'));
 }
@@ -1040,6 +1072,7 @@ function pollShutterScanProgress() {
                 clearInterval(shutterScanProgressInterval); shutterScanProgressInterval = null;
                 setDisplay('btn-stop-shutter-scan', false);
                 showNotification(d.shutterCount > 0 ? t('notifications.scan_complete', {count: d.shutterCount}) : t('notifications.scan_complete_none'), d.shutterCount > 0 ? 'success' : 'info');
+                loadSavedShutterDevices();
             }
         }).catch(() => { clearInterval(shutterScanProgressInterval); shutterScanProgressInterval = null; setDisplay('btn-stop-shutter-scan', false); });
     }, 1000);
@@ -1047,8 +1080,26 @@ function pollShutterScanProgress() {
 function stopShutterNetworkScan() {
     if(!confirm(t('notifications.confirm_stop_scan'))) return;
     post('/stopScan', {}).then(d => {
-        if(d.success) { showNotification(t('notifications.scan_stopped'), 'info'); if(shutterScanProgressInterval) { clearInterval(shutterScanProgressInterval); shutterScanProgressInterval = null; } setDisplay('btn-stop-shutter-scan', false); }
+        if(d.success) { showNotification(t('notifications.scan_stopped'), 'info'); if(shutterScanProgressInterval) { clearInterval(shutterScanProgressInterval); shutterScanProgressInterval = null; } setDisplay('btn-stop-shutter-scan', false); loadSavedShutterDevices(); }
     }).catch(() => {});
+}
+
+// === SHUTTER SAVED DEVICES ===
+function loadSavedShutterDevices() {
+    api('/getSavedShutterDevices').then(d => displaySavedShutterDevices(d.devices || [])).catch(() => {});
+}
+function displaySavedShutterDevices(devs) {
+    const c = $('shutter-saved-devices-list');
+    if(!c) return;
+    if(!devs.length) { c.innerHTML = '<div class="saved-device-empty">' + t('shutter.no_saved_devices') + '</div>'; return; }
+    const types = { 0: t('dimmer.unknown'), 1: t('shutter.shelly_25'), 2: t('shutter.shelly_plus_2pm') };
+    c.innerHTML = devs.map(d => `<div class="saved-device-item"><div class="saved-device-info"><div class="saved-device-ip">${d.ip}</div><div class="saved-device-type">${types[d.type] || t('dimmer.unknown')}</div></div><div class="saved-device-actions"><button class="btn-device-connect" onclick="connectToSavedShutterDevice('${d.ip}')">${t('common.connect')}</button><button class="btn-device-remove" onclick="removeSavedShutterDevice('${d.ip}')">${t('shutter.remove')}</button></div></div>`).join('');
+}
+function connectToSavedShutterDevice(ip) { $('quick-shutter-ip-input').value = ip; connectShutter(ip); }
+function removeSavedShutterDevice(ip) {
+    if(!confirm(t('notifications.confirm_remove'))) return;
+    post('/removeSavedShutterDevice', { ip }).then(d => { if(d.success) { showNotification(t('shutter.device_removed'), 'success'); loadSavedShutterDevices(); } else showNotification(t('shutter.remove_failed'), 'error'); })
+        .catch(e => showNotification(t('common.error') + ': ' + e, 'error'));
 }
 
 // === SYSTEM ACTIONS ===

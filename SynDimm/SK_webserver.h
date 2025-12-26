@@ -8,6 +8,7 @@
 
 #include <WebServer.h>
 #include <ArduinoJson.h>
+#include <LittleFS.h>
 #include "SK_config.h"
 #include "SK_html.h"
 #include "SK_js.h"
@@ -52,12 +53,21 @@ private:
     }
     
     // Parse JSON body from POST request, returns true if successful
+    // Maximum body size: 4KB to prevent heap exhaustion attacks
+    static const size_t MAX_JSON_BODY_SIZE = 4096;
+    
     bool parseJsonBody(JsonDocument& doc) {
         if (!requirePost()) return false;
         
         String body = server->arg("plain");
         if (body.length() == 0) {
             sendError(400, "Empty body");
+            return false;
+        }
+        
+        // Protect against oversized payloads
+        if (body.length() > MAX_JSON_BODY_SIZE) {
+            sendError(413, "Payload too large");
             return false;
         }
         
@@ -104,6 +114,12 @@ private:
         size_t chunkSize = 1024;
         
         for (size_t i = 0; i < len; i += chunkSize) {
+            // Check if client still connected before sending
+            if (!server->client().connected()) {
+                DEBUG_PRINTLN("[WEBSERVER] Client disconnected during script transfer");
+                break;
+            }
+            
             size_t remaining = len - i;
             size_t size = (remaining < chunkSize) ? remaining : chunkSize;
             
@@ -379,6 +395,13 @@ private:
         DEBUG_PRINTLN("[WEB] /scanNetwork called");
         if (!requirePost()) return;
         
+        // Check available memory before starting scan
+        if (ESP.getFreeHeap() < 25000) {
+            sendError(503, "Insufficient memory for network scan");
+            DEBUG_PRINTF("[WEB] Scan rejected - low heap: %lu bytes\n", ESP.getFreeHeap());
+            return;
+        }
+        
         ScanConfig config;
         config.filters = FILTER_DIMMERS | FILTER_SHUTTERS;
         config.parallelCount = 10;
@@ -488,6 +511,13 @@ private:
         DEBUG_PRINTLN("[WEB] /scanShutterNetwork called");
         if (!requirePost()) return;
         
+        // Check available memory before starting scan
+        if (ESP.getFreeHeap() < 25000) {
+            sendError(503, "Insufficient memory for network scan");
+            DEBUG_PRINTF("[WEB] Shutter scan rejected - low heap: %lu bytes\n", ESP.getFreeHeap());
+            return;
+        }
+        
         ScanConfig config;
         config.filters = FILTER_SHUTTERS;
         config.parallelCount = 10;
@@ -515,6 +545,28 @@ private:
         
         setEncoderStep(step);
         sendSuccess();
+    }
+    
+    void handleGetSavedShutterDevices() {
+        String json = getSavedShutterDevicesJSON();
+        server->send(200, "application/json", json);
+    }
+    
+    void handleRemoveSavedShutterDevice() {
+        JsonDocument doc;
+        if (!parseJsonBody(doc)) return;
+        
+        String ip = doc["ip"].as<String>();
+        if (ip.length() == 0) {
+            sendError(400, "No IP provided");
+            return;
+        }
+        
+        if (removeShutterDevice(ip)) {
+            sendSuccess();
+        } else {
+            server->send(200, "application/json", "{\"success\": false, \"message\": \"Device not found\"}");
+        }
     }
     
     // Mode Manager Endpoints
@@ -656,6 +708,28 @@ private:
         sendSuccess("Teaching cancelled");
     }
     
+    // Teaching Mode - Web'den şifreyi kaydet
+    void handleCompleteSafeTeaching() {
+        if (!safeLockPtr) {
+            sendError(500, "Safe Lock not initialized");
+            return;
+        }
+        
+        DEBUG_PRINTLN("[WebServer] /completeSafeTeaching");
+        
+        if (safeLockPtr->completeTeachingFromWeb()) {
+            String pattern = safeLockPtr->getLastCompletedPattern();
+            JsonDocument resp;
+            resp["success"] = true;
+            resp["pattern"] = pattern;
+            String output;
+            serializeJson(resp, output);
+            server->send(200, "application/json", output);
+        } else {
+            sendError(400, "Could not complete teaching - minimum 3 steps required");
+        }
+    }
+    
     // Teaching Mode - Durumu getir
     void handleGetTeachingStatus() {
         if (!safeLockPtr) {
@@ -771,12 +845,24 @@ private:
         
         resetFirstSetup();
         
-        // Clear all preferences namespaces
-        const char* namespaces[] = {PREFS_NAMESPACE, "dimmer-settings", "shutter", "mode", "safelock", "ota-settings"};
+        // Clear all preferences namespaces (except DEVICE_PREFS_NAMESPACE which keeps Device ID)
+        const char* namespaces[] = {PREFS_NAMESPACE, SYSTEM_PREFS_NAMESPACE, "dimmer-settings", "shutter", "mode_mgr", "safelock", "ota-settings", "lang"};
         for (const char* ns : namespaces) {
             clearPrefsNamespace(ns);
         }
-        DEBUG_PRINTLN("[FACTORY RESET] All settings cleared");
+        DEBUG_PRINTLN("[FACTORY RESET] All NVS settings cleared");
+        
+        // Clear LittleFS safe mode API configs
+        if (LittleFS.begin(true)) {
+            for (int i = 0; i < 5; i++) {
+                String path = String(SAFE_API_CONFIG_PREFIX) + String(i) + SAFE_API_CONFIG_SUFFIX;
+                if (LittleFS.exists(path)) {
+                    LittleFS.remove(path);
+                    DEBUG_PRINTF("[FACTORY RESET] Removed: %s\n", path.c_str());
+                }
+            }
+            DEBUG_PRINTLN("[FACTORY RESET] LittleFS API configs cleared");
+        }
         
         sendSuccess("Factory reset complete. Restarting...");
         delay(1000);
@@ -872,6 +958,8 @@ public:
         server->on("/scanShutterNetwork", HTTP_POST, [this]() { handleScanShutterNetwork(); });
         server->on("/getShutterStatus", HTTP_GET, [this]() { handleGetShutterStatus(); });
         server->on("/adjustShutterStep", HTTP_POST, [this]() { handleAdjustShutterStep(); });
+        server->on("/getSavedShutterDevices", HTTP_GET, [this]() { handleGetSavedShutterDevices(); });
+        server->on("/removeSavedShutterDevice", HTTP_POST, [this]() { handleRemoveSavedShutterDevice(); });
         
         // Mode manager routes
         server->on("/getCurrentMode", HTTP_GET, [this]() { handleGetCurrentMode(); });
@@ -887,6 +975,7 @@ public:
         // Safe teaching mode routes
         server->on("/startSafeTeaching", HTTP_POST, [this]() { handleStartSafeTeaching(); });
         server->on("/cancelSafeTeaching", HTTP_POST, [this]() { handleCancelSafeTeaching(); });
+        server->on("/completeSafeTeaching", HTTP_POST, [this]() { handleCompleteSafeTeaching(); });
         server->on("/getTeachingStatus", HTTP_GET, [this]() { handleGetTeachingStatus(); });
         
         // System action routes

@@ -605,7 +605,7 @@ public:
   void onEncoderButton() {
     DEBUG_PRINTLN("[SafeLock] BUTON");
     
-    // Teaching Mode aktifse - buton teaching'i tamamlar
+    // Teaching Mode aktifse - buton şifreye B olarak eklenir (kaydetme değil!)
     if (teachingActive) {
       // Timeout kontrolü
       if (millis() - teachingStartTime > TEACHING_TIMEOUT) {
@@ -613,7 +613,7 @@ public:
         return;
       }
       
-      // Mevcut hareketi teaching buffer'a ekle
+      // Mevcut hareketi teaching buffer'a ekle (varsa)
       if (movementStarted && currentTicks > 0) {
         if (teachBufferCount < SAFE_MAX_PASSWORD_STEPS) {
           teachBuffer[teachBufferCount++] = SafeMovement(currentDirection, currentTicks);
@@ -621,9 +621,13 @@ public:
         resetCurrentMovement();
       }
       
-      // Teaching'i tamamla
-      teachingRequiresButton = true;
-      completeTeaching();
+      // Buton hareketini (B) şifreye ekle
+      if (teachBufferCount < SAFE_MAX_PASSWORD_STEPS) {
+        teachBuffer[teachBufferCount++] = SafeMovement('B', 0);
+        DEBUG_PRINTLN("[SafeLock] Teaching: B eklendi");
+      }
+      
+      // NOT: Kaydetme artık burada yapılmıyor, web arayüzündeki Kaydet butonuyla yapılacak
       return;
     }
     
@@ -831,6 +835,40 @@ public:
     String pattern = lastCompletedPattern;
     lastCompletedPattern = "";
     return pattern;
+  }
+  
+  // Web'den teaching'i tamamla (mevcut pattern'i kaydet)
+  bool completeTeachingFromWeb() {
+    if (!teachingActive) {
+      DEBUG_PRINTLN("[SafeLock] completeTeachingFromWeb: Teaching not active");
+      return false;
+    }
+    
+    // Mevcut hareketi buffer'a ekle
+    if (movementStarted && currentTicks > 0) {
+      if (teachBufferCount < SAFE_MAX_PASSWORD_STEPS) {
+        teachBuffer[teachBufferCount++] = SafeMovement(currentDirection, currentTicks);
+      }
+      resetCurrentMovement();
+    }
+    
+    // Minimum adım kontrolü
+    if (teachBufferCount < SAFE_MIN_PASSWORD_STEPS) {
+      DEBUG_PRINTF("[SafeLock] completeTeachingFromWeb: Too short (%d < %d)\n", teachBufferCount, SAFE_MIN_PASSWORD_STEPS);
+      return false;
+    }
+    
+    // Pattern'de B var mı kontrol et
+    teachingRequiresButton = false;
+    for (uint8_t i = 0; i < teachBufferCount; i++) {
+      if (teachBuffer[i].direction == 'B') {
+        teachingRequiresButton = true;
+        break;
+      }
+    }
+    
+    completeTeaching();
+    return true;
   }
   
   // Teaching timeout kontrolü (loop'ta çağrılmalı)

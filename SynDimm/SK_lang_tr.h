@@ -124,9 +124,14 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
     "moving_down": "Aşağı İniyor",
     "open": "Açık",
     "closed": "Kapalı",
-    "no_device_connected": "Cihaz bağlı değil"
+    "no_device_connected": "Cihaz bağlı değil",
+    "remove": "Kaldır",
+    "device_removed": "Shutter cihazı kaldırıldı",
+    "remove_failed": "Cihaz kaldırılamadı",
+    "shelly_25": "Shelly 2.5",
+    "shelly_plus_2pm": "Shelly Plus 2PM"
   },
-  
+
   "safe": {
     "title": "SAFE",
     "description": "Encoder hareketleriyle şifre girişi yapılır. Her şifre için API endpoint tanımlayabilirsiniz. Doğru şifre girildiğinde ESP32C6 otomatik olarak tanımlı API'yi tetikler.",
@@ -153,7 +158,7 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
     "test_api": "API Test Et",
     "teach_password": "Öğret",
     "teaching_title": "Şifre Öğretme Modu",
-    "teaching_hint": "Encoder'ı çevirin... Kaydetmek için butona basın",
+    "teaching_hint": "Encoder'ı çevirin. Butona basınca B eklenir.",
     "cancel_teaching": "İptal",
     "teaching_starting": "Öğretme modu başlatılıyor...",
     "teaching_started": "Öğretme modu aktif! Encoder'ı çevirin.",
@@ -161,6 +166,7 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
     "teaching_timeout": "Öğretme süresi doldu",
     "teaching_complete": "Şifre öğretildi",
     "teaching_failed": "Öğretme başlatılamadı",
+    "password_saved": "Şifre kaydedildi",
     "password_empty": "Şifre boş olamaz!",
     "invalid_format": "Geçersiz şifre formatı! Örnek: L3-R12-L11-R3-B",
     "api_empty": "API URL boş olamaz!",
@@ -349,6 +355,7 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
   
   "notifications": {
     "connection_error": "Bağlantı hatası",
+    "device_offline": "Cihaz çevrimdışı - yeniden deneniyor...",
     "scanning": "Ağ taranıyor...",
     "scan_started": "Tarama başladı",
     "scan_stopped": "Tarama durduruldu",

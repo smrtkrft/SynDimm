@@ -124,9 +124,14 @@ const char LANG_DE_JSON[] PROGMEM = R"rawliteral({
     "moving_down": "Nach unten",
     "open": "Offen",
     "closed": "Geschlossen",
-    "no_device_connected": "Kein Gerät verbunden"
+    "no_device_connected": "Kein Gerät verbunden",
+    "remove": "Entfernen",
+    "device_removed": "Rolladengerät entfernt",
+    "remove_failed": "Gerät konnte nicht entfernt werden",
+    "shelly_25": "Shelly 2.5",
+    "shelly_plus_2pm": "Shelly Plus 2PM"
   },
-  
+
   "safe": {
     "title": "SAFE",
     "description": "Die Passworteingabe erfolgt über Encoder-Bewegungen. Sie können für jedes Passwort einen API-Endpunkt definieren. Wenn das richtige Passwort eingegeben wird, löst ESP32C6 automatisch die definierte API aus.",
@@ -153,7 +158,7 @@ const char LANG_DE_JSON[] PROGMEM = R"rawliteral({
     "test_api": "API testen",
     "teach_password": "Lernen",
     "teaching_title": "Lernmodus",
-    "teaching_hint": "Encoder drehen... Taste drücken zum Speichern",
+    "teaching_hint": "Encoder drehen. Taste drücken fügt B hinzu.",
     "cancel_teaching": "Abbrechen",
     "teaching_starting": "Lernmodus wird gestartet...",
     "teaching_started": "Lernmodus aktiv! Encoder drehen.",
@@ -161,6 +166,7 @@ const char LANG_DE_JSON[] PROGMEM = R"rawliteral({
     "teaching_timeout": "Lernzeit abgelaufen",
     "teaching_complete": "Passwort gelernt",
     "teaching_failed": "Lernmodus konnte nicht gestartet werden",
+    "password_saved": "Passwort gespeichert",
     "password_empty": "Passwort darf nicht leer sein!",
     "invalid_format": "Ungültiges Passwortformat! Beispiel: L3-R12-L11-R3-B",
     "api_empty": "API-URL darf nicht leer sein!",
@@ -349,6 +355,7 @@ const char LANG_DE_JSON[] PROGMEM = R"rawliteral({
   
   "notifications": {
     "connection_error": "Verbindungsfehler",
+    "device_offline": "Gerät offline - Neuversuch...",
     "scanning": "Netzwerk wird gescannt...",
     "scan_started": "Scan gestartet",
     "scan_stopped": "Scan gestoppt",

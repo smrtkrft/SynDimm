@@ -30,8 +30,8 @@
 #define GITHUB_REPO_NAME "SynDimm"
 #define GITHUB_API_URL "https://api.github.com/repos/" GITHUB_REPO_OWNER "/" GITHUB_REPO_NAME "/releases/latest"
 
-// Current firmware version
-#define CURRENT_VERSION "v1.2.0"
+// Current firmware version (use VERSION from SK_config.h)
+#define CURRENT_VERSION VERSION
 
 // OTA Status
 enum OTAStatus {
@@ -392,35 +392,23 @@ void saveOTASettings(bool autoUpdate) {
 }
 
 // ========================================
-// OTA ZAMANLAMA SİSTEMİ (Basit)
+// OTA KONTROL SİSTEMİ
 // ========================================
+// Sadece ilk açılışta ve buton tıklandığında kontrol edilir
+// Otomatik güncelleme YOK - kullanıcı manuel olarak yükselter
 
-// Sonraki OTA kontrol aralığını hesapla (24-48 saat arası random)
-unsigned long getNextOTAInterval() {
-    const unsigned long BASE_INTERVAL = 24UL * 60UL * 60UL * 1000UL;  // 24 saat
-    const unsigned long RANDOM_MAX = 24UL * 60UL * 60UL * 1000UL;     // +0-24 saat random
-    unsigned long randomOffset = random(0, RANDOM_MAX);
-    unsigned long interval = BASE_INTERVAL + randomOffset;
-    
-    DEBUG_PRINTF("[OTA] Sonraki kontrol: %lu saat %lu dakika sonra\n", 
-                 interval / 3600000UL, (interval % 3600000UL) / 60000UL);
-    
-    return interval;
-}
-
-// Auto-update check (called at startup and periodically)
-void autoUpdateCheck() {
-    DEBUG_PRINTLN("[OTA] Guncelleme kontrolu...");
+// Startup'ta güncelleme kontrolü (sadece bilgilendirme, otomatik yükleme yok)
+void startupUpdateCheck() {
+    DEBUG_PRINTLN("[OTA] Baslangic guncelleme kontrolu...");
     
     // Güncelleme kontrolü yap
     if (checkForUpdates() && otaInfo.updateAvailable) {
-        // Sadece otomatik güncelleme açıksa güncelle
-        if (otaInfo.autoUpdateEnabled) {
-            DEBUG_PRINTLN("[OTA] Yeni versiyon bulundu! Otomatik guncelleme basliyor...");
-            performOTAUpdate();
-        } else {
-            DEBUG_PRINTLN("[OTA] Yeni versiyon mevcut. Manuel guncelleme bekleniyor.");
-        }
+        DEBUG_PRINTLN("[OTA] Yeni versiyon mevcut! Manuel guncelleme bekleniyor.");
+        DEBUG_PRINTF("[OTA] Mevcut: %s -> Yeni: %s\n", 
+                     otaInfo.currentVersion.c_str(), 
+                     otaInfo.latestVersion.c_str());
+    } else {
+        DEBUG_PRINTLN("[OTA] Sistem guncel.");
     }
 }
 

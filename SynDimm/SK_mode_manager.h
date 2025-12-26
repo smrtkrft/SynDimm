@@ -1,17 +1,14 @@
 /**
  * SK_mode_manager.h
  * SmartKraft SynDimm - Mode Management System
- * Version: v1.2.0
+ * Version: v1.3.0
  * 
  * Manages system modes: DIMMER, SHUTTER, SAFE
- * Handles mode switching via encoder long press (3s)
- * Saves/loads active mode to Preferences
+ * Mode switching methods:
+ * 1. Web interface - click on mode button
+ * 2. Encoder - hold button + rotate to preview, release to confirm
  * 
- * Mode Selection Flow:
- * 1. Long press (3s) → Enter selection mode
- * 2. Rotate encoder → Preview modes (dit feedback)
- * 3. Long press (3s) again → Activate selected mode
- * 4. Timeout (15s) → Cancel, revert to previous mode
+ * Saves/loads active mode to Preferences
  */
 
 #ifndef SK_MODE_MANAGER_H
@@ -26,15 +23,13 @@ namespace {
     Preferences modePrefs;
     const char* MODE_PREFS_NS = "mode_mgr";
     const char* MODE_KEY = "active_mode";
-    const unsigned long MODE_SELECT_TIMEOUT = 15000; // 15 seconds
 }
 
 class SKModeManager {
 private:
     SystemMode activeMode;
     SystemMode previewMode;
-    bool inSelectionMode;
-    unsigned long selectionStartTime;
+    bool inModeChangeMode;   // Buton basılı tutularak çevriliyor mu
     SKBuzzer* buzzer;
     
     const char* getModeNameStr(SystemMode mode) const {
@@ -77,65 +72,70 @@ private:
     
     void activateMode(SystemMode mode) {
         activeMode = mode;
+        previewMode = mode;
         saveActiveMode();
-        buzzer->playDits(getModeDitCount(mode));
+        if (buzzer) buzzer->playDits(getModeDitCount(mode));
+        DEBUG_PRINTF("[ModeManager] Mode activated: %s\n", getModeNameStr(mode));
     }
     
 public:
     SKModeManager(SKBuzzer* buzzerInstance) {
         buzzer = buzzerInstance;
-        inSelectionMode = false;
-        selectionStartTime = 0;
-        
-        // Default to DIMMER, will be loaded in begin()
+        inModeChangeMode = false;
         activeMode = MODE_DIMMER;
         previewMode = activeMode;
     }
     
     void begin() {
-        // Load saved mode from Preferences
         activeMode = loadActiveMode();
         previewMode = activeMode;
         DEBUG_PRINTF("[ModeManager] Initialized with mode: %s\n", getModeNameStr(activeMode));
     }
     
-    // Call in loop() to handle timeout
+    // No timeout needed - mode change is immediate on button release
     void update() {
-        if (inSelectionMode) {
-            unsigned long elapsed = millis() - selectionStartTime;
-            if (elapsed >= MODE_SELECT_TIMEOUT) {
-                inSelectionMode = false;
-                previewMode = activeMode;
-            }
-        }
+        // Reserved for future use
     }
     
-    // Handle encoder events
-    void handleEncoderEvent(char event) {
-        if (event == 'P') {
-            if (!inSelectionMode) {
-                inSelectionMode = true;
-                selectionStartTime = millis();
-                previewMode = activeMode;
-            } else {
-                inSelectionMode = false;
-                activateMode(previewMode);
+    // Called when encoder rotates while button is held
+    // Returns true if mode change was triggered (for encoder to mark)
+    bool handleModeRotation(char direction) {
+        inModeChangeMode = true;
+        
+        if (direction == 'R') {
+            // Sağa çevirince sonraki mod
+            if ((int)previewMode < 2) {
+                previewMode = (SystemMode)((int)previewMode + 1);
+            }
+        } else if (direction == 'L') {
+            // Sola çevirince önceki mod
+            if ((int)previewMode > 0) {
+                previewMode = (SystemMode)((int)previewMode - 1);
             }
         }
-        else if (inSelectionMode && (event == 'L' || event == 'R')) {
-            if (event == 'R') {
-                // Sağa çevirince sonraki mod, ama SAFE(2)'den öteye geçemez
-                if ((int)previewMode < 2) {
-                    previewMode = (SystemMode)((int)previewMode + 1);
-                }
-            } else {
-                // Sola çevirince önceki mod, ama DIMMER(0)'dan öteye geçemez
-                if ((int)previewMode > 0) {
-                    previewMode = (SystemMode)((int)previewMode - 1);
-                }
-            }
-            buzzer->playDits(getModeDitCount(previewMode));
+        
+        // Buzzer feedback for preview mode
+        if (buzzer) buzzer->playDits(getModeDitCount(previewMode));
+        DEBUG_PRINTF("[ModeManager] Preview mode: %s\n", getModeNameStr(previewMode));
+        
+        return true;
+    }
+    
+    // Called when button is released after mode change rotation
+    void confirmModeChange() {
+        if (inModeChangeMode && previewMode != activeMode) {
+            activateMode(previewMode);
+        } else if (inModeChangeMode) {
+            // Preview was same as active, still play confirmation
+            if (buzzer) buzzer->playDits(getModeDitCount(activeMode));
         }
+        inModeChangeMode = false;
+    }
+    
+    // Cancel mode change (reset preview to active)
+    void cancelModeChange() {
+        previewMode = activeMode;
+        inModeChangeMode = false;
     }
     
     // Getters
@@ -147,8 +147,8 @@ public:
         return previewMode;
     }
     
-    bool isInSelectionMode() const {
-        return inSelectionMode;
+    bool isInModeChangeMode() const {
+        return inModeChangeMode;
     }
     
     const char* getActiveModeName() const {
@@ -164,24 +164,15 @@ public:
         if (mode < MODE_DIMMER || mode > MODE_SAFE) {
             return false;
         }
-        
-        if (inSelectionMode) {
-            // Cancel selection mode first
-            inSelectionMode = false;
-        }
-        
         activateMode(mode);
         return true;
     }
     
-    // JSON status for web
+    // JSON status for web (simplified - mode change is instant via encoder)
     String getStatusJSON() {
         String json = "{";
         json += "\"activeMode\":" + String((int)activeMode) + ",";
-        json += "\"activeModeStr\":\"" + String(getModeNameStr(activeMode)) + "\",";
-        json += "\"previewMode\":" + String((int)previewMode) + ",";
-        json += "\"previewModeStr\":\"" + String(getModeNameStr(previewMode)) + "\",";
-        json += "\"inSelectionMode\":" + String(inSelectionMode ? "true" : "false");
+        json += "\"activeModeStr\":\"" + String(getModeNameStr(activeMode)) + "\"";
         json += "}";
         return json;
     }

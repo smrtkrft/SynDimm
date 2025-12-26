@@ -36,6 +36,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
+#include <vector>
 #include "SK_config.h"
 #include "SK_scan.h"
 
@@ -45,6 +46,7 @@
 #define SHUTTER_DEFAULT_STEP 3        // Encoder step: 1-5 (% per tick)
 #define SHUTTER_REQUEST_TIMEOUT 3000
 #define SHUTTER_STATUS_UPDATE_INTERVAL 1000
+#define SHUTTER_MAX_SAVED_DEVICES 10  // Maximum saved shutter devices
 
 // Anonymous namespace to prevent multiple definition
 namespace {
@@ -110,12 +112,23 @@ struct ShutterConfig {
     String lastConnectedIP;     // Last connected device IP
 };
 
+// Saved Shutter Device Structure
+struct SavedShutterDevice {
+    String ip;
+    String name;
+    String modelName;
+    String displayName;
+    String macAddress;
+    ShutterType type;
+};
+
 // Anonymous namespace to prevent multiple definition
 namespace {
     // Global variables
     ShutterDevice shutterDevice;
     ShutterConfig shutterConfig;
     unsigned long lastShutterStatusUpdate = 0;
+    std::vector<SavedShutterDevice> savedShutterDevices;
 }
 
 // ========================================
@@ -138,7 +151,7 @@ bool setShutterPosition(int position);  // 0-100%
 bool toggleShutterDirection();          // Toggle based on last direction
 
 // Status & Info
-void getShutterStatus();
+bool getShutterStatus();
 String getShutterStatusJSON();
 ShutterStatus getCurrentShutterStatus();
 int getCurrentPosition();
@@ -146,6 +159,17 @@ int getCurrentPosition();
 // Configuration
 void setEncoderStep(int step);          // 1-5
 int getEncoderStep();
+void saveShutterConfig();
+void loadShutterConfig();
+void saveShutterLastIP(String ip);
+void autoReconnectShutter();
+
+// Saved Devices Management
+void loadSavedShutterDevices();
+void saveSavedShutterDevices();
+void addShutterDevice(String ip, String name, ShutterType type);
+bool removeShutterDevice(String ip);
+String getSavedShutterDevicesJSON();
 void saveShutterConfig();
 void loadShutterConfig();
 void saveShutterLastIP(String ip);
@@ -177,6 +201,9 @@ void initShutter() {
     // Load configuration
     loadShutterConfig();
     
+    // Load saved devices
+    loadSavedShutterDevices();
+    
     // Initialize device
     shutterDevice.ip = "";
     shutterDevice.modelName = "";
@@ -193,6 +220,7 @@ void initShutter() {
     DEBUG_PRINTF("[SHUTTER] Last Direction: %s\n", 
                   shutterConfig.lastDirection == DIRECTION_UP ? "UP" : 
                   shutterConfig.lastDirection == DIRECTION_DOWN ? "DOWN" : "NONE");
+    DEBUG_PRINTF("[SHUTTER] Saved devices: %d\n", savedShutterDevices.size());
     DEBUG_PRINTLN("[SHUTTER] Initialization complete");
 }
 
@@ -247,6 +275,132 @@ void setEncoderStep(int step) {
 // Get Encoder Step
 int getEncoderStep() {
     return shutterConfig.encoderStep;
+}
+
+// ========================================
+// SAVED SHUTTER DEVICES MANAGEMENT
+// ========================================
+
+// Load Saved Devices from Preferences
+void loadSavedShutterDevices() {
+    String devicesJSON = shutterPrefs.getString("saved_devices", "[]");
+    
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, devicesJSON);
+    
+    if (error) {
+        DEBUG_PRINTLN("[SHUTTER] Failed to parse saved devices JSON");
+        return;
+    }
+    
+    // Vector'u temizle
+    savedShutterDevices.clear();
+    savedShutterDevices.shrink_to_fit();
+    
+    JsonArray arr = doc.as<JsonArray>();
+    
+    // Maksimum cihaz sayısı kontrolü
+    int count = 0;
+    for (JsonObject obj : arr) {
+        if (count >= SHUTTER_MAX_SAVED_DEVICES) break;
+        SavedShutterDevice device;
+        device.ip = obj["ip"].as<String>();
+        device.name = obj["name"].as<String>();
+        device.modelName = obj["modelName"] | "";
+        device.displayName = obj["displayName"] | "";
+        device.macAddress = obj["macAddress"] | "";
+        device.type = (ShutterType)obj["type"].as<int>();
+        savedShutterDevices.push_back(device);
+        count++;
+    }
+    
+    DEBUG_PRINTF("[SHUTTER] Loaded %d saved devices\n", count);
+}
+
+// Save Devices to Preferences
+void saveSavedShutterDevices() {
+    JsonDocument doc;
+    JsonArray arr = doc.to<JsonArray>();
+    
+    for (const auto& device : savedShutterDevices) {
+        JsonObject obj = arr.add<JsonObject>();
+        obj["ip"] = device.ip;
+        obj["name"] = device.name;
+        obj["modelName"] = device.modelName;
+        obj["displayName"] = device.displayName;
+        obj["macAddress"] = device.macAddress;
+        obj["type"] = (int)device.type;
+    }
+    
+    String output;
+    serializeJson(doc, output);
+    shutterPrefs.putString("saved_devices", output);
+    DEBUG_PRINTF("[SHUTTER] Saved %d devices to NVS\n", savedShutterDevices.size());
+}
+
+// Add Shutter Device to Saved List
+void addShutterDevice(String ip, String name, ShutterType type) {
+    // Mevcut cihazı güncelle veya yeni ekle
+    for (auto& device : savedShutterDevices) {
+        if (device.ip == ip) {
+            device.name = name;
+            device.type = type;
+            device.modelName = shutterDevice.modelName;
+            device.displayName = shutterDevice.displayName;
+            saveSavedShutterDevices();
+            DEBUG_PRINTF("[SHUTTER] Updated saved device: %s\n", ip.c_str());
+            return;
+        }
+    }
+    
+    // Yeni cihaz ekle
+    if (savedShutterDevices.size() >= SHUTTER_MAX_SAVED_DEVICES) {
+        DEBUG_PRINTLN("[SHUTTER] Max saved devices reached, removing oldest");
+        savedShutterDevices.erase(savedShutterDevices.begin());
+    }
+    
+    SavedShutterDevice device;
+    device.ip = ip;
+    device.name = name;
+    device.type = type;
+    device.modelName = shutterDevice.modelName;
+    device.displayName = shutterDevice.displayName;
+    
+    savedShutterDevices.push_back(device);
+    saveSavedShutterDevices();
+    DEBUG_PRINTF("[SHUTTER] Added saved device: %s\n", ip.c_str());
+}
+
+// Remove Shutter Device from Saved List
+bool removeShutterDevice(String ip) {
+    for (auto it = savedShutterDevices.begin(); it != savedShutterDevices.end(); ++it) {
+        if (it->ip == ip) {
+            savedShutterDevices.erase(it);
+            saveSavedShutterDevices();
+            DEBUG_PRINTF("[SHUTTER] Removed saved device: %s\n", ip.c_str());
+            return true;
+        }
+    }
+    return false;
+}
+
+// Get Saved Devices as JSON
+String getSavedShutterDevicesJSON() {
+    JsonDocument doc;
+    JsonArray devices = doc["devices"].to<JsonArray>();
+    
+    for (const auto& device : savedShutterDevices) {
+        JsonObject obj = devices.add<JsonObject>();
+        obj["ip"] = device.ip;
+        obj["name"] = device.name;
+        obj["modelName"] = device.modelName;
+        obj["displayName"] = device.displayName;
+        obj["type"] = (int)device.type;
+    }
+    
+    String output;
+    serializeJson(doc, output);
+    return output;
 }
 
 // Detect Shutter Type from IP
@@ -406,6 +560,9 @@ bool connectToShutter(String ip) {
     // Save last connected IP
     saveShutterLastIP(ip);
     
+    // Add to saved devices list
+    addShutterDevice(ip, shutterDevice.displayName, shutterDevice.type);
+    
     DEBUG_PRINTF("[SHUTTER] Connected: %s (Gen%d)\n", shutterDevice.displayName.c_str(), shutterDevice.generation);
     return true;
 }
@@ -424,9 +581,9 @@ bool isShutterConnected() {
 }
 
 // Get Shutter Status from Device
-void getShutterStatus() {
+bool getShutterStatus() {
     if (!shutterDevice.isConnected) {
-        return;
+        return false;
     }
     
     HTTPClient http;
@@ -437,6 +594,7 @@ void getShutterStatus() {
     http.setTimeout(SHUTTER_REQUEST_TIMEOUT);
     
     int httpCode = http.GET();
+    bool success = false;
     
     if (httpCode == HTTP_CODE_OK) {
         String payload = http.getString();
@@ -506,6 +664,7 @@ void getShutterStatus() {
             // Update config
             shutterConfig.lastDirection = shutterDevice.lastDirection;
             shutterConfig.lastPosition = shutterDevice.currentPosition;
+            success = true;
         }
     } else {
         DEBUG_PRINTF("[SHUTTER] Status request failed: %d\n", httpCode);
@@ -513,6 +672,7 @@ void getShutterStatus() {
     }
     
     http.end();
+    return success;
 }
 
 // Get Status as JSON
@@ -736,6 +896,10 @@ bool toggleShutterDirection() {
 // UPDATE LOOP
 // ========================================
 
+// Status update failure counter for auto-disconnect on unreachable device
+static uint8_t shutterStatusFailCount = 0;
+static const uint8_t SHUTTER_MAX_STATUS_FAILURES = 5;
+
 // Update Shutter Status Periodically
 void updateShutter() {
     if (!shutterDevice.isConnected) {
@@ -746,7 +910,19 @@ void updateShutter() {
     unsigned long currentTime = millis();
     if (currentTime - lastShutterStatusUpdate >= SHUTTER_STATUS_UPDATE_INTERVAL) {
         lastShutterStatusUpdate = currentTime;
-        getShutterStatus();
+        bool success = getShutterStatus();
+        
+        // Track consecutive failures and auto-disconnect if device unreachable
+        if (!success) {
+            shutterStatusFailCount++;
+            if (shutterStatusFailCount >= SHUTTER_MAX_STATUS_FAILURES) {
+                DEBUG_PRINTLN("[SHUTTER] Device unreachable - auto disconnecting");
+                disconnectShutter();
+                shutterStatusFailCount = 0;
+            }
+        } else {
+            shutterStatusFailCount = 0;  // Reset on success
+        }
     }
 }
 

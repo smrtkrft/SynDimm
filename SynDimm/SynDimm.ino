@@ -30,7 +30,6 @@
 #include <esp_system.h>
 #include <esp_task_wdt.h>
 #include <ESPmDNS.h>
-#include <EEPROM.h>
 #include "SK_config.h"
 #include "SKwifi.h"
 #include "SK_encoder.h"
@@ -51,10 +50,6 @@ SKModeManager modeManager(&buzzer);
 SKWebServer webServer;
 SafeLock safeLock;
 SafeLockAPIHandler safeApiHandler;
-
-// OTA auto-check variables
-static unsigned long lastOTACheck = 0;
-static unsigned long otaCheckInterval = 0;
 
 void setup() {
   // Initialize Serial
@@ -140,7 +135,19 @@ void setup() {
   safeLock.begin();
   safeApiHandler.setSafeLock(&safeLock);
   safeLock.setPasswordMatchCallback([](uint8_t pwdIndex) {
+    DEBUG_PRINTF("[SAFE] Password #%d matched!\n", pwdIndex);
+    buzzer.playDits(2);  // 2 bip = şifre eşleşti
     SafeLockAPIHandler::onPasswordMatch(pwdIndex, &safeLock, &safeApiHandler);
+  });
+  
+  // Teaching mode callbacks - buzzer feedback
+  safeLock.setTeachingCompleteCallback([](uint8_t pwdIndex, const String& pattern) {
+    DEBUG_PRINTF("[SAFE] Teaching complete for slot #%d\n", pwdIndex);
+    buzzer.playDits(3);  // 3 bip = teaching başarılı
+  });
+  safeLock.setTeachingCancelledCallback([](uint8_t pwdIndex, const char* reason) {
+    DEBUG_PRINTF("[SAFE] Teaching cancelled: %s\n", reason);
+    buzzer.playDits(1);  // 1 bip = iptal
   });
 
   // Initialize Language System
@@ -168,12 +175,10 @@ void setup() {
   autoReconnectShutter(); // Shutter - always try
   DEBUG_PRINTLN("[STARTUP] Device connections complete");
   
-  // İlk OTA kontrolü (WiFi bağlıysa)
+  // İlk OTA kontrolü (WiFi bağlıysa, sadece bilgilendirme)
   if (wifi.isConnectedToWiFi()) {
     DEBUG_PRINTLN("[STARTUP] Guncelleme kontrolu yapiliyor...");
-    autoUpdateCheck();
-    otaCheckInterval = getNextOTAInterval();  // Sonraki kontrol için random süre
-    lastOTACheck = millis();
+    startupUpdateCheck();
   }
   
   // Random seed'i chip ID ile başlat (her cihaz farklı random değer üretir)
@@ -186,13 +191,11 @@ void setup() {
 static unsigned long lastHealthCheck = 0;
 static unsigned long wifiDownSince = 0;
 static uint32_t minFreeHeap = UINT32_MAX;
-static unsigned long lastMDNSRefresh = 0;
 static unsigned long systemUptime = 0;
 static const unsigned long HEALTH_CHECK_INTERVAL = 60000;     // 1 dakikada bir
 static const unsigned long CRITICAL_WIFI_DOWN_TIME = 600000;  // 10 dakika WiFi yoksa restart
 static const uint32_t CRITICAL_HEAP_THRESHOLD = 15000;        // 15KB altı kritik
 static const uint32_t WARNING_HEAP_THRESHOLD = 30000;         // 30KB altı uyarı
-static const unsigned long MDNS_REFRESH_INTERVAL = 3600000;   // 1 saatte bir mDNS yenile
 static const unsigned long MAX_UPTIME_BEFORE_RESTART = 172800000UL; // 2 gün = 172800000ms (48 saat)
 
 // Detaylı izleme için ek değişkenler
@@ -298,26 +301,11 @@ void performHealthCheck() {
     lastHourlyLog = millis();
     DEBUG_PRINTF("[HOURLY] Saat %lu - Heap: %lu/%lu, Min: %lu, Loops: %lu\n", 
                  millis()/3600000, freeHeap, totalHeap, minFreeHeap, loopCounter);
-  }
-  
-  // mDNS periyodik yenileme (1 saatte bir) - NONBLOCKING
-  static bool mdnsNeedsRestart = false;
-  static unsigned long mdnsRestartTime = 0;
-  
-  if (millis() - lastMDNSRefresh > MDNS_REFRESH_INTERVAL) {
-    lastMDNSRefresh = millis();
-    MDNS.end();
-    mdnsNeedsRestart = true;
-    mdnsRestartTime = millis();
-    DEBUG_PRINTLN("[HEALTH] mDNS durduruldu, yeniden baslatilacak...");
-  }
-  
-  // mDNS yeniden başlatma (100ms sonra, non-blocking)
-  if (mdnsNeedsRestart && (millis() - mdnsRestartTime > 100)) {
-    mdnsNeedsRestart = false;
-    if (MDNS.begin("dimm")) {
-      MDNS.addService("http", "tcp", 80);
-      DEBUG_PRINTLN("[HEALTH] mDNS yenilendi");
+    
+    // Saatlik mDNS zorla yenileme (WiFi modunda)
+    if (wifi.isConnectedToWiFi() && !wifi.isAPModeActive()) {
+      DEBUG_PRINTLN("[HOURLY] mDNS saatlik yenileme...");
+      wifi.restartMDNS();
     }
   }
   
@@ -367,15 +355,6 @@ void loop() {
   // Update mode manager (handle timeout)
   modeManager.update();
   
-  // OTA periyodik güncelleme kontrolü
-  if (wifi.isConnectedToWiFi() && otaCheckInterval > 0) {
-    if (millis() - lastOTACheck > otaCheckInterval) {
-      lastOTACheck = millis();
-      autoUpdateCheck();
-      otaCheckInterval = getNextOTAInterval();  // Yeni random süre
-    }
-  }
-  
   // ========================================
   // MOD İZOLASYONU - Sadece aktif mod güncellenir
   // ========================================
@@ -399,12 +378,18 @@ void loop() {
   if (encoder.available()) {
     char event = encoder.read();
     
-    // Check if in mode selection mode
-    if (modeManager.isInSelectionMode() || event == 'P') {
-      // Mode selection has priority
-      modeManager.handleEncoderEvent(event);
-    } else {
-      // Normal mode - route to active mode
+    // Check if button is held while rotating - MODE CHANGE
+    if (encoder.isButtonHeld() && (event == 'L' || event == 'R')) {
+      // Button held + rotation = mode change
+      modeManager.handleModeRotation(event);
+      encoder.setModeChangeTriggered();
+    }
+    // Mode change confirmation (button released after rotation)
+    else if (event == 'M') {
+      modeManager.confirmModeChange();
+    }
+    // Normal event handling - route to active mode
+    else {
       switch(activeMode) {
         case MODE_DIMMER:
           handleDimmerEncoderEvent(event);

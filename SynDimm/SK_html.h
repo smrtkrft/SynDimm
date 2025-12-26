@@ -255,9 +255,12 @@ String generateHTML(String chipID, String version) {
                                         <div class="teaching-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
                                         <div class="teaching-title" data-lang="safe.teaching_title">Teaching Mode</div>
                                         <div class="teaching-pattern" id="teaching-pattern-0">-</div>
-                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder... Press button to save</div>
+                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder to create pattern</div>
                                         <div class="teaching-timer" id="teaching-timer-0">15s</div>
-                                        <button class="btn-cancel-teach" onclick="cancelTeachPassword(0)" data-lang="safe.cancel_teaching">Cancel</button>
+                                        <div class="teaching-buttons">
+                                            <button class="btn-save-pattern" id="btn-save-pattern-0" onclick="completeTeachPassword(0)" data-lang="safe.save_password">Save</button>
+                                            <button class="btn-cancel-teach" onclick="cancelTeachPassword(0)" data-lang="safe.cancel_teaching">Cancel</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -321,9 +324,12 @@ String generateHTML(String chipID, String version) {
                                         <div class="teaching-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
                                         <div class="teaching-title" data-lang="safe.teaching_title">Teaching Mode</div>
                                         <div class="teaching-pattern" id="teaching-pattern-1">-</div>
-                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder... Press button to save</div>
+                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder to create pattern</div>
                                         <div class="teaching-timer" id="teaching-timer-1">15s</div>
-                                        <button class="btn-cancel-teach" onclick="cancelTeachPassword(1)" data-lang="safe.cancel_teaching">Cancel</button>
+                                        <div class="teaching-buttons">
+                                            <button class="btn-save-pattern" id="btn-save-pattern-1" onclick="completeTeachPassword(1)" data-lang="safe.save_password">Save</button>
+                                            <button class="btn-cancel-teach" onclick="cancelTeachPassword(1)" data-lang="safe.cancel_teaching">Cancel</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -387,9 +393,12 @@ String generateHTML(String chipID, String version) {
                                         <div class="teaching-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
                                         <div class="teaching-title" data-lang="safe.teaching_title">Teaching Mode</div>
                                         <div class="teaching-pattern" id="teaching-pattern-2">-</div>
-                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder... Press button to save</div>
+                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder to create pattern</div>
                                         <div class="teaching-timer" id="teaching-timer-2">15s</div>
-                                        <button class="btn-cancel-teach" onclick="cancelTeachPassword(2)" data-lang="safe.cancel_teaching">Cancel</button>
+                                        <div class="teaching-buttons">
+                                            <button class="btn-save-pattern" id="btn-save-pattern-2" onclick="completeTeachPassword(2)" data-lang="safe.save_password">Save</button>
+                                            <button class="btn-cancel-teach" onclick="cancelTeachPassword(2)" data-lang="safe.cancel_teaching">Cancel</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -453,9 +462,12 @@ String generateHTML(String chipID, String version) {
                                         <div class="teaching-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
                                         <div class="teaching-title" data-lang="safe.teaching_title">Teaching Mode</div>
                                         <div class="teaching-pattern" id="teaching-pattern-3">-</div>
-                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder... Press button to save</div>
+                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder to create pattern</div>
                                         <div class="teaching-timer" id="teaching-timer-3">15s</div>
-                                        <button class="btn-cancel-teach" onclick="cancelTeachPassword(3)" data-lang="safe.cancel_teaching">Cancel</button>
+                                        <div class="teaching-buttons">
+                                            <button class="btn-save-pattern" id="btn-save-pattern-3" onclick="completeTeachPassword(3)" data-lang="safe.save_password">Save</button>
+                                            <button class="btn-cancel-teach" onclick="cancelTeachPassword(3)" data-lang="safe.cancel_teaching">Cancel</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -519,9 +531,12 @@ String generateHTML(String chipID, String version) {
                                         <div class="teaching-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
                                         <div class="teaching-title" data-lang="safe.teaching_title">Teaching Mode</div>
                                         <div class="teaching-pattern" id="teaching-pattern-4">-</div>
-                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder... Press button to save</div>
+                                        <div class="teaching-hint" data-lang="safe.teaching_hint">Rotate encoder to create pattern</div>
                                         <div class="teaching-timer" id="teaching-timer-4">15s</div>
-                                        <button class="btn-cancel-teach" onclick="cancelTeachPassword(4)" data-lang="safe.cancel_teaching">Cancel</button>
+                                        <div class="teaching-buttons">
+                                            <button class="btn-save-pattern" id="btn-save-pattern-4" onclick="completeTeachPassword(4)" data-lang="safe.save_password">Save</button>
+                                            <button class="btn-cancel-teach" onclick="cancelTeachPassword(4)" data-lang="safe.cancel_teaching">Cancel</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

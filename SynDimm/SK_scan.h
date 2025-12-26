@@ -171,10 +171,44 @@ DiscoveredDevice detectDevice(String ip) {
             device.modelName = model;
             device.firmwareVersion = fw;
             device.macAddress = mac;
-            device.generation = 3;
+            
+            // Determine generation from model/app name
+            bool isGen4 = model.indexOf("Gen4") >= 0 || model.indexOf("g4") >= 0 || model.indexOf("G4") >= 0 ||
+                          app.indexOf("Gen4") >= 0 || app.indexOf("g4") >= 0 || app.indexOf("G4") >= 0;
+            device.generation = isGen4 ? 4 : 3;
             device.isValid = true;
             device.deviceType = app;
             
+            // ========================================
+            // GEN4 DIMMERS (Check first - highest priority)
+            // ========================================
+            if (isGen4 && app.indexOf("Dimmer") >= 0) {
+                if (model.indexOf("0-10V") >= 0 || model.indexOf("S0-10V") >= 0) {
+                    device.displayName = "Shelly Dimmer 0-10V Gen4";
+                    device.specificType = 60; // DIMMER_SHELLY_DIMMER_0_10V_GEN4
+                } else if (model.indexOf("1-10V") >= 0 || model.indexOf("S1-10V") >= 0) {
+                    device.displayName = "Shelly Dimmer 1-10V Gen4";
+                    device.specificType = 61; // DIMMER_SHELLY_DIMMER_1_10V_GEN4
+                } else {
+                    device.displayName = "Shelly Dimmer Gen4";
+                    device.specificType = 62; // DIMMER_SHELLY_DIMMER_GEN4
+                }
+                device.category = CATEGORY_DIMMER;
+                device.supportsDimming = true;
+                device.maxChannels = 1;
+            }
+            // GEN4 SHUTTERS
+            else if (isGen4 && (app.indexOf("Cover") >= 0 || app.indexOf("Shutter") >= 0 || app.indexOf("Roller") >= 0)) {
+                device.displayName = "Shelly Shutter Gen4";
+                device.category = CATEGORY_SHUTTER;
+                device.specificType = 204; // SHUTTER_SHELLY_GEN4
+                device.supportsShutter = true;
+                device.maxChannels = 1;
+            }
+            
+            // ========================================
+            // GEN3 DIMMERS
+            // ========================================
             // Shelly Dimmer 2 Gen3 (SNSW-001P16EU)
             if (model.indexOf("SNSW-001P16EU") >= 0 || (app.indexOf("Dimmer") >= 0 && model.indexOf("Gen3") >= 0)) {
                 device.displayName = "Shelly Dimmer 2 Gen3";

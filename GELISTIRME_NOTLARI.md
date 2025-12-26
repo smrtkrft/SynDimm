@@ -338,9 +338,9 @@ void scanNetworkSafe() {
 
 - ESP32 RAM sınırı: 320KB (SRAM)
 - Maximum eşzamanlı HTTP bağlantısı: ~5-10 (bellek bağımlı)
-- Encoder uzun basma süresi: 1000ms (ayarlanabilir)
-- EEPROM alanı Safe Mode için: 2048+ offset
-- Preferences alanı WiFi/config için: NVS
+- Encoder uzun basma süresi: 3000ms (mod seçimi), 20000ms (factory reset)
+- NVS (Preferences): Tüm ayarlar için (WiFi, Dimmer, Shutter, Safe, vb.)
+- LittleFS: Safe Mode API config'leri için (sınırsız JSON)
 
 ---
 
