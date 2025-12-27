@@ -247,7 +247,7 @@ private:
   uint8_t teachBufferCount;                         // Öğretilen hareket sayısı
   bool teachingRequiresButton;                      // Teaching B ile mi bitti?
   String lastCompletedPattern;                      // Son tamamlanan pattern
-  static const unsigned long TEACHING_TIMEOUT = 15000; // 15 saniye timeout
+  static const unsigned long TEACHING_TIMEOUT = 20000; // 20 saniye timeout
   
   // Callback fonksiyonları
   void (*onPasswordMatchCallback)(uint8_t passwordIndex);
@@ -795,22 +795,20 @@ public:
     uint8_t index = teachingPasswordIndex;
     
     // Minimum adım kontrolü
-    if (teachBufferCount < SAFE_MIN_PASSWORD_STEPS - (teachingRequiresButton ? 1 : 0)) {
+    if (teachBufferCount < SAFE_MIN_PASSWORD_STEPS) {
       cancelTeaching("too_short");
       return;
     }
     
-    // Şifre string'i oluştur
+    // Şifre string'i oluştur (B için ticks ekleme)
     String pattern = "";
     for (uint8_t i = 0; i < teachBufferCount; i++) {
       if (i > 0) pattern += "-";
       pattern += String(teachBuffer[i].direction);
-      pattern += String(teachBuffer[i].ticks);
-    }
-    
-    // Eğer butonla tamamlandıysa B ekle
-    if (teachingRequiresButton) {
-      pattern += "-B";
+      // B (buton) için ticks ekleme, sadece L ve R için ekle
+      if (teachBuffer[i].direction != 'B') {
+        pattern += String(teachBuffer[i].ticks);
+      }
     }
     
     DEBUG_PRINTF("[SafeLock] Teaching complete: %s\n", pattern.c_str());
@@ -858,15 +856,6 @@ public:
       return false;
     }
     
-    // Pattern'de B var mı kontrol et
-    teachingRequiresButton = false;
-    for (uint8_t i = 0; i < teachBufferCount; i++) {
-      if (teachBuffer[i].direction == 'B') {
-        teachingRequiresButton = true;
-        break;
-      }
-    }
-    
     completeTeaching();
     return true;
   }
@@ -886,7 +875,10 @@ public:
     for (uint8_t i = 0; i < teachBufferCount; i++) {
       if (i > 0) pattern += "-";
       pattern += String(teachBuffer[i].direction);
-      pattern += String(teachBuffer[i].ticks);
+      // B (buton) için ticks ekleme, sadece L ve R için ekle
+      if (teachBuffer[i].direction != 'B') {
+        pattern += String(teachBuffer[i].ticks);
+      }
     }
     
     // Devam eden hareket varsa onu da göster

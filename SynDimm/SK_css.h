@@ -123,8 +123,7 @@ body.light-theme #mode-config-accordion:hover { border-color: rgba(0, 0, 0, 0.3)
 /* Light Theme - Info Tooltips */
 body.light-theme .info-tooltip-i { background: rgba(0, 0, 0, 0.05); border-color: var(--border-color); color: var(--text-muted); }
 body.light-theme .info-tooltip-i:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
-body.light-theme .info-tooltip-i .tooltip-content { background: rgba(255, 255, 255, 0.95); border-color: var(--border-color); color: var(--text-secondary); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25); }
-body.light-theme .info-tooltip-i .tooltip-content::after { border-top-color: rgba(255, 255, 255, 0.95); }
+body.light-theme .info-tooltip-i .tooltip-content { background: rgba(255, 255, 255, 0.98); border-color: var(--border-color); color: #333; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.3); }
 
 /* Light Theme - Dimmer Section */
 body.light-theme .dimmer-status-card { background: var(--bg-card); border-color: var(--border-color); }
@@ -336,28 +335,29 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .mode-btn:hover { border-color: var(--border-light); background: var(--hover-bg); transform: translateY(-2px); }
 .mode-btn.active { background: var(--hover-bg); border-color: var(--text-primary); }
 .mode-btn-text { font-size: 1.1em; font-weight: 600; letter-spacing: 0.5px; }
+.mode-btn .info-tooltip-i.mode-info { position: absolute; top: 8px; right: 8px; width: 16px; height: 16px; font-size: 10px; margin-left: 0; }
 
 /* Info Tooltip Styles - Test Variants */
 /* Variant 1: Circle with "i" (italik) */
-.info-tooltip-i { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; background: rgba(255, 255, 255, 0.1); border: 1px solid var(--border-light); border-radius: 50%; font-size: 12px; font-style: italic; font-weight: 600; color: var(--text-muted); cursor: help; margin-left: 8px; transition: var(--transition-fast); }
+.info-tooltip-i { position: static; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; background: rgba(255, 255, 255, 0.1); border: 1px solid var(--border-light); border-radius: 50%; font-size: 12px; font-style: italic; font-weight: 600; color: var(--text-muted); cursor: help; margin-left: 8px; transition: var(--transition-fast); }
 .info-tooltip-i:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
-.info-tooltip-i .tooltip-content { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); min-width: 220px; max-width: 320px; padding: 14px 18px; background: rgba(30, 30, 35, 0.95); border: 1px solid var(--border-light); border-radius: 8px; font-size: 1.1em; font-style: normal; font-weight: 400; color: var(--text-secondary); line-height: 1.6; visibility: hidden; opacity: 0; transition: var(--transition-fast); z-index: 99999; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); text-align: left; }
-.info-tooltip-i .tooltip-content::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: rgba(30, 30, 35, 0.95); }
+.info-tooltip-i .tooltip-content { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); min-width: 280px; max-width: 380px; padding: 18px 22px; background: rgba(15, 15, 20, 0.98); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; font-size: 14px; font-style: normal; font-weight: 400; color: #f0f0f0; line-height: 1.7; visibility: hidden; opacity: 0; transition: opacity 0.2s ease; z-index: 999999; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7); text-align: left; pointer-events: none; }
 .info-tooltip-i:hover .tooltip-content { visibility: visible; opacity: 1; }
 
 /* Variant 2: Circle with "?" */
-.info-tooltip-q { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; background: rgba(59, 130, 246, 0.15); border: 1px solid var(--color-info-border); border-radius: 50%; font-size: 12px; font-weight: 700; color: var(--color-info); cursor: help; margin-left: 8px; transition: var(--transition-fast); }
+.info-tooltip-q { position: static; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; background: rgba(59, 130, 246, 0.15); border: 1px solid var(--color-info-border); border-radius: 50%; font-size: 12px; font-weight: 700; color: var(--color-info); cursor: help; margin-left: 8px; transition: var(--transition-fast); }
 .info-tooltip-q:hover { background: var(--color-info); color: #fff; }
-.info-tooltip-q .tooltip-content { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); min-width: 220px; max-width: 320px; padding: 14px 18px; background: var(--bg-card); border: 1px solid var(--color-info-border); border-radius: 8px; font-size: 1.1em; font-weight: 400; color: var(--text-secondary); line-height: 1.6; visibility: hidden; opacity: 0; transition: var(--transition-fast); z-index: 1000; box-shadow: 0 4px 20px rgba(59, 130, 246, 0.2); text-align: left; }
-.info-tooltip-q .tooltip-content::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--color-info-border); }
+.info-tooltip-q .tooltip-content { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); min-width: 280px; max-width: 380px; padding: 18px 22px; background: rgba(15, 15, 20, 0.98); border: 1px solid var(--color-info-border); border-radius: 10px; font-size: 14px; font-weight: 400; color: #f0f0f0; line-height: 1.7; visibility: hidden; opacity: 0; transition: opacity 0.2s ease; z-index: 999999; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7); text-align: left; pointer-events: none; }
 .info-tooltip-q:hover .tooltip-content { visibility: visible; opacity: 1; }
 
 /* Variant 3: Asterisk (*) */
-.info-tooltip-ast { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 14px; font-weight: 700; color: var(--color-warning); cursor: help; margin-left: 6px; transition: var(--transition-fast); }
+.info-tooltip-ast { position: static; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 14px; font-weight: 700; color: var(--color-warning); cursor: help; margin-left: 6px; transition: var(--transition-fast); }
 .info-tooltip-ast:hover { color: var(--color-warning-dark); transform: scale(1.2); }
-.info-tooltip-ast .tooltip-content { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); min-width: 220px; max-width: 320px; padding: 14px 18px; background: var(--bg-card); border: 1px solid var(--color-warning); border-radius: 8px; font-size: 1.1em; font-weight: 400; color: var(--text-secondary); line-height: 1.6; visibility: hidden; opacity: 0; transition: var(--transition-fast); z-index: 1000; box-shadow: 0 4px 20px rgba(251, 191, 36, 0.2); text-align: left; }
-.info-tooltip-ast .tooltip-content::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--color-warning); }
+.info-tooltip-ast .tooltip-content { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); min-width: 280px; max-width: 380px; padding: 18px 22px; background: rgba(15, 15, 20, 0.98); border: 1px solid var(--color-warning); border-radius: 10px; font-size: 14px; font-weight: 400; color: #f0f0f0; line-height: 1.7; visibility: hidden; opacity: 0; transition: opacity 0.2s ease; z-index: 999999; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7); text-align: left; pointer-events: none; }
 .info-tooltip-ast:hover .tooltip-content { visibility: visible; opacity: 1; }
+
+/* Tooltip button context */
+button .info-tooltip-i { margin-left: 6px; width: 14px; height: 14px; font-size: 10px; vertical-align: middle; }
 
 /* Variant 4: Inline hint text (for theme/language) */
 .info-hint-inline { display: block; font-size: 1.1em; color: var(--text-muted); margin-top: 8px; font-style: italic; }
@@ -932,6 +932,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .shutter-inline-form input::placeholder { color: rgba(255, 255, 255, 0.3); }
 .shutter-warning { padding: 12px 16px; border-radius: 6px; font-size: 0.85em; line-height: 1.5; margin-top: 15px; background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.4); color: rgb(251, 191, 36); }
 .shutter-warning .warning-icon { margin-right: 8px; }
+
+/* ========================================
+   SAFE HERO DISPLAY
+   ======================================== */
+.safe-hero { text-align: center; padding: 30px 20px; background: radial-gradient(ellipse at center, rgba(16, 185, 129, 0.15) 0%, transparent 70%); border-radius: 8px; margin-bottom: 20px; }
+.safe-hero-icon { color: rgb(16, 185, 129); margin-bottom: 10px; }
+.safe-hero-icon svg { stroke: currentColor; }
+.safe-hero-title { font-size: 2em; font-weight: 600; color: #fff; line-height: 1; margin-bottom: 5px; }
+.safe-hero-subtitle { font-size: 0.9em; color: rgba(255, 255, 255, 0.5); }
+body.light-theme .safe-hero { background: radial-gradient(ellipse at center, rgba(16, 185, 129, 0.1) 0%, transparent 70%); }
+body.light-theme .safe-hero-title { color: var(--text-primary); }
+body.light-theme .safe-hero-subtitle { color: var(--text-muted); }
 
 /* Shutter Status Bar (legacy - can be removed later) */
 .shutter-status-bar { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 20px 25px; margin-bottom: 25px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }

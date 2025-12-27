@@ -87,11 +87,45 @@ private:
         prefs.end();
     }
     
+    // Helper function to send PROGMEM data in chunks
+    void sendProgmemChunked(const char* progmemData) {
+        size_t len = strlen_P(progmemData);
+        size_t chunkSize = 512;
+        char buffer[513];
+        
+        for (size_t i = 0; i < len; i += chunkSize) {
+            if (!server->client().connected()) break;
+            size_t remaining = len - i;
+            size_t size = (remaining < chunkSize) ? remaining : chunkSize;
+            memcpy_P(buffer, progmemData + i, size);
+            buffer[size] = '\0';
+            server->sendContent(buffer);
+            yield();
+        }
+    }
+    
     // ========== HANDLER FUNCTIONS ==========
     void handleRoot() {
         if (httpRequestCallback) httpRequestCallback();
-        String html = generateHTML(chipID, VERSION);
-        server->send(200, "text/html", html);
+        
+        // Calculate total content length
+        size_t totalLen = strlen_P(SK_HTML_PART1) + chipID.length() + 
+                          strlen_P(SK_HTML_PART2) + strlen(VERSION) + 
+                          strlen_P(SK_HTML_PART3);
+        
+        // Send headers
+        server->sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        server->sendHeader("Pragma", "no-cache");
+        server->sendHeader("Expires", "0");
+        server->setContentLength(totalLen);
+        server->send(200, "text/html", "");
+        
+        // Send HTML in parts from PROGMEM
+        sendProgmemChunked(SK_HTML_PART1);
+        server->sendContent(chipID);
+        sendProgmemChunked(SK_HTML_PART2);
+        server->sendContent(VERSION);
+        sendProgmemChunked(SK_HTML_PART3);
     }
     
     void handleCSS() {

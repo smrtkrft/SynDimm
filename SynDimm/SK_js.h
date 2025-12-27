@@ -445,14 +445,21 @@ function loadSavedSettings() {
 }
 
 function updateQuickConnectionBadges(d) {
-    const updateBadge = (id, configured) => {
+    const updateBadge = (id, configured, connected) => {
         const el = $(id);
         if(!el) return;
-        el.textContent = configured ? t('connection.configured') : t('common.not_configured');
-        el.className = 'badge badge-' + (configured ? 'passive' : 'not-configured');
+        el.textContent = connected ? t('connection.connected') : configured ? t('connection.configured') : t('common.not_configured');
+        el.className = 'badge badge-' + (connected ? 'connected' : configured ? 'passive' : 'not-configured');
     };
-    updateBadge('quick-primary-badge', d.primary && d.primary.ssid);
-    updateBadge('quick-backup-badge', d.backup && d.backup.ssid);
+    // Get connection status
+    api('/getStatus').then(status => {
+        const connectedTo = status.connectedTo || '';
+        updateBadge('quick-primary-badge', d.primary && d.primary.ssid, connectedTo === 'primary');
+        updateBadge('quick-backup-badge', d.backup && d.backup.ssid, connectedTo === 'backup');
+    }).catch(() => {
+        updateBadge('quick-primary-badge', d.primary && d.primary.ssid, false);
+        updateBadge('quick-backup-badge', d.backup && d.backup.ssid, false);
+    });
 }
 
 // === TABS & ACCORDION ===
@@ -560,7 +567,7 @@ function testSafeApi(idx) {
 let teachingInterval = null;
 let teachingStartTime = 0;
 let teachingIndex = -1;
-const TEACHING_TIMEOUT = 15000;
+const TEACHING_TIMEOUT = 20000;
 
 function startTeachPassword(idx) {
     showNotification(t('safe.teaching_starting'), 'info');
@@ -633,9 +640,10 @@ function startTeachingPolling(idx) {
         
         // Timeout check
         if(remaining <= 0) {
-            hideTeachingOverlay(idx);
             stopTeachingPolling();
+            hideTeachingOverlay(idx);
             showNotification(t('safe.teaching_timeout'), 'warning');
+            loadSafePasswords(); // Reload passwords to refresh UI state
             return;
         }
         
@@ -648,14 +656,15 @@ function startTeachingPolling(idx) {
                 
                 // Teaching completed (server stopped teaching)
                 if(!data.teaching && teachingIndex === idx) {
-                    hideTeachingOverlay(idx);
                     stopTeachingPolling();
+                    hideTeachingOverlay(idx);
                     if(data.pattern && data.pattern.length > 0) {
                         // Put pattern in input field
                         const pwdInput = $('quick-safe-pwd-' + idx);
                         if(pwdInput) pwdInput.value = data.pattern;
                         showNotification(t('safe.teaching_complete') + ': ' + data.pattern, 'success');
                     }
+                    loadSafePasswords(); // Reload passwords to refresh UI state
                 }
             })
             .catch(() => {});

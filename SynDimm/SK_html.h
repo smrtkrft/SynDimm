@@ -20,9 +20,8 @@
 #include "SK_css.h"
 #include "SK_js.h"
 
-// Generate complete HTML page
-String generateHTML(String chipID, String version) {
-    String html = R"rawliteral(<!DOCTYPE html>
+// HTML Part 1 - Before ChipID placeholder
+const char SK_HTML_PART1[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
@@ -38,17 +37,15 @@ String generateHTML(String chipID, String version) {
                 <div class="info-single">
                     <span class="info-label">ID:</span>
                     <span class="info-value">)rawliteral";
-    
-    html += chipID;
-    
-    html += R"rawliteral(</span>
+
+// HTML Part 2 - Between ChipID and Version
+const char SK_HTML_PART2[] PROGMEM = R"rawliteral(</span>
                     <span class="info-separator">-</span>
                     <span class="info-label">Version:</span>
                     <span class="info-value">)rawliteral";
-    
-    html += version;
-    
-    html += R"rawliteral(</span>
+
+// HTML Part 3 - After Version (rest of HTML)
+const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                 </div>
                 <div class="info-single">
                     <span class="info-label" data-lang="connection.mode">Mode:</span>
@@ -87,12 +84,15 @@ String generateHTML(String chipID, String version) {
                 <div class="mode-buttons">
                     <button class="mode-btn" id="mode-btn-dimmer" onclick="selectMode('DIMMER')">
                         <span class="mode-btn-text">DIMMER</span>
+                        <span class="info-tooltip-i mode-info">i<span class="tooltip-content" data-lang="tooltip.dimmer_mode_info">Controls lighting brightness with encoder rotation.</span></span>
                     </button>
                     <button class="mode-btn" id="mode-btn-shutter" onclick="selectMode('SHUTTER')">
                         <span class="mode-btn-text">SHUTTER</span>
+                        <span class="info-tooltip-i mode-info">i<span class="tooltip-content" data-lang="tooltip.shutter_mode_info">Controls roller shutter position with encoder.</span></span>
                     </button>
                     <button class="mode-btn" id="mode-btn-safe" onclick="selectMode('SAFE')">
                         <span class="mode-btn-text">SAFE</span>
+                        <span class="info-tooltip-i mode-info">i<span class="tooltip-content" data-lang="tooltip.safe_mode_info">Trigger API calls with password sequences.</span></span>
                     </button>
                 </div>
                 
@@ -120,7 +120,10 @@ String generateHTML(String chipID, String version) {
                                     <button class="dimmer-cal-btn" id="cal-btn-minus" onclick="adjustCalibration(-1)" disabled>−</button>
                                     <div class="dimmer-cal-center">
                                         <div class="dimmer-cal-value" id="dimmer-cal-value">-</div>
-                                        <div class="dimmer-cal-label" data-lang="dimmer.sensitivity">Sensitivity</div>
+                                        <div class="dimmer-cal-label">
+                                            <span data-lang="dimmer.sensitivity">Sensitivity</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.sensitivity_info">Brightness change per encoder step (1-5).</span></span>
+                                        </div>
                                     </div>
                                     <button class="dimmer-cal-btn" id="cal-btn-plus" onclick="adjustCalibration(1)" disabled>+</button>
                                 </div>
@@ -128,11 +131,17 @@ String generateHTML(String chipID, String version) {
                             
                             <!-- Connection Section -->
                             <div class="dimmer-compact-form">
-                                <div class="section-title" data-lang="dimmer.device_connection">Device Connection</div>
+                                <div class="section-title">
+                                    <span data-lang="dimmer.device_connection">Device Connection</span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.dimmer_device_connection">Search and connect to dimmer devices on your local network.</span></span>
+                                </div>
                                 <div class="dimmer-inline-form">
                                     <input type="text" id="quick-dimmer-ip-input" placeholder="IP Adresi">
                                     <button class="btn btn-primary" onclick="connectDimmerFromQuick()" data-lang="common.connect">Connect</button>
-                                    <button class="btn btn-secondary" onclick="startNetworkScan()" data-lang="dimmer.scan">Scan</button>
+                                    <button class="btn btn-secondary" onclick="startNetworkScan()">
+                                        <span data-lang="dimmer.scan">Scan</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.scan_network">Scan local network for compatible smart devices.</span></span>
+                                    </button>
                                 </div>
                                 <div class="saved-devices-list" id="quick-saved-devices-list">
                                     <div class="saved-device-empty" data-lang="dimmer.no_devices">No saved devices yet.</div>
@@ -155,7 +164,10 @@ String generateHTML(String chipID, String version) {
                                     <button class="shutter-cal-btn" id="shutter-cal-btn-minus" onclick="adjustShutterStep(-1)" disabled>−</button>
                                     <div class="shutter-cal-center">
                                         <div class="shutter-cal-value" id="shutter-cal-value">-</div>
-                                        <div class="shutter-cal-label" data-lang="dimmer.sensitivity">Sensitivity</div>
+                                        <div class="shutter-cal-label">
+                                            <span data-lang="dimmer.sensitivity">Sensitivity</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.sensitivity_info">Position change per encoder step (1-5).</span></span>
+                                        </div>
                                     </div>
                                     <button class="shutter-cal-btn" id="shutter-cal-btn-plus" onclick="adjustShutterStep(1)" disabled>+</button>
                                 </div>
@@ -163,11 +175,17 @@ String generateHTML(String chipID, String version) {
                             
                             <!-- Connection Section -->
                             <div class="shutter-compact-form">
-                                <div class="section-title" data-lang="shutter.device_connection">Device Connection</div>
+                                <div class="section-title">
+                                    <span data-lang="shutter.device_connection">Device Connection</span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.shutter_device_connection">Search and connect to shutter devices on your local network.</span></span>
+                                </div>
                                 <div class="shutter-inline-form">
                                     <input type="text" id="quick-shutter-ip-input" placeholder="IP Adresi">
                                     <button class="btn btn-primary" onclick="connectShutterFromQuick()" data-lang="common.connect">Connect</button>
-                                    <button class="btn btn-secondary" onclick="startShutterNetworkScan()" data-lang="shutter.scan">Scan</button>
+                                    <button class="btn btn-secondary" onclick="startShutterNetworkScan()">
+                                        <span data-lang="shutter.scan">Scan</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.scan_network">Scan local network for compatible smart devices.</span></span>
+                                    </button>
                                 </div>
                                 <div class="saved-devices-list" id="shutter-saved-devices-list">
                                     <div class="saved-device-empty" data-lang="shutter.no_devices">No saved devices yet.</div>
@@ -181,9 +199,17 @@ String generateHTML(String chipID, String version) {
                         
                         <!-- SAFE Yapılandırması -->
                         <div class="mode-config-panel" id="config-panel-safe" style="display: none;">
-                            <!-- Safe Mod Açıklama -->
-                            <div class="mode-info-text" data-lang="safe.description">
-                                Password entry is done with encoder movements. You can define an API endpoint for each password.
+                            <!-- Safe Hero Display -->
+                            <div class="safe-hero" id="safe-hero">
+                                <div class="safe-hero-icon">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                        <circle cx="12" cy="16" r="1"></circle>
+                                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                    </svg>
+                                </div>
+                                <div class="safe-hero-title" data-lang="safe.title">SAFE</div>
+                                <div class="safe-hero-subtitle" data-lang="tooltip.safe_hero_subtitle">Password protected API trigger</div>
                             </div>
                             
                             <!-- Şifre Tab'ları -->
@@ -203,15 +229,22 @@ String generateHTML(String chipID, String version) {
                                         <span class="toggle-slider"></span>
                                     </label>
                                     <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.enable_password_info">Temporarily disable password without deleting settings.</span></span>
                                     <span id="quick-safe-api-0-status" class="api-status-badge"></span>
                                 </div>
                                 <div class="safe-config-section">
                                     <div class="form-group">
-                                        <label data-lang="safe.password_label">Password</label>
+                                        <label>
+                                            <span data-lang="safe.password_label">Password</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.password_format_info">Format: L3-R2-B (L=Left, R=Right, number=ticks, B=Button)</span></span>
+                                        </label>
                                         <input type="text" id="quick-safe-pwd-0" placeholder="L3-R2-L1-R3">
                                     </div>
                                     <details class="api-details">
-                                        <summary data-lang="safe.api_settings">API Settings</summary>
+                                        <summary>
+                                            <span data-lang="safe.api_settings">API Settings</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.api_settings_info">See GitHub documentation for detailed API configuration guide.</span></span>
+                                        </summary>
                                         <div class="form-group">
                                             <label data-lang="safe.api_url">URL</label>
                                             <input type="text" id="quick-safe-api-0-url" placeholder="http://192.168.1.100/api/action">
@@ -247,8 +280,14 @@ String generateHTML(String chipID, String version) {
                                 </div>
                                 <div class="form-actions">
                                     <button class="btn-save" onclick="saveSafePassword(0)" data-lang="safe.save_password">Save</button>
-                                    <button class="btn-teach" onclick="startTeachPassword(0)" data-lang="safe.teach_password">Teach</button>
-                                    <button class="btn-test" onclick="testSafeApi(0)" data-lang="safe.test_api">Test API</button>
+                                    <button class="btn-teach" onclick="startTeachPassword(0)">
+                                        <span data-lang="safe.teach_password">Teach</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.teach_password_info">Create password by rotating encoder. Press button to add B step.</span></span>
+                                    </button>
+                                    <button class="btn-test" onclick="testSafeApi(0)">
+                                        <span data-lang="safe.test_api">Test API</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.test_api_info">Test API call without entering password.</span></span>
+                                    </button>
                                 </div>
                                 <div class="teaching-overlay" id="teaching-overlay-0" style="display:none;">
                                     <div class="teaching-content">
@@ -272,15 +311,22 @@ String generateHTML(String chipID, String version) {
                                         <span class="toggle-slider"></span>
                                     </label>
                                     <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.enable_password_info">Temporarily disable password without deleting settings.</span></span>
                                     <span id="quick-safe-api-1-status" class="api-status-badge"></span>
                                 </div>
                                 <div class="safe-config-section">
                                     <div class="form-group">
-                                        <label data-lang="safe.password_label">Password</label>
+                                        <label>
+                                            <span data-lang="safe.password_label">Password</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.password_format_info">Format: L3-R2-B (L=Left, R=Right, number=ticks, B=Button)</span></span>
+                                        </label>
                                         <input type="text" id="quick-safe-pwd-1" placeholder="L3-R2-L1-R3">
                                     </div>
                                     <details class="api-details">
-                                        <summary data-lang="safe.api_settings">API Settings</summary>
+                                        <summary>
+                                            <span data-lang="safe.api_settings">API Settings</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.api_settings_info">See GitHub documentation for detailed API configuration guide.</span></span>
+                                        </summary>
                                         <div class="form-group">
                                             <label data-lang="safe.api_url">URL</label>
                                             <input type="text" id="quick-safe-api-1-url" placeholder="http://192.168.1.100/api/action">
@@ -316,8 +362,14 @@ String generateHTML(String chipID, String version) {
                                 </div>
                                 <div class="form-actions">
                                     <button class="btn-save" onclick="saveSafePassword(1)" data-lang="safe.save_password">Save</button>
-                                    <button class="btn-teach" onclick="startTeachPassword(1)" data-lang="safe.teach_password">Teach</button>
-                                    <button class="btn-test" onclick="testSafeApi(1)" data-lang="safe.test_api">Test API</button>
+                                    <button class="btn-teach" onclick="startTeachPassword(1)">
+                                        <span data-lang="safe.teach_password">Teach</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.teach_password_info">Create password by rotating encoder. Press button to add B step.</span></span>
+                                    </button>
+                                    <button class="btn-test" onclick="testSafeApi(1)">
+                                        <span data-lang="safe.test_api">Test API</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.test_api_info">Test API call without entering password.</span></span>
+                                    </button>
                                 </div>
                                 <div class="teaching-overlay" id="teaching-overlay-1" style="display:none;">
                                     <div class="teaching-content">
@@ -341,15 +393,22 @@ String generateHTML(String chipID, String version) {
                                         <span class="toggle-slider"></span>
                                     </label>
                                     <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.enable_password_info">Temporarily disable password without deleting settings.</span></span>
                                     <span id="quick-safe-api-2-status" class="api-status-badge"></span>
                                 </div>
                                 <div class="safe-config-section">
                                     <div class="form-group">
-                                        <label data-lang="safe.password_label">Password</label>
+                                        <label>
+                                            <span data-lang="safe.password_label">Password</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.password_format_info">Format: L3-R2-B (L=Left, R=Right, number=ticks, B=Button)</span></span>
+                                        </label>
                                         <input type="text" id="quick-safe-pwd-2" placeholder="L3-R2-L1-R3">
                                     </div>
                                     <details class="api-details">
-                                        <summary data-lang="safe.api_settings">API Settings</summary>
+                                        <summary>
+                                            <span data-lang="safe.api_settings">API Settings</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.api_settings_info">See GitHub documentation for detailed API configuration guide.</span></span>
+                                        </summary>
                                         <div class="form-group">
                                             <label data-lang="safe.api_url">URL</label>
                                             <input type="text" id="quick-safe-api-2-url" placeholder="http://192.168.1.100/api/action">
@@ -385,8 +444,14 @@ String generateHTML(String chipID, String version) {
                                 </div>
                                 <div class="form-actions">
                                     <button class="btn-save" onclick="saveSafePassword(2)" data-lang="safe.save_password">Save</button>
-                                    <button class="btn-teach" onclick="startTeachPassword(2)" data-lang="safe.teach_password">Teach</button>
-                                    <button class="btn-test" onclick="testSafeApi(2)" data-lang="safe.test_api">Test API</button>
+                                    <button class="btn-teach" onclick="startTeachPassword(2)">
+                                        <span data-lang="safe.teach_password">Teach</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.teach_password_info">Create password by rotating encoder. Press button to add B step.</span></span>
+                                    </button>
+                                    <button class="btn-test" onclick="testSafeApi(2)">
+                                        <span data-lang="safe.test_api">Test API</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.test_api_info">Test API call without entering password.</span></span>
+                                    </button>
                                 </div>
                                 <div class="teaching-overlay" id="teaching-overlay-2" style="display:none;">
                                     <div class="teaching-content">
@@ -410,15 +475,22 @@ String generateHTML(String chipID, String version) {
                                         <span class="toggle-slider"></span>
                                     </label>
                                     <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.enable_password_info">Temporarily disable password without deleting settings.</span></span>
                                     <span id="quick-safe-api-3-status" class="api-status-badge"></span>
                                 </div>
                                 <div class="safe-config-section">
                                     <div class="form-group">
-                                        <label data-lang="safe.password_label">Password</label>
+                                        <label>
+                                            <span data-lang="safe.password_label">Password</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.password_format_info">Format: L3-R2-B (L=Left, R=Right, number=ticks, B=Button)</span></span>
+                                        </label>
                                         <input type="text" id="quick-safe-pwd-3" placeholder="L3-R2-L1-R3">
                                     </div>
                                     <details class="api-details">
-                                        <summary data-lang="safe.api_settings">API Settings</summary>
+                                        <summary>
+                                            <span data-lang="safe.api_settings">API Settings</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.api_settings_info">See GitHub documentation for detailed API configuration guide.</span></span>
+                                        </summary>
                                         <div class="form-group">
                                             <label data-lang="safe.api_url">URL</label>
                                             <input type="text" id="quick-safe-api-3-url" placeholder="http://192.168.1.100/api/action">
@@ -454,8 +526,14 @@ String generateHTML(String chipID, String version) {
                                 </div>
                                 <div class="form-actions">
                                     <button class="btn-save" onclick="saveSafePassword(3)" data-lang="safe.save_password">Save</button>
-                                    <button class="btn-teach" onclick="startTeachPassword(3)" data-lang="safe.teach_password">Teach</button>
-                                    <button class="btn-test" onclick="testSafeApi(3)" data-lang="safe.test_api">Test API</button>
+                                    <button class="btn-teach" onclick="startTeachPassword(3)">
+                                        <span data-lang="safe.teach_password">Teach</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.teach_password_info">Create password by rotating encoder. Press button to add B step.</span></span>
+                                    </button>
+                                    <button class="btn-test" onclick="testSafeApi(3)">
+                                        <span data-lang="safe.test_api">Test API</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.test_api_info">Test API call without entering password.</span></span>
+                                    </button>
                                 </div>
                                 <div class="teaching-overlay" id="teaching-overlay-3" style="display:none;">
                                     <div class="teaching-content">
@@ -479,15 +557,22 @@ String generateHTML(String chipID, String version) {
                                         <span class="toggle-slider"></span>
                                     </label>
                                     <span class="toggle-label" data-lang="safe.enable_password">Enable Password</span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.enable_password_info">Temporarily disable password without deleting settings.</span></span>
                                     <span id="quick-safe-api-4-status" class="api-status-badge"></span>
                                 </div>
                                 <div class="safe-config-section">
                                     <div class="form-group">
-                                        <label data-lang="safe.password_label">Password</label>
+                                        <label>
+                                            <span data-lang="safe.password_label">Password</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.password_format_info">Format: L3-R2-B (L=Left, R=Right, number=ticks, B=Button)</span></span>
+                                        </label>
                                         <input type="text" id="quick-safe-pwd-4" placeholder="L3-R2-L1-R3">
                                     </div>
                                     <details class="api-details">
-                                        <summary data-lang="safe.api_settings">API Settings</summary>
+                                        <summary>
+                                            <span data-lang="safe.api_settings">API Settings</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.api_settings_info">See GitHub documentation for detailed API configuration guide.</span></span>
+                                        </summary>
                                         <div class="form-group">
                                             <label data-lang="safe.api_url">URL</label>
                                             <input type="text" id="quick-safe-api-4-url" placeholder="http://192.168.1.100/api/action">
@@ -523,8 +608,14 @@ String generateHTML(String chipID, String version) {
                                 </div>
                                 <div class="form-actions">
                                     <button class="btn-save" onclick="saveSafePassword(4)" data-lang="safe.save_password">Save</button>
-                                    <button class="btn-teach" onclick="startTeachPassword(4)" data-lang="safe.teach_password">Teach</button>
-                                    <button class="btn-test" onclick="testSafeApi(4)" data-lang="safe.test_api">Test API</button>
+                                    <button class="btn-teach" onclick="startTeachPassword(4)">
+                                        <span data-lang="safe.teach_password">Teach</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.teach_password_info">Create password by rotating encoder. Press button to add B step.</span></span>
+                                    </button>
+                                    <button class="btn-test" onclick="testSafeApi(4)">
+                                        <span data-lang="safe.test_api">Test API</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.test_api_info">Test API call without entering password.</span></span>
+                                    </button>
                                 </div>
                                 <div class="teaching-overlay" id="teaching-overlay-4" style="display:none;">
                                     <div class="teaching-content">
@@ -551,7 +642,6 @@ String generateHTML(String chipID, String version) {
                 <!-- Cihaz Ayarları Başlığı -->
                 <h2 class="device-settings-title">
                     <span data-lang="quick.device_settings">Device Settings</span>
-                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.device_settings_info">Configure theme, language and network settings for your device.</span></span>
                 </h2>
                 
                 <!-- Tema ve Dil Seçimi -->
@@ -649,22 +739,33 @@ String generateHTML(String chipID, String version) {
                             <div class="form-group">
                                 <div class="form-label-row">
                                     <label data-lang="connection.ssid">SSID</label>
-                                    <button type="button" class="btn-wifi-scan" onclick="openWifiScanModal('quick-primary-ssid')" data-lang="connection.scan">Scan</button>
+                                    <button type="button" class="btn-wifi-scan" onclick="openWifiScanModal('quick-primary-ssid')">
+                                        <span data-lang="connection.scan">Scan</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.wifi_scan_info">Scan for available WiFi networks.</span></span>
+                                    </button>
                                 </div>
                                 <input type="text" id="quick-primary-ssid" data-lang-placeholder="connection.enter_ssid">
                             </div>
                             <div class="form-group">
-                                <label data-lang="connection.password_optional">Password (optional)</label>
+                                <label>
+                                    <span data-lang="connection.password_optional">Password</span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.wifi_password_info">Leave empty for open networks.</span></span>
+                                </label>
                                 <input type="password" id="quick-primary-password" autocomplete="current-password" data-lang-placeholder="connection.leave_empty_open">
                             </div>
                             <div class="form-group">
-                                <label data-lang="connection.static_ip">Static IP (optional)</label>
+                                <label>
+                                    <span data-lang="connection.static_ip">Static IP</span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.static_ip_info">Leave empty for automatic IP (DHCP).</span></span>
+                                </label>
                                 <input type="text" id="quick-primary-static" data-lang-placeholder="connection.leave_empty_dhcp">
                             </div>
                             <div class="form-group">
-                                <label data-lang="connection.local_domain">.local Domain Name (optional)</label>
+                                <label>
+                                    <span data-lang="connection.mdns_domain">.local Domain</span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.mdns_info">Access device as [name].local. Each device needs unique name.</span></span>
+                                </label>
                                 <input type="text" id="quick-primary-mdns" placeholder="e.g: dimm">
-                                <small class="form-hint" data-lang="connection.mdns_hint">Will be accessible as [name].local on the network</small>
                             </div>
                         </div>
                     </div>
@@ -680,22 +781,33 @@ String generateHTML(String chipID, String version) {
                             <div class="form-group">
                                 <div class="form-label-row">
                                     <label data-lang="connection.ssid">SSID</label>
-                                    <button type="button" class="btn-wifi-scan" onclick="openWifiScanModal('quick-backup-ssid')" data-lang="connection.scan">Scan</button>
+                                    <button type="button" class="btn-wifi-scan" onclick="openWifiScanModal('quick-backup-ssid')">
+                                        <span data-lang="connection.scan">Scan</span>
+                                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.wifi_scan_info">Scan for available WiFi networks.</span></span>
+                                    </button>
                                 </div>
                                 <input type="text" id="quick-backup-ssid" data-lang-placeholder="connection.enter_ssid">
                             </div>
                             <div class="form-group">
-                                <label data-lang="connection.password_optional">Password (optional)</label>
+                                <label>
+                                    <span data-lang="connection.password_optional">Password</span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.wifi_password_info">Leave empty for open networks.</span></span>
+                                </label>
                                 <input type="password" id="quick-backup-password" autocomplete="current-password" data-lang-placeholder="connection.leave_empty_open">
                             </div>
                             <div class="form-group">
-                                <label data-lang="connection.static_ip">Static IP (optional)</label>
+                                <label>
+                                    <span data-lang="connection.static_ip">Static IP</span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.static_ip_info">Leave empty for automatic IP (DHCP).</span></span>
+                                </label>
                                 <input type="text" id="quick-backup-static" data-lang-placeholder="connection.leave_empty_dhcp">
                             </div>
                             <div class="form-group">
-                                <label data-lang="connection.local_domain">.local Domain Name (optional)</label>
+                                <label>
+                                    <span data-lang="connection.mdns_domain">.local Domain</span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.mdns_info">Access device as [name].local. Each device needs unique name.</span></span>
+                                </label>
                                 <input type="text" id="quick-backup-mdns" placeholder="e.g: mysyndimm">
-                                <small class="form-hint" data-lang="connection.mdns_hint">Will be accessible as [name].local on the network</small>
                             </div>
                         </div>
                     </div>
@@ -800,8 +912,5 @@ String generateHTML(String chipID, String version) {
     <script src="/script.js"></script>
 </body>
 </html>)rawliteral";
-    
-    return html;
-}
 
 #endif // SK_HTML_H
