@@ -567,12 +567,21 @@ bool connectToShutter(String ip) {
     return true;
 }
 
-// Disconnect Shutter
+// Disconnect Shutter (keeps lastConnectedIP for auto-reconnect)
 void disconnectShutter() {
     DEBUG_PRINTLN("[SHUTTER] Disconnecting...");
     shutterDevice.isConnected = false;
     shutterDevice.status = SHUTTER_DISCONNECTED;
+    // NOT: IP ve lastConnectedIP silinmiyor - otomatik yeniden bağlanma için korunuyor
+    DEBUG_PRINTF("[SHUTTER] Disconnected. Last IP preserved: %s\n", shutterConfig.lastConnectedIP.c_str());
+}
+
+// Clear last connection (only when user explicitly wants to forget device)
+void clearShutterLastConnection() {
+    shutterConfig.lastConnectedIP = "";
     shutterDevice.ip = "";
+    shutterPrefs.putString("last_ip", "");
+    DEBUG_PRINTLN("[SHUTTER] Last connection cleared by user");
 }
 
 // Check Connection Status
@@ -900,28 +909,57 @@ bool toggleShutterDirection() {
 static uint8_t shutterStatusFailCount = 0;
 static const uint8_t SHUTTER_MAX_STATUS_FAILURES = 5;
 
+// Auto-reconnect timing
+static unsigned long lastShutterReconnectAttempt = 0;
+static const unsigned long SHUTTER_RECONNECT_INTERVAL = 5000;  // 5 saniyede bir yeniden bağlanma denemesi
+static uint8_t shutterReconnectAttemptCount = 0;
+static const uint8_t SHUTTER_MAX_RECONNECT_ATTEMPTS = 12;  // 12 deneme = 1 dakika sonra daha seyrek
+static const unsigned long SHUTTER_SLOW_RECONNECT_INTERVAL = 30000;  // 30 saniyede bir (yavaş mod)
+
 // Update Shutter Status Periodically
 void updateShutter() {
-    if (!shutterDevice.isConnected) {
-        return;
+    // Update status (if connected)
+    if (shutterDevice.isConnected) {
+        unsigned long currentTime = millis();
+        if (currentTime - lastShutterStatusUpdate >= SHUTTER_STATUS_UPDATE_INTERVAL) {
+            lastShutterStatusUpdate = currentTime;
+            bool success = getShutterStatus();
+            
+            // Track consecutive failures and auto-disconnect if device unreachable
+            if (!success) {
+                shutterStatusFailCount++;
+                if (shutterStatusFailCount >= SHUTTER_MAX_STATUS_FAILURES) {
+                    DEBUG_PRINTLN("[SHUTTER] Device unreachable - auto disconnecting (will retry)");
+                    disconnectShutter();
+                    shutterStatusFailCount = 0;
+                    shutterReconnectAttemptCount = 0;  // Reset reconnect counter
+                }
+            } else {
+                shutterStatusFailCount = 0;  // Reset on success
+            }
+        }
     }
     
-    // Update status every SHUTTER_STATUS_UPDATE_INTERVAL (1 second)
-    unsigned long currentTime = millis();
-    if (currentTime - lastShutterStatusUpdate >= SHUTTER_STATUS_UPDATE_INTERVAL) {
-        lastShutterStatusUpdate = currentTime;
-        bool success = getShutterStatus();
+    // AUTO-RECONNECT: If not connected but have a saved IP, try to reconnect
+    if (!shutterDevice.isConnected && shutterConfig.lastConnectedIP.length() > 0) {
+        unsigned long currentInterval = (shutterReconnectAttemptCount >= SHUTTER_MAX_RECONNECT_ATTEMPTS) 
+                                        ? SHUTTER_SLOW_RECONNECT_INTERVAL 
+                                        : SHUTTER_RECONNECT_INTERVAL;
         
-        // Track consecutive failures and auto-disconnect if device unreachable
-        if (!success) {
-            shutterStatusFailCount++;
-            if (shutterStatusFailCount >= SHUTTER_MAX_STATUS_FAILURES) {
-                DEBUG_PRINTLN("[SHUTTER] Device unreachable - auto disconnecting");
-                disconnectShutter();
-                shutterStatusFailCount = 0;
+        if (millis() - lastShutterReconnectAttempt > currentInterval) {
+            lastShutterReconnectAttempt = millis();
+            shutterReconnectAttemptCount++;
+            
+            DEBUG_PRINTF("[SHUTTER] Auto-reconnect attempt #%d to %s\n", shutterReconnectAttemptCount, shutterConfig.lastConnectedIP.c_str());
+            
+            if (connectToShutter(shutterConfig.lastConnectedIP)) {
+                DEBUG_PRINTLN("[SHUTTER] Auto-reconnect successful!");
+                shutterReconnectAttemptCount = 0;  // Reset on success
+            } else {
+                if (shutterReconnectAttemptCount >= SHUTTER_MAX_RECONNECT_ATTEMPTS) {
+                    DEBUG_PRINTF("[SHUTTER] Switching to slow reconnect mode (every %lu sec)\n", SHUTTER_SLOW_RECONNECT_INTERVAL / 1000);
+                }
             }
-        } else {
-            shutterStatusFailCount = 0;  // Reset on success
         }
     }
 }

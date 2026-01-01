@@ -16,6 +16,7 @@
 
 #include <Arduino.h>
 #include <Preferences.h>
+#include <functional>
 #include "SK_buzzer.h"
 #include "SK_config.h"
 
@@ -25,12 +26,16 @@ namespace {
     const char* MODE_KEY = "active_mode";
 }
 
+// Mod değişim callback tipi
+typedef std::function<void(SystemMode oldMode, SystemMode newMode)> ModeChangeCallback;
+
 class SKModeManager {
 private:
     SystemMode activeMode;
     SystemMode previewMode;
     bool inModeChangeMode;   // Buton basılı tutularak çevriliyor mu
     SKBuzzer* buzzer;
+    ModeChangeCallback onModeChangeCallback;  // Mod değişim callback'i
     
     const char* getModeNameStr(SystemMode mode) const {
         switch(mode) {
@@ -71,11 +76,17 @@ private:
     }
     
     void activateMode(SystemMode mode) {
+        SystemMode oldMode = activeMode;  // Eski modu kaydet
         activeMode = mode;
         previewMode = mode;
         saveActiveMode();
         if (buzzer) buzzer->playDits(getModeDitCount(mode));
         DEBUG_PRINTF("[ModeManager] Mode activated: %s\n", getModeNameStr(mode));
+        
+        // Callback çağır (eğer tanımlıysa)
+        if (onModeChangeCallback) {
+            onModeChangeCallback(oldMode, mode);
+        }
     }
     
 public:
@@ -84,6 +95,7 @@ public:
         inModeChangeMode = false;
         activeMode = MODE_DIMMER;
         previewMode = activeMode;
+        onModeChangeCallback = nullptr;
     }
     
     void begin() {
@@ -166,6 +178,11 @@ public:
         }
         activateMode(mode);
         return true;
+    }
+    
+    // Mod değişim callback'i ayarla
+    void setModeChangeCallback(ModeChangeCallback callback) {
+        onModeChangeCallback = callback;
     }
     
     // JSON status for web (simplified - mode change is instant via encoder)

@@ -672,13 +672,23 @@ bool connectToDimmer(String ip) {
     return false;
 }
 
-// Disconnect from Dimmer
+// Disconnect from Dimmer (keeps lastConnectedIP for auto-reconnect)
 void disconnectDimmer() {
     dimmerDevice.isConnected = false;
     dimmerDevice.status = DIMMER_IDLE;
-    dimmerDevice.ip = "";
+    // NOT: IP ve lastConnectedIP silinmiyor - otomatik yeniden bağlanma için korunuyor
     dimmerDevice.brightness = 0;
     dimmerDevice.isOn = false;
+    DEBUG_PRINTF("[DIMMER] Disconnected. Last IP preserved: %s\n", lastConnectedIP.c_str());
+}
+
+// Clear last connection (only when user explicitly wants to forget device)
+void clearLastConnection() {
+    lastConnectedIP = "";
+    dimmerDevice.ip = "";
+    dimmerPrefs.putString("last_ip", "");
+    dimmerPrefs.putString("dimmer_ip", "");
+    DEBUG_PRINTLN("[DIMMER] Last connection cleared by user");
 }
 
 // Set Brightness (called by encoder)
@@ -764,8 +774,15 @@ void setDimmerRatio(int ratio) {
 static uint8_t dimmerStatusFailCount = 0;
 static const uint8_t MAX_STATUS_FAILURES = 5;
 
+// Auto-reconnect timing
+static unsigned long lastReconnectAttempt = 0;
+static const unsigned long RECONNECT_INTERVAL = 5000;  // 5 saniyede bir yeniden bağlanma denemesi
+static uint8_t reconnectAttemptCount = 0;
+static const uint8_t MAX_RECONNECT_ATTEMPTS = 12;  // 12 deneme = 1 dakika sonra daha seyrek
+static const unsigned long SLOW_RECONNECT_INTERVAL = 30000;  // 30 saniyede bir (yavaş mod)
+
 void dimmerLoop() {
-    // Auto-update status every 2 seconds
+    // Auto-update status every 2 seconds (if connected)
     if (dimmerDevice.isConnected && (millis() - lastStatusUpdate > DIMMER_STATUS_UPDATE_INTERVAL)) {
         bool success = updateDimmerStatus();
         lastStatusUpdate = millis();
@@ -774,12 +791,36 @@ void dimmerLoop() {
         if (!success) {
             dimmerStatusFailCount++;
             if (dimmerStatusFailCount >= MAX_STATUS_FAILURES) {
-                DEBUG_PRINTLN("[DIMMER] Device unreachable - auto disconnecting");
+                DEBUG_PRINTLN("[DIMMER] Device unreachable - auto disconnecting (will retry)");
                 disconnectDimmer();
                 dimmerStatusFailCount = 0;
+                reconnectAttemptCount = 0;  // Reset reconnect counter
             }
         } else {
             dimmerStatusFailCount = 0;  // Reset on success
+        }
+    }
+    
+    // AUTO-RECONNECT: If not connected but have a saved IP, try to reconnect
+    if (!dimmerDevice.isConnected && lastConnectedIP.length() > 0) {
+        unsigned long currentInterval = (reconnectAttemptCount >= MAX_RECONNECT_ATTEMPTS) 
+                                        ? SLOW_RECONNECT_INTERVAL 
+                                        : RECONNECT_INTERVAL;
+        
+        if (millis() - lastReconnectAttempt > currentInterval) {
+            lastReconnectAttempt = millis();
+            reconnectAttemptCount++;
+            
+            DEBUG_PRINTF("[DIMMER] Auto-reconnect attempt #%d to %s\n", reconnectAttemptCount, lastConnectedIP.c_str());
+            
+            if (connectToDimmer(lastConnectedIP)) {
+                DEBUG_PRINTLN("[DIMMER] Auto-reconnect successful!");
+                reconnectAttemptCount = 0;  // Reset on success
+            } else {
+                if (reconnectAttemptCount >= MAX_RECONNECT_ATTEMPTS) {
+                    DEBUG_PRINTF("[DIMMER] Switching to slow reconnect mode (every %lu sec)\n", SLOW_RECONNECT_INTERVAL / 1000);
+                }
+            }
         }
     }
 }

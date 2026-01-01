@@ -402,8 +402,10 @@ private:
     
     void handleDisconnectDimmer() {
         if (!requirePost()) return;
+        // Kullanıcı manuel olarak disconnect dediğinde, cihazı da unut
+        clearLastConnection();  // lastConnectedIP'yi temizle - otomatik reconnect olmayacak
         disconnectDimmer();
-        sendSuccess("Disconnected");
+        sendSuccess("Disconnected and cleared");
     }
     
     void handleGetDimmerStatus() {
@@ -537,8 +539,10 @@ private:
     
     void handleDisconnectShutter() {
         if (!requirePost()) return;
+        // Kullanıcı manuel olarak disconnect dediğinde, cihazı da unut
+        clearShutterLastConnection();  // lastConnectedIP'yi temizle - otomatik reconnect olmayacak
         disconnectShutter();
-        sendSuccess("Disconnected");
+        sendSuccess("Disconnected and cleared");
     }
     
     void handleScanShutterNetwork() {

@@ -122,6 +122,22 @@ void setup() {
   // Initialize Mode Manager
   modeManager.begin();
   
+  // Mod değişim callback'i - modlar arası geçişte otomatik reconnect
+  modeManager.setModeChangeCallback([](SystemMode oldMode, SystemMode newMode) {
+    DEBUG_PRINTF("[MODE] Mode changed: %d -> %d\\n", (int)oldMode, (int)newMode);
+    
+    // Dimmer moduna geçildiğinde otomatik olarak son cihaza bağlan
+    if (newMode == MODE_DIMMER) {
+      DEBUG_PRINTLN("[MODE] Entering DIMMER mode - triggering auto-reconnect");
+      autoReconnect();
+    }
+    // Shutter moduna geçildiğinde otomatik olarak son cihaza bağlan
+    else if (newMode == MODE_SHUTTER) {
+      DEBUG_PRINTLN("[MODE] Entering SHUTTER mode - triggering auto-reconnect");
+      autoReconnectShutter();
+    }
+  });
+  
   // Initialize WiFi (with network scan and smart connection)
   wifi.begin();
   
