@@ -471,7 +471,8 @@ public:
     file.close();
     
     if (written > 0) {
-      passwords[index].hasApiConfig = config.enabled;
+      // hasApiConfig: dosya kaydedildiyse true (enabled değerine bakılmaksızın)
+      passwords[index].hasApiConfig = true;
       savePasswords();
       DEBUG_PRINTF("[SafeLock] API config kaydedildi: %s (%d byte)\n", path.c_str(), written);
       return true;
@@ -486,8 +487,8 @@ public:
     
     if (index >= SAFE_MAX_PASSWORDS) return config;
     if (!littleFsReady) return config;
-    if (!passwords[index].hasApiConfig) return config;
     
+    // Dosya kontrolü yap (hasApiConfig yerine doğrudan dosya kontrolü)
     String path = getApiConfigPath(index);
     
     if (!LittleFS.exists(path)) {

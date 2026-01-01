@@ -241,6 +241,48 @@ function updateEncoderToggleLabel(enabled) {
     }
 }
 
+// Default Brightness fonksiyonları
+function toggleDefaultBrightness(enabled) {
+    post('/setDefaultBrightness', { enabled: enabled }).then(() => {
+        const container = $('default-brightness-slider-container');
+        if(container) {
+            container.style.display = enabled ? 'flex' : 'none';
+        }
+        showNotification(t('notifications.setting_saved'), 'success');
+    }).catch(() => {
+        const toggle = $('default-brightness-toggle');
+        if(toggle) toggle.checked = !enabled;
+        showNotification(t('notifications.setting_failed'), 'error');
+    });
+}
+
+function updateDefaultBrightnessPreview(value) {
+    const valueDisplay = $('default-brightness-value');
+    if(valueDisplay) {
+        valueDisplay.textContent = value + '%';
+    }
+}
+
+function setDefaultBrightnessValue(value) {
+    post('/setDefaultBrightness', { value: parseInt(value) }).then(() => {
+        showNotification(t('notifications.setting_saved'), 'success');
+    }).catch(() => {
+        showNotification(t('notifications.setting_failed'), 'error');
+    });
+}
+
+function updateDefaultBrightnessUI(enabled, value) {
+    const toggle = $('default-brightness-toggle');
+    const slider = $('default-brightness-slider');
+    const container = $('default-brightness-slider-container');
+    const valueDisplay = $('default-brightness-value');
+    
+    if(toggle) toggle.checked = enabled;
+    if(container) container.style.display = enabled ? 'flex' : 'none';
+    if(slider) slider.value = value;
+    if(valueDisplay) valueDisplay.textContent = value + '%';
+}
+
 function selectMode(mode) { 
     post('/setMode', { mode: mode }).then(() => {
         loadCurrentMode();
@@ -905,6 +947,11 @@ function updateDimmerUI(d) {
         // Disable calibration buttons
         if(calBtnMinus) calBtnMinus.disabled = true;
         if(calBtnPlus) calBtnPlus.disabled = true;
+    }
+    
+    // Update default brightness UI (always, regardless of connection)
+    if(d.defaultBrightnessEnabled !== undefined) {
+        updateDefaultBrightnessUI(d.defaultBrightnessEnabled, d.defaultBrightnessValue || 50);
     }
 }
 function updateCalibrationValue(v) { setText('calibration-value', v); }

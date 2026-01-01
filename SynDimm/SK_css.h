@@ -676,6 +676,18 @@ button .info-tooltip-i { margin-left: 6px; width: 14px; height: 14px; font-size:
     .notification { padding: 15px 40px 15px 15px; }
     .notification-message { font-size: 0.9em; }
     .notification-close { top: 5px; right: 8px; font-size: 1.5em; }
+    /* Default Brightness mobile */
+    .default-brightness-section { margin-top: 12px; padding: 10px 12px; }
+    .default-brightness-toggle-row { gap: 10px; }
+    .default-brightness-toggle-row .toggle-label { font-size: 0.85em; }
+    .default-brightness-slider-container { gap: 10px; margin-top: 10px; padding-top: 10px; }
+    .default-brightness-value { min-width: 40px; font-size: 0.9em; }
+    /* Dimmer hero mobile fine-tune */
+    .dimmer-cal-label { font-size: 0.7em; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .dimmer-cal-label .info-tooltip-i { margin-left: 4px; width: 14px; height: 14px; font-size: 9px; }
+    /* Mode toggle row mobile */
+    .mode-toggle-row { padding: 10px 12px; gap: 10px; }
+    .mode-toggle-row .toggle-label { font-size: 0.85em; }
 }
 
 /* OTA Update Styles */
@@ -1003,10 +1015,24 @@ body.light-theme .safe-hero-subtitle { color: var(--text-muted); }
     .status-col:last-child { border-bottom: none; }
     .status-col-label { font-size: 0.7em; }
     .status-col-value { font-size: 1em; }
-    .dimmer-hero { padding: 30px 20px 25px; }
-    .dimmer-brightness-display { font-size: 3em; }
-    .dimmer-calibration-controls { gap: 15px; max-width: 200px; }
-    .dimmer-cal-btn { width: 40px; height: 40px; font-size: 1.2em; }
+    .dimmer-hero { padding: 25px 15px 20px; }
+    .dimmer-brightness-display { font-size: 2.8em; }
+    .dimmer-calibration-controls { gap: 12px; margin-top: 15px; }
+    .dimmer-cal-btn { width: 38px; height: 38px; font-size: 1.1em; }
+    .dimmer-cal-center { min-width: 60px; }
+    .dimmer-cal-value { font-size: 1.6em; }
+    .dimmer-cal-label { font-size: 0.65em; margin-top: 5px; flex-wrap: wrap; }
+    /* Default brightness 480px */
+    .default-brightness-section { padding: 8px 10px; }
+    .default-brightness-toggle-row .toggle-label { font-size: 0.8em; gap: 5px; }
+    .default-brightness-toggle-row .toggle-label .info-tooltip-i { width: 14px; height: 14px; font-size: 9px; }
+    .default-brightness-slider-container { gap: 8px; }
+    .default-brightness-value { min-width: 35px; font-size: 0.85em; }
+    /* Shutter hero 480px */
+    .shutter-hero { padding: 25px 15px 20px; }
+    .shutter-position-display { font-size: 2.8em; }
+    .shutter-calibration-controls { gap: 12px; margin-top: 15px; }
+    .shutter-cal-btn { width: 38px; height: 38px; font-size: 1.1em; }
 }
 
 /* Calibration Slider */
@@ -1153,6 +1179,22 @@ body.light-theme .safe-hero-subtitle { color: var(--text-muted); }
 
 /* WiFi Scan Empty */
 .wifi-scan-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; color: var(--text-muted); }
+
+/* Default Brightness Section */
+.default-brightness-section { margin-top: 15px; padding: 12px 15px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); }
+.default-brightness-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.default-brightness-toggle-row .toggle-label { display: flex; align-items: center; gap: 8px; font-size: 0.9em; color: var(--text-secondary); font-weight: 400; }
+.default-brightness-slider-container { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light); }
+.default-brightness-slider { flex: 1; height: 6px; -webkit-appearance: none; appearance: none; background: var(--border-color); border-radius: 3px; outline: none; cursor: pointer; }
+.default-brightness-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; background: #10b981; border-radius: 50%; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.default-brightness-slider::-webkit-slider-thumb:hover { transform: scale(1.15); box-shadow: 0 0 8px rgba(16, 185, 129, 0.5); }
+.default-brightness-slider::-moz-range-thumb { width: 18px; height: 18px; background: #10b981; border: none; border-radius: 50%; cursor: pointer; }
+.default-brightness-value { min-width: 45px; text-align: right; font-size: 0.95em; font-weight: 600; color: #10b981; }
+
+/* Light theme overrides for default brightness */
+body.light-theme .default-brightness-section { background: rgba(0, 0, 0, 0.02); border-color: rgba(0, 0, 0, 0.1); }
+body.light-theme .default-brightness-slider { background: rgba(0, 0, 0, 0.1); }
+body.light-theme .default-brightness-slider-container { border-top-color: rgba(0, 0, 0, 0.1); }
 
 )rawliteral";
 

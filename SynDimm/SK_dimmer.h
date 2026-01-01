@@ -148,6 +148,8 @@ struct DimmerConfig {
     int dimmerRatio;        // 1-5 (how much brightness changes per encoder tick)
     bool autoConnect;
     DimmerType deviceType;
+    bool defaultBrightnessEnabled;  // Ön tanımlı parlaklık aktif mi
+    int defaultBrightnessValue;     // Ön tanımlı parlaklık değeri (10-100)
 };
 
 // Anonymous namespace to prevent multiple definition
@@ -211,7 +213,13 @@ void initDimmer() {
     dimmerConfig.dimmerRatio = dimmerPrefs.getInt("dimmer_ratio", DIMMER_DEFAULT_RATIO);
     dimmerConfig.autoConnect = dimmerPrefs.getBool("auto_connect", true);
     dimmerConfig.deviceType = (DimmerType)dimmerPrefs.getInt("device_type", DIMMER_UNKNOWN);
+    dimmerConfig.defaultBrightnessEnabled = dimmerPrefs.getBool("def_bright_en", false);
+    dimmerConfig.defaultBrightnessValue = dimmerPrefs.getInt("def_bright_val", 80);
     lastConnectedIP = dimmerPrefs.getString("last_ip", "");
+    
+    // Default brightness değerini sınırla
+    if (dimmerConfig.defaultBrightnessValue < 10) dimmerConfig.defaultBrightnessValue = 10;
+    if (dimmerConfig.defaultBrightnessValue > 100) dimmerConfig.defaultBrightnessValue = 100;
     
     dimmerDevice.ip = dimmerConfig.savedIP;
     dimmerDevice.brightness = 0;
@@ -220,6 +228,10 @@ void initDimmer() {
     dimmerDevice.status = DIMMER_IDLE;
     dimmerDevice.type = dimmerConfig.deviceType;
     dimmerDevice.lastUpdate = 0;
+    
+    DEBUG_PRINTF("[DIMMER] Default brightness: %s, value: %d%%\n", 
+                 dimmerConfig.defaultBrightnessEnabled ? "enabled" : "disabled",
+                 dimmerConfig.defaultBrightnessValue);
     
     loadSavedDevices();
 }
@@ -744,8 +756,17 @@ bool toggleDimmer() {
     dimmerDevice.status = DIMMER_CONTROLLING;
     bool success = false;
     
+    // Eğer cihaz kapalıysa ve default brightness aktifse, önce default değere set et
+    bool wasOff = !dimmerDevice.isOn;
+    
     if (dimmerDevice.type >= 10 && dimmerDevice.type < 100) {
-        success = toggleShelly();
+        // Default brightness uygula: Cihaz kapalıyken açılıyorsa ve özellik aktifse
+        if (wasOff && dimmerConfig.defaultBrightnessEnabled) {
+            DEBUG_PRINTF("[DIMMER] Applying default brightness: %d%%\n", dimmerConfig.defaultBrightnessValue);
+            success = setShellyBrightness(dimmerConfig.defaultBrightnessValue);
+        } else {
+            success = toggleShelly();
+        }
     } else if (dimmerDevice.type == DIMMER_TASMOTA) {
         // TODO
     } else if (dimmerDevice.type == DIMMER_GENERIC) {
@@ -769,6 +790,30 @@ void setDimmerRatio(int ratio) {
     
     dimmerConfig.dimmerRatio = ratio;
     dimmerPrefs.putInt("dimmer_ratio", ratio);
+}
+
+// Default Brightness Settings
+void setDefaultBrightnessEnabled(bool enabled) {
+    dimmerConfig.defaultBrightnessEnabled = enabled;
+    dimmerPrefs.putBool("def_bright_en", enabled);
+    DEBUG_PRINTF("[DIMMER] Default brightness: %s\n", enabled ? "enabled" : "disabled");
+}
+
+void setDefaultBrightnessValue(int value) {
+    if (value < 10) value = 10;
+    if (value > 100) value = 100;
+    
+    dimmerConfig.defaultBrightnessValue = value;
+    dimmerPrefs.putInt("def_bright_val", value);
+    DEBUG_PRINTF("[DIMMER] Default brightness value: %d%%\n", value);
+}
+
+bool isDefaultBrightnessEnabled() {
+    return dimmerConfig.defaultBrightnessEnabled;
+}
+
+int getDefaultBrightnessValue() {
+    return dimmerConfig.defaultBrightnessValue;
 }
 
 // Dimmer Loop (call in main loop)
@@ -841,6 +886,8 @@ String getDimmerStatusJSON() {
     doc["brightness"] = dimmerDevice.brightness;
     doc["isOn"] = dimmerDevice.isOn;
     doc["ratio"] = dimmerConfig.dimmerRatio;
+    doc["defaultBrightnessEnabled"] = dimmerConfig.defaultBrightnessEnabled;
+    doc["defaultBrightnessValue"] = dimmerConfig.defaultBrightnessValue;
     doc["errorMessage"] = dimmerDevice.errorMessage;
     doc["lastUpdate"] = dimmerDevice.lastUpdate;
     

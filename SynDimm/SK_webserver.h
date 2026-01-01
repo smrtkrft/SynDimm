@@ -672,6 +672,31 @@ private:
         sendSuccess();
     }
     
+    // Default Brightness Settings
+    void handleSetDefaultBrightness() {
+        if (!requirePost()) return;
+        
+        JsonDocument doc;
+        if (!parseJsonBody(doc)) return;
+        
+        // Check if enabling/disabling toggle
+        if (doc.containsKey("enabled")) {
+            bool enabled = doc["enabled"].as<bool>();
+            setDefaultBrightnessEnabled(enabled);
+        }
+        
+        // Check if setting value
+        if (doc.containsKey("value")) {
+            int value = doc["value"].as<int>();
+            // Clamp to valid range
+            if (value < 10) value = 10;
+            if (value > 100) value = 100;
+            setDefaultBrightnessValue(value);
+        }
+        
+        sendSuccess();
+    }
+    
     // Safe Mode Endpoints
     SafeLock* safeLockPtr = nullptr;
     SafeLockAPIHandler* safeApiHandlerPtr = nullptr;
@@ -1019,6 +1044,7 @@ public:
         server->on("/getCurrentMode", HTTP_GET, [this]() { handleGetCurrentMode(); });
         server->on("/setMode", HTTP_POST, [this]() { handleSetMode(); });
         server->on("/setEncoderModeChange", HTTP_POST, [this]() { handleSetEncoderModeChange(); });
+        server->on("/setDefaultBrightness", HTTP_POST, [this]() { handleSetDefaultBrightness(); });
         
         // Safe mode routes
         server->on("/getSafeStatus", HTTP_GET, [this]() { handleGetSafeStatus(); });

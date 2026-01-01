@@ -139,6 +139,24 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                                     </div>
                                     <button class="dimmer-cal-btn" id="cal-btn-plus" onclick="adjustCalibration(1)" disabled>+</button>
                                 </div>
+                                
+                                <!-- Default Brightness Section -->
+                                <div class="default-brightness-section">
+                                    <div class="default-brightness-toggle-row">
+                                        <label class="toggle-label">
+                                            <span data-lang="dimmer.default_brightness">Default Brightness</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.default_brightness">When enabled, the dimmer will start at this brightness level when turned on.</span></span>
+                                        </label>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="default-brightness-toggle" onchange="toggleDefaultBrightness(this.checked)">
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <div class="default-brightness-slider-container" id="default-brightness-slider-container" style="display: none;">
+                                        <input type="range" id="default-brightness-slider" class="default-brightness-slider" min="10" max="100" value="50" oninput="updateDefaultBrightnessPreview(this.value)" onchange="setDefaultBrightnessValue(this.value)">
+                                        <span class="default-brightness-value" id="default-brightness-value">50%</span>
+                                    </div>
+                                </div>
                             </div>
                             
                             <!-- Connection Section -->
