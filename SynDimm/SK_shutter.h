@@ -1,7 +1,7 @@
 /**
  * SK_shutter.h
  * SmartKraft SynDimm - Shutter Control System
- * Version: v1.2.0
+ * Version: v1.1.0
  * 
  * ========================================
  * KRITIK KURAL - ASLA DEĞİŞTİRME!

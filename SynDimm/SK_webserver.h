@@ -1,5 +1,5 @@
 /**
- * SK_webserver.h - Web Server Management v1.2.0
+ * SK_webserver.h - Web Server Management v1.1.0
  * KRITIK: Web arayüzü SADECE ESP32-C6 local erişim içindir!
  */
 
@@ -680,13 +680,13 @@ private:
         if (!parseJsonBody(doc)) return;
         
         // Check if enabling/disabling toggle
-        if (doc.containsKey("enabled")) {
+        if (!doc["enabled"].isNull()) {
             bool enabled = doc["enabled"].as<bool>();
             setDefaultBrightnessEnabled(enabled);
         }
         
         // Check if setting value
-        if (doc.containsKey("value")) {
+        if (!doc["value"].isNull()) {
             int value = doc["value"].as<int>();
             // Clamp to valid range
             if (value < 10) value = 10;

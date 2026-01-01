@@ -1,7 +1,7 @@
 /**
  * SK_lang_en.h
  * SmartKraft SynDimm - English Language Pack
- * Version: v1.2.0
+ * Version: v1.1.0
  */
 
 #ifndef SK_LANG_EN_H
@@ -46,17 +46,18 @@ const char LANG_EN_JSON[] PROGMEM = R"rawliteral({
     "wifi_settings_info": "Configure primary and backup WiFi settings to connect your device to the network. You can also control whether the device creates its own network via Access Point (AP) mode.",
     "version_info": "Check for software updates over the air (OTA).",
     "factory_reset_info": "Resets all settings to factory defaults. This action cannot be undone.",
-    "dimmer_mode_info": "Controls lighting brightness with encoder rotation.",
+    "dimmer_mode_info": "Control lighting brightness by rotating encoder, toggle on/off by pressing.",
     "shutter_mode_info": "Controls roller shutter position with encoder.",
     "safe_mode_info": "Trigger API calls with password sequences.",
     "dimmer_device_connection": "Search and connect to dimmer devices on your local network.",
     "shutter_device_connection": "Search and connect to shutter devices on your local network.",
     "scan_network": "Scan local network for compatible smart devices.",
-    "sensitivity_info": "Low value = precise control (slow changes). High value = fast control (large steps).",
+    "sensitivity_info": "Sets how much brightness changes per encoder tick. 1 = most precise (small steps), 5 = fastest (large steps).",
+    "sensitivity_info_shutter": "Sets how much shutter position changes per encoder tick. 1 = most precise (small steps), 5 = fastest (large steps).",
     "default_brightness": "When enabled, the dimmer will start at this brightness level when turned on.",
     "wifi_scan_info": "Scan for available WiFi networks.",
     "wifi_password_info": "Leave empty for open networks.",
-    "static_ip_info": "Leave empty for automatic IP (DHCP).",
+    "static_ip_info": "Fill in to set a static IP address. Leave empty for automatic IP (DHCP). Example: 192.168.1.100",
     "mdns_info": "Access device by typing [name].local in browser. IMPORTANT: Give each device a different name, same name causes network conflicts!",
     "safe_hero_subtitle": "Password protected API trigger",
     "enable_password_info": "Enable or disable password temporarily without deleting settings.",
@@ -100,6 +101,7 @@ const char LANG_EN_JSON[] PROGMEM = R"rawliteral({
     "no_device_connected": "No device connected",
     "sensitivity": "Sensitivity",
     "default_brightness": "Default Brightness",
+    "ip_placeholder": "IP Address",
     "enter_ip": "Please enter IP!",
     "invalid_ip": "Invalid IP!",
     "calibration_saved": "Calibration saved!",
@@ -110,7 +112,8 @@ const char LANG_EN_JSON[] PROGMEM = R"rawliteral({
     "unknown": "Unknown",
     "shelly_dimmer": "Shelly Dimmer",
     "shelly_dali": "Shelly DALI",
-    "tasmota": "Tasmota"
+    "tasmota": "Tasmota",
+    "usage_guide": "Usage: Rotate encoder to adjust brightness. Press button to toggle light on/off. If default brightness is enabled, light starts at your set level each time it turns on."
   },
   
   "shutter": {
@@ -119,11 +122,11 @@ const char LANG_EN_JSON[] PROGMEM = R"rawliteral({
     "ip_address": "IP ADDRESS",
     "status": "STATUS",
     "position": "POSITION",
-    "encoder_step": "ENCODER STEP",
-    "connected": "Connected",
+    "encoder_step": "ENCODER STEP",    "sensitivity": "Sensitivity",    "connected": "Connected",
     "not_connected": "Not Connected",
     "device_connection": "Device Connection",
     "manual_ip": "Manual IP Entry",
+    "ip_placeholder": "IP Address",
     "connect": "Connect",
     "disconnect": "Disconnect",
     "scan_network": "Scan Network",
@@ -150,7 +153,8 @@ const char LANG_EN_JSON[] PROGMEM = R"rawliteral({
     "device_removed": "Shutter device removed",
     "remove_failed": "Failed to remove device",
     "shelly_25": "Shelly 2.5",
-    "shelly_plus_2pm": "Shelly Plus 2PM"
+    "shelly_plus_2pm": "Shelly Plus 2PM",
+    "usage_guide": "Usage: Rotate encoder right to close shutter (down), left to open (up). If device is not calibrated, encoder rotation is disabled. Button: Stops if moving, if stopped performs full open or close opposite to last movement."
   },
   
   "safe": {
@@ -196,7 +200,8 @@ const char LANG_EN_JSON[] PROGMEM = R"rawliteral({
     "save_failed": "Error: Could not save",
     "testing": "Testing API...",
     "test_success": "API test successful!",
-    "test_failed": "API test failed"
+    "test_failed": "API test failed",
+    "usage_guide": "Usage: Enter your defined password sequence with the encoder. For example, for L3-R2-B password: rotate left 3 times, rotate right 2 times, press button. API triggers automatically when entered correctly."
   },
   
   "alarm": {
@@ -415,7 +420,8 @@ const char LANG_EN_JSON[] PROGMEM = R"rawliteral({
     "active": "Active",
     "automatic": "Automatic",
     "not_configured": "Not Configured",
-    "note": "Note:"
+    "note": "Note:",
+    "detailed_usage": "Detailed usage: github.com/smrtkrft/SynDimm"
   }
 })rawliteral";
 

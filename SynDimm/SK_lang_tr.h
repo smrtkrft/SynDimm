@@ -1,7 +1,7 @@
 /**
  * SK_lang_tr.h
  * SmartKraft SynDimm - Turkish Language Pack (Türkçe)
- * Version: v1.2.0
+ * Version: v1.1.0
  */
 
 #ifndef SK_LANG_TR_H
@@ -46,17 +46,18 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
     "wifi_settings_info": "Cihazınızı ağınıza bağlamak için birincil ve yedek WiFi ayarlarını yapılandırın. Access Point (AP) modu ile cihazın kendi ağını oluşturmasını da kontrol edebilirsiniz.",
     "version_info": "Yazılım güncellemelerini kontrol edin.",
     "factory_reset_info": "Tüm ayarları fabrika varsayılanlarına sıfırlar. Bu işlem geri alınamaz.",
-    "dimmer_mode_info": "Encoder çevirerek aydınlatma parlaklığını kontrol eder.",
+    "dimmer_mode_info": "Encoder çevirerek aydınlatma parlaklığını, basarak açma/kapatmayı kontrol eder.",
     "shutter_mode_info": "Encoder ile panjur pozisyonunu kontrol eder.",
     "safe_mode_info": "Şifre dizileriyle API çağrıları tetikler.",
     "dimmer_device_connection": "Yerel ağınızdaki dimmer cihazlarını arayın ve bağlanın.",
     "shutter_device_connection": "Yerel ağınızdaki panjur cihazlarını arayın ve bağlanın.",
     "scan_network": "Yerel ağda uyumlu akıllı cihazları tarar.",
-    "sensitivity_info": "Düşük değer = hassas kontrol (yavaş değişim). Yüksek değer = hızlı kontrol (büyük adımlar).",
+    "sensitivity_info": "Encoder'in her bir tıkığında parlaklığın kaç birim değişeceğini belirler. 1 = en hassas (küçük adımlar), 5 = en hızlı (büyük adımlar).",
+    "sensitivity_info_shutter": "Encoder'in her bir tıkığında panjur pozisyonunun kaç birim değişeceğini belirler. 1 = en hassas (küçük adımlar), 5 = en hızlı (büyük adımlar).",
     "default_brightness": "Etkinleştirildiğinde, dimmer açıldığında bu parlaklık seviyesinde başlar.",
     "wifi_scan_info": "Kullanılabilir WiFi ağlarını tarar.",
     "wifi_password_info": "Açık ağlar için boş bırakın.",
-    "static_ip_info": "Otomatik IP (DHCP) için boş bırakın.",
+    "static_ip_info": "Sabit IP adresi tanımlamak için doldurun. Otomatik IP (DHCP) için boş bırakın. Örnek: 192.168.1.100",
     "mdns_info": "Cihaza tarayıcıdan [isim].local yazarak erişin. ÖNEMLİ: Her cihaza farklı isim verin, aynı isim ağ çakışmasına neden olur!",
     "safe_hero_subtitle": "Şifre korumalı API tetikleyici",
     "enable_password_info": "Ayarları silmeden şifreyi geçici olarak etkinleştirin veya devre dışı bırakın.",
@@ -100,6 +101,7 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
     "no_device_connected": "Cihaz bağlı değil",
     "sensitivity": "Hassasiyet",
     "default_brightness": "Varsayılan Parlaklık",
+    "ip_placeholder": "IP Adresi",
     "enter_ip": "Lütfen IP girin!",
     "invalid_ip": "Geçersiz IP!",
     "calibration_saved": "Kalibrasyon kaydedildi!",
@@ -110,7 +112,8 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
     "unknown": "Bilinmeyen",
     "shelly_dimmer": "Shelly Dimmer",
     "shelly_dali": "Shelly DALI",
-    "tasmota": "Tasmota"
+    "tasmota": "Tasmota",
+    "usage_guide": "Kullanım: Encoder'ı çevirerek parlaklığı ayarlayın. Butona basarak ışığı açıp kapatın. Varsayılan parlaklık etkinse, ışık her açıldığında belirlediğiniz seviyeden başlar."
   },
   
   "shutter": {
@@ -120,10 +123,12 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
     "status": "DURUM",
     "position": "POZİSYON",
     "encoder_step": "ENCODER STEP",
+    "sensitivity": "Hassasiyet",
     "connected": "Bağlı",
     "not_connected": "Bağlı Değil",
     "device_connection": "Cihaz Bağla",
     "manual_ip": "Manuel IP Girişi",
+    "ip_placeholder": "IP Adresi",
     "connect": "Bağlan",
     "disconnect": "Bağlantıyı Kes",
     "scan_network": "Ağı Tara",
@@ -150,7 +155,8 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
     "device_removed": "Shutter cihazı kaldırıldı",
     "remove_failed": "Cihaz kaldırılamadı",
     "shelly_25": "Shelly 2.5",
-    "shelly_plus_2pm": "Shelly Plus 2PM"
+    "shelly_plus_2pm": "Shelly Plus 2PM",
+    "usage_guide": "Kullanım: Encoder'ı sağa çevirerek panjuru kapatın (aşağı), sola çevirerek açın (yukarı). Cihaz kalibre değilse encoder dönüşü devre dışıdır. Buton: Hareket halindeyse durdurur, duruyorsa son hareketin tersine tam açma veya kapama yapar."
   },
 
   "safe": {
@@ -196,7 +202,8 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
     "save_failed": "Hata: Kaydedilemedi",
     "testing": "API test ediliyor...",
     "test_success": "API test başarılı!",
-    "test_failed": "API test başarısız"
+    "test_failed": "API test başarısız",
+    "usage_guide": "Kullanım: Tanımladığınız şifre dizisini encoder ile girin. Örneğin L3-R2-B şifresi için: 3 kez sola çevirin, 2 kez sağa çevirin, butona basın. Doğru girildiğinde API otomatik tetiklenir."
   },
   
   "alarm": {
@@ -415,7 +422,8 @@ const char LANG_TR_JSON[] PROGMEM = R"rawliteral({
     "active": "Aktif",
     "automatic": "Otomatik",
     "not_configured": "Yapılandırılmadı",
-    "note": "Not:"
+    "note": "Not:",
+    "detailed_usage": "Detaylı kullanım için: github.com/smrtkrft/SynDimm"
   }
 })rawliteral";
 

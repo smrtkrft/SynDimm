@@ -1,7 +1,7 @@
 /**
  * SK_css.h
  * SmartKraft SynDimm - CSS Styles
- * Version: v1.2.0
+ * Version: v1.1.0
  * 
  * ========================================
  * KRITIK KURAL - ASLA DEĞİŞTİRME!
@@ -103,7 +103,11 @@ body.light-theme .ota-quick-section { background: var(--bg-card); border-color: 
 body.light-theme .ota-quick-label { color: var(--text-muted); }
 body.light-theme .ota-quick-version { color: var(--text-primary); }
 body.light-theme .ota-progress-bar { background: var(--border-color); }
-body.light-theme .ota-update-available { background: rgba(76, 175, 80, 0.08); border-color: rgba(76, 175, 80, 0.2); }
+body.light-theme .ota-update-available { background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(6, 182, 212, 0.04) 100%); border-color: rgba(16, 185, 129, 0.2); }
+body.light-theme .ota-new-version span:first-child { color: var(--text-muted); }
+body.light-theme .version-badge { box-shadow: 0 4px 15px rgba(16, 185, 129, 0.2); }
+body.light-theme .btn-ota-install { box-shadow: 0 4px 15px rgba(16, 185, 129, 0.15); }
+body.light-theme .ota-progress-text { color: var(--text-secondary); }
 body.light-theme .wifi-connection-info { background: var(--bg-card); border-color: var(--border-color); }
 body.light-theme .wifi-info-text { color: var(--text-primary); }
 body.light-theme .ap-mode-card { background: linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, rgba(139, 92, 246, 0.03) 100%); border-color: rgba(59, 130, 246, 0.15); }
@@ -167,6 +171,7 @@ body.light-theme .dimmer-cal-btn:hover:not(:disabled) { border-color: rgb(59, 13
 body.light-theme .dimmer-cal-value { color: rgb(59, 130, 246); }
 body.light-theme .dimmer-cal-label { color: var(--text-muted); }
 body.light-theme .dimmer-compact-form { background: rgba(0, 0, 0, 0.02); border-color: var(--border-color); }
+body.light-theme .dimmer-compact-form .section-title { color: var(--text-secondary); }
 body.light-theme .dimmer-section-title { color: var(--text-secondary); }
 body.light-theme .dimmer-inline-form input { background: var(--bg-card); border-color: var(--border-light); color: var(--text-primary); }
 body.light-theme .dimmer-inline-form input::placeholder { color: var(--text-muted); }
@@ -194,6 +199,7 @@ body.light-theme .shutter-cal-value { color: rgb(6, 182, 212); }
 body.light-theme .shutter-hero.disconnected .shutter-cal-value { color: var(--text-muted); }
 body.light-theme .shutter-cal-label { color: var(--text-muted); }
 body.light-theme .shutter-compact-form { background: rgba(0, 0, 0, 0.02); border-color: var(--border-color); }
+body.light-theme .shutter-compact-form .section-title { color: var(--text-secondary); }
 body.light-theme .shutter-inline-form input { background: var(--bg-card); border-color: var(--border-light); color: var(--text-primary); }
 body.light-theme .shutter-inline-form input::placeholder { color: var(--text-muted); }
 body.light-theme .shutter-inline-form input:focus { border-color: rgba(6, 182, 212, 0.4); }
@@ -233,6 +239,24 @@ body.light-theme .devices-container::-webkit-scrollbar-track { background: var(-
 body.light-theme .devices-container::-webkit-scrollbar-thumb { background: var(--border-light); }
 body.light-theme .devices-container::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
+/* Light Theme - Info Section */
+body.light-theme .info-section { border-bottom-color: var(--border-light); }
+body.light-theme .info-section:hover p { color: var(--text-primary); }
+body.light-theme .info-button { color: var(--text-muted); border-color: var(--border-light); }
+body.light-theme .info-button:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+
+/* Light Theme - Safe Mode Teaching */
+body.light-theme .teaching-overlay { background: rgba(255, 255, 255, 0.98); }
+body.light-theme .teaching-icon { color: var(--text-primary); }
+body.light-theme .teaching-title { color: var(--text-primary); }
+body.light-theme .teaching-subtitle { color: var(--text-secondary); }
+body.light-theme .teaching-pattern { color: var(--text-primary); background: var(--bg-card); border-color: var(--border-light); }
+body.light-theme .teaching-timer { color: var(--text-primary); }
+body.light-theme .btn-teach { background: linear-gradient(135deg, #333 0%, #222 100%); color: #fff; border-color: #333; }
+
+/* Light Theme - Status Text */
+body.light-theme .status-text { color: var(--text-secondary); }
+
 /* Light Theme - Slider */
 body.light-theme .calibration-slider { background: linear-gradient(to right, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.08)); }
 body.light-theme .calibration-slider::-webkit-slider-thumb { background: #333333; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.1); }
@@ -267,6 +291,16 @@ body.light-theme .ratio-btn-compact.active { color: #ffffff; }
 body.light-theme .btn-status-connect { color: var(--text-primary); }
 body.light-theme .theme-btn.active { color: #ffffff; background: #333333; }
 
+/* Light Theme - Secondary Buttons and Check Update */
+body.light-theme .btn-secondary { background: rgba(0, 0, 0, 0.05); border-color: rgba(0, 0, 0, 0.15); color: var(--text-primary); }
+body.light-theme .btn-secondary:hover { background: rgba(0, 0, 0, 0.1); }
+body.light-theme .btn-check-update { background: #333333; color: #ffffff; }
+body.light-theme .btn-check-update:hover { background: #444444; }
+body.light-theme .dimmer-inline-form .btn-secondary { background: rgba(0, 0, 0, 0.05); border-color: rgba(0, 0, 0, 0.15); color: var(--text-primary); }
+body.light-theme .dimmer-inline-form .btn-secondary:hover { background: rgba(0, 0, 0, 0.1); }
+body.light-theme .shutter-inline-form .btn-secondary { background: rgba(0, 0, 0, 0.05); border-color: rgba(0, 0, 0, 0.15); color: var(--text-primary); }
+body.light-theme .shutter-inline-form .btn-secondary:hover { background: rgba(0, 0, 0, 0.1); }
+
 /* Light Theme - Toggle Switch */
 body.light-theme .toggle-slider { background-color: rgba(0, 0, 0, 0.1); border-color: rgba(0, 0, 0, 0.2); }
 body.light-theme .toggle-slider:before { background-color: rgba(0, 0, 0, 0.4); }
@@ -279,8 +313,8 @@ body.light-theme .mode-toggle-row .toggle-label { color: var(--text-secondary); 
 body.light-theme .mode-toggle-row .toggle-label-active { color: var(--text-primary); }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 19.2px; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 0; display: flex; justify-content: center; align-items: flex-start; transition: background 0.3s ease, color 0.3s ease; }
-.container { max-width: 900px; width: 100%; background: var(--bg-primary); min-height: 100vh; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 19.2px; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 0; display: flex; justify-content: center; align-items: flex-start; transition: background 0.3s ease, color 0.3s ease; overflow-x: hidden; }
+.container { max-width: 900px; width: 100%; background: var(--bg-primary); min-height: 100vh; overflow-x: hidden; }
 .header { background: var(--bg-primary); color: var(--text-primary); padding: 40px 40px 15px 40px; text-align: center; border-bottom: none; position: relative; }
 .header h1 { font-size: 2.2em; margin-bottom: 12px; font-weight: 400; letter-spacing: 0.5px; color: var(--text-primary); }
 .theme-toggle { position: absolute; top: 20px; right: 20px; display: flex; gap: 8px; background: var(--bg-card); padding: 6px; border-radius: 20px; border: 1px solid var(--border-color); }
@@ -316,7 +350,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .tab:hover { color: var(--text-secondary); opacity: 0.8; }
 .tab.active { color: var(--text-primary); }
 .tab.active::after { transform: translateX(-50%) scaleX(1); }
-.tab-content { display: none !important; padding: 50px 40px; min-height: 500px; animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+.tab-content { display: none !important; padding: 50px 40px; min-height: 500px; animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1); overflow-x: hidden; }
 .tab-content.active { display: block !important; }
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 .placeholder { text-align: center; color: var(--text-muted); font-size: 0.95em; padding: 100px 30px; font-weight: 300; letter-spacing: 0.5px; opacity: 0.5; }
@@ -470,7 +504,7 @@ button .info-tooltip-i { margin-left: 6px; width: 14px; height: 14px; font-size:
 .accordion-icon { font-size: 0.8em; color: var(--text-muted); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
 .accordion-header.active .accordion-icon { transform: rotate(180deg); }
 .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1); padding: 0 25px; }
-.accordion-header.active + .accordion-content { max-height: 5000px; padding: 15px 25px 25px 25px; overflow-y: auto; }
+.accordion-header.active + .accordion-content { max-height: 5000px; padding: 15px 25px 25px 25px; overflow-y: auto; overflow-x: hidden; }
 
 /* Form Group */
 .form-group { margin-bottom: 12px; }
@@ -529,7 +563,7 @@ button .info-tooltip-i { margin-left: 6px; width: 14px; height: 14px; font-size:
 .mode-toggle-row .toggle-label-active { color: var(--text-primary); font-weight: 500; }
 
 /* Safe Config Section - İyileştirilmiş */
-.safe-config-section { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 0; }
+.safe-config-section { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 0; overflow: hidden; word-wrap: break-word; }
 .safe-config-section .form-group { margin-bottom: 15px; }
 .safe-config-section .form-group:last-child { margin-bottom: 0; }
 .safe-config-section .form-group label { font-size: 0.85em; color: var(--text-secondary); margin-bottom: 8px; display: block; font-weight: 500; }
@@ -667,8 +701,8 @@ button .info-tooltip-i { margin-left: 6px; width: 14px; height: 14px; font-size:
     .safe-toggle-row { gap: 10px; }
     .toggle-label { font-size: 0.9em; }
     /* System buttons mobile */
-    .system-buttons { flex-direction: column; gap: 12px; }
-    .btn-restart, .btn-factory-reset { width: 100%; padding: 14px 20px; }
+    .system-buttons { flex-direction: column; gap: 12px; align-items: center; }
+    .btn-restart, .btn-factory-reset { width: 100%; padding: 14px 20px; justify-content: center; text-align: center; }
     .factory-reset-confirm { padding: 12px; }
     .factory-reset-confirm input { width: 100%; margin-bottom: 10px; margin-right: 0; }
     .btn-confirm-reset, .btn-cancel-reset { width: 100%; margin-right: 0; margin-bottom: 8px; }
@@ -685,9 +719,23 @@ button .info-tooltip-i { margin-left: 6px; width: 14px; height: 14px; font-size:
     /* Dimmer hero mobile fine-tune */
     .dimmer-cal-label { font-size: 0.7em; display: flex; align-items: center; justify-content: center; gap: 4px; }
     .dimmer-cal-label .info-tooltip-i { margin-left: 4px; width: 14px; height: 14px; font-size: 9px; }
+    /* Shutter mobile 600px */
+    .shutter-hero { padding: 25px 15px; }
+    .shutter-position-display { font-size: 3.2em; }
+    .shutter-cal-label { font-size: 0.7em; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .shutter-cal-label .info-tooltip-i { margin-left: 4px; width: 14px; height: 14px; font-size: 9px; }
+    .shutter-compact-form { padding: 15px; }
+    .shutter-inline-form { flex-wrap: wrap; }
+    .shutter-inline-form input { flex: 1 1 100%; min-width: unset; }
+    .shutter-inline-form button { flex: 1; }
+    .shutter-warning { font-size: 0.82em; }
     /* Mode toggle row mobile */
     .mode-toggle-row { padding: 10px 12px; gap: 10px; }
     .mode-toggle-row .toggle-label { font-size: 0.85em; }
+    /* Usage guide mobile */
+    .mode-usage-guide { padding: 12px 14px; }
+    .usage-guide-text { font-size: 0.8em; }
+    .usage-guide-link { font-size: 0.75em; }
 }
 
 /* OTA Update Styles */
@@ -735,16 +783,80 @@ button .info-tooltip-i { margin-left: 6px; width: 14px; height: 14px; font-size:
 .ota-quick-status.success { background: var(--color-success-bg); color: var(--color-success); border: 1px solid var(--color-success-border); }
 .ota-quick-status.error { background: var(--color-error-bg); color: var(--color-error); border: 1px solid var(--color-error-border); }
 .ota-quick-status.info { background: var(--color-info-bg); color: var(--color-info); border: 1px solid var(--color-info-border); }
-.ota-update-available { margin-top: 15px; padding: 15px; background: rgba(76, 175, 80, 0.1); border: 1px solid rgba(76, 175, 80, 0.3); border-radius: 6px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
-.ota-new-version { display: flex; align-items: center; gap: 10px; }
-.ota-new-version span:first-child { font-size: 0.9em; color: var(--text-secondary); }
-.version-badge { background: var(--color-success); color: #fff; padding: 4px 12px; border-radius: 4px; font-size: 0.9em; font-weight: 600; font-family: monospace; }
-.btn-ota-install { padding: 10px 25px; background: var(--color-success); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 600; transition: all 0.2s; }
-.btn-ota-install:hover { background: #43a047; transform: translateY(-1px); }
-.ota-progress-container { margin-top: 15px; }
+/* OTA Update Available - Refined Design */
+.ota-update-available { 
+    margin-top: 20px; 
+    padding: 20px; 
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(6, 182, 212, 0.05) 100%); 
+    border: 1px solid rgba(16, 185, 129, 0.25); 
+    border-radius: var(--radius-lg); 
+    display: flex; 
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 15px;
+    animation: otaPulse 2s ease-in-out infinite;
+}
+@keyframes otaPulse {
+    0%, 100% { border-color: rgba(16, 185, 129, 0.25); }
+    50% { border-color: rgba(16, 185, 129, 0.5); }
+}
+.ota-update-available .ota-update-icon { 
+    font-size: 2em; 
+    color: #10b981;
+    margin-bottom: 5px;
+}
+.ota-new-version { 
+    display: flex; 
+    flex-direction: column;
+    align-items: center; 
+    gap: 8px; 
+}
+.ota-new-version span:first-child { 
+    font-size: 0.85em; 
+    color: var(--text-muted); 
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.version-badge { 
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%); 
+    color: #fff; 
+    padding: 8px 20px; 
+    border-radius: 20px; 
+    font-size: 1.1em; 
+    font-weight: 600; 
+    font-family: 'SF Mono', 'Consolas', monospace;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+}
+.btn-ota-install { 
+    padding: 12px 35px; 
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%); 
+    color: #fff; 
+    border: none; 
+    border-radius: var(--radius-md); 
+    cursor: pointer; 
+    font-size: 0.95em; 
+    font-weight: 600; 
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);
+}
+.btn-ota-install:hover { 
+    background: linear-gradient(135deg, #059669 0%, #047857 100%); 
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+}
+.ota-progress-container { margin-top: 15px; width: 100%; }
 .ota-progress-bar { height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; }
-.ota-progress-fill { height: 100%; background: var(--primary); transition: width 0.3s; }
-.ota-progress-text { display: block; text-align: center; margin-top: 8px; font-size: 0.85em; color: var(--text-muted); }
+.ota-progress-fill { height: 100%; background: linear-gradient(90deg, #10b981, #06b6d4); transition: width 0.3s; border-radius: 4px; }
+.ota-progress-text { display: block; text-align: center; margin-top: 10px; font-size: 0.9em; color: var(--text-secondary); font-weight: 500; }
+
+/* OTA Update Available - Mobile */
+@media (max-width: 600px) {
+    .ota-update-available { padding: 18px 15px; gap: 12px; }
+    .ota-update-available .ota-update-icon { font-size: 1.8em; }
+    .version-badge { padding: 6px 16px; font-size: 1em; }
+    .btn-ota-install { padding: 12px 30px; width: 100%; }
+}
 
 /* WiFi Connection Info */
 .wifi-connection-info { margin: 30px 0; padding: 20px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-light); border-radius: 8px; overflow: visible; position: relative; }
@@ -908,11 +1020,11 @@ button .info-tooltip-i { margin-left: 6px; width: 14px; height: 14px; font-size:
 .dimmer-cal-label { font-size: 0.75em; color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; }
 
 /* Dimmer Compact Form */
-.dimmer-compact-form { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 20px; }
-.dimmer-compact-form .section-title { font-size: 0.85em; font-weight: 600; color: rgba(255, 255, 255, 0.6); margin: 0 0 12px 0; padding: 0; border: none; text-transform: uppercase; letter-spacing: 0.5px; }
+.dimmer-compact-form { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 20px; overflow: hidden; }
+.dimmer-compact-form .section-title { font-size: 0.85em; font-weight: 600; color: rgba(255, 255, 255, 0.6); margin: 0 0 12px 0; padding: 0; border: none; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .dimmer-section-title { font-size: 0.85em; font-weight: 600; color: rgba(255, 255, 255, 0.6); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-.dimmer-inline-form { display: flex; gap: 10px; margin-bottom: 15px; }
-.dimmer-inline-form input { flex: 1; padding: 12px 15px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; color: #fff; font-size: 1em; }
+.dimmer-inline-form { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+.dimmer-inline-form input { flex: 1; min-width: 120px; padding: 12px 15px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; color: #fff; font-size: 1em; }
 .dimmer-inline-form input:focus { outline: none; border-color: rgba(59, 130, 246, 0.3); background: rgba(255, 255, 255, 0.08); }
 .dimmer-inline-form input::placeholder { color: rgba(255, 255, 255, 0.3); }
 .dimmer-inline-form button { padding: 10px 20px; border: none; border-radius: 6px; font-size: 0.9em; font-weight: 500; cursor: pointer; transition: all 0.2s ease; }
@@ -953,14 +1065,22 @@ button .info-tooltip-i { margin-left: 6px; width: 14px; height: 14px; font-size:
 .shutter-cal-value { font-size: 2em; font-weight: 600; min-width: 50px; text-align: center; color: rgb(6, 182, 212); line-height: 1; }
 .shutter-hero.disconnected .shutter-cal-value { color: rgba(255, 255, 255, 0.3); }
 .shutter-cal-label { font-size: 0.75em; color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; }
-.shutter-compact-form { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 20px; }
-.shutter-compact-form .section-title { font-size: 0.85em; font-weight: 600; color: rgba(255, 255, 255, 0.6); margin: 0 0 12px 0; padding: 0; border: none; text-transform: uppercase; letter-spacing: 0.5px; }
-.shutter-inline-form { display: flex; gap: 10px; margin-bottom: 15px; }
-.shutter-inline-form input { flex: 1; padding: 12px 15px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; color: #fff; font-size: 1em; }
+.shutter-compact-form { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 20px; overflow: hidden; }
+.shutter-compact-form .section-title { font-size: 0.85em; font-weight: 600; color: rgba(255, 255, 255, 0.6); margin: 0 0 12px 0; padding: 0; border: none; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.shutter-inline-form { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+.shutter-inline-form input { flex: 1; min-width: 120px; padding: 12px 15px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; color: #fff; font-size: 1em; }
 .shutter-inline-form input:focus { outline: none; border-color: rgba(6, 182, 212, 0.3); background: rgba(255, 255, 255, 0.08); }
 .shutter-inline-form input::placeholder { color: rgba(255, 255, 255, 0.3); }
-.shutter-warning { padding: 12px 16px; border-radius: 6px; font-size: 0.85em; line-height: 1.5; margin-top: 15px; background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.4); color: rgb(251, 191, 36); }
-.shutter-warning .warning-icon { margin-right: 8px; }
+.shutter-warning { padding: 12px 16px; border-radius: 6px; font-size: 0.85em; line-height: 1.5; margin-top: 15px; background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.4); color: rgb(251, 191, 36); word-wrap: break-word; overflow-wrap: break-word; }
+.shutter-warning .warning-icon { margin-right: 8px; flex-shrink: 0; }
+
+/* Mode Usage Guide */
+.mode-usage-guide { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; margin-top: 20px; background: transparent; border: none; border-radius: 0; }
+.usage-guide-text { font-size: 0.85em; line-height: 1.6; color: rgba(255, 255, 255, 0.6); }
+.usage-guide-link { font-size: 0.8em; color: rgba(99, 102, 241, 0.8); text-decoration: none; transition: color 0.2s ease; }
+.usage-guide-link:hover { color: rgb(99, 102, 241); text-decoration: underline; }
+body.light-theme .usage-guide-text { color: var(--text-muted); }
+body.light-theme .usage-guide-link { color: rgba(99, 102, 241, 0.9); }
 
 /* ========================================
    SAFE HERO DISPLAY
@@ -1033,6 +1153,25 @@ body.light-theme .safe-hero-subtitle { color: var(--text-muted); }
     .shutter-position-display { font-size: 2.8em; }
     .shutter-calibration-controls { gap: 12px; margin-top: 15px; }
     .shutter-cal-btn { width: 38px; height: 38px; font-size: 1.1em; }
+    .shutter-cal-label { font-size: 0.65em; flex-wrap: wrap; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .shutter-cal-label .info-tooltip-i { margin-left: 4px; width: 14px; height: 14px; font-size: 9px; }
+    /* Shutter inline form 480px */
+    .shutter-inline-form { flex-direction: column; }
+    .shutter-inline-form input { width: 100%; min-width: unset; }
+    .shutter-inline-form button { width: 100%; }
+    .shutter-compact-form { padding: 15px; }
+    .shutter-warning { font-size: 0.8em; padding: 10px 12px; }
+    /* Dimmer inline form 480px */
+    .dimmer-inline-form { flex-direction: column; }
+    .dimmer-inline-form input { width: 100%; min-width: unset; }
+    .dimmer-inline-form button { width: 100%; }
+    .dimmer-compact-form { padding: 15px; }
+    /* Saved devices 480px */
+    .saved-device-item { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .saved-device-actions { width: 100%; }
+    .saved-device-actions button { flex: 1; }
+    .btn-device-connect, .btn-device-remove { padding: 10px 12px; }
+    .saved-device-empty { padding: 20px 15px; font-size: 0.85em; }
 }
 
 /* Calibration Slider */
@@ -1086,10 +1225,10 @@ body.light-theme .safe-hero-subtitle { color: var(--text-muted); }
 
 /* System Actions (Restart & Factory Reset) */
 .system-actions { text-align: center; }
-.system-buttons { display: flex; justify-content: center; gap: 20px; margin-top: 15px; }
-.btn-restart { padding: 12px 30px; background: #ffffff; color: #000000; border: none; border-radius: var(--radius-md); font-size: 1em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); }
+.system-buttons { display: flex; justify-content: center; gap: 20px; margin-top: 15px; flex-wrap: wrap; }
+.btn-restart { padding: 12px 30px; background: #ffffff; color: #000000; border: none; border-radius: var(--radius-md); font-size: 1em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); text-align: center; justify-content: center; }
 .btn-restart:hover { background: #e0e0e0; transform: translateY(-2px); }
-.btn-factory-reset { padding: 12px 30px; background: #ef4444; color: #ffffff; border: none; border-radius: var(--radius-md); font-size: 1em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); display: inline-flex; align-items: center; gap: 8px; position: relative; overflow: visible; }
+.btn-factory-reset { padding: 12px 30px; background: #ef4444; color: #ffffff; border: none; border-radius: var(--radius-md); font-size: 1em; font-weight: 600; cursor: pointer; transition: var(--transition-normal); display: inline-flex; align-items: center; justify-content: center; gap: 8px; position: relative; overflow: visible; text-align: center; }
 .btn-factory-reset:hover { background: #dc2626; transform: translateY(-2px); }
 .btn-factory-reset .info-tooltip-i { background: rgba(255, 255, 255, 0.2); border-color: rgba(255, 255, 255, 0.4); color: #fff; margin-left: 0; }
 .btn-factory-reset .info-tooltip-i:hover { background: rgba(255, 255, 255, 0.3); }
@@ -1102,7 +1241,7 @@ body.light-theme .safe-hero-subtitle { color: var(--text-muted); }
 .btn-cancel-reset:hover { background: var(--bg-secondary); }
 
 /* Mode Config Panel */
-.mode-config-panel { animation: fadeIn 0.3s ease; }
+.mode-config-panel { animation: fadeIn 0.3s ease; overflow: hidden; word-wrap: break-word; overflow-wrap: break-word; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 #mode-config-accordion { margin-top: 25px; border: 2px solid rgba(255, 255, 255, 0.25); box-shadow: 0 0 15px rgba(255, 255, 255, 0.05); }
 #mode-config-accordion:hover { border-color: rgba(255, 255, 255, 0.35); }

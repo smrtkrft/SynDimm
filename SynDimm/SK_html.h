@@ -1,7 +1,7 @@
 /**
  * SK_html.h
  * SmartKraft SynDimm - HTML Structure
- * Version: v1.2.0
+ * Version: v1.1.0
  * 
  * ========================================
  * KRITIK KURAL - ASLA DEĞİŞTİRME!
@@ -96,7 +96,7 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                 <div class="mode-buttons">
                     <button class="mode-btn" id="mode-btn-dimmer" onclick="selectMode('DIMMER')">
                         <span class="mode-btn-text">DIMMER</span>
-                        <span class="info-tooltip-i mode-info">i<span class="tooltip-content" data-lang="tooltip.dimmer_mode_info">Controls lighting brightness with encoder rotation.</span></span>
+                        <span class="info-tooltip-i mode-info">i<span class="tooltip-content" data-lang="tooltip.dimmer_mode_info">Control lighting brightness by rotating encoder, toggle on/off by pressing.</span></span>
                     </button>
                     <button class="mode-btn" id="mode-btn-shutter" onclick="selectMode('SHUTTER')">
                         <span class="mode-btn-text">SHUTTER</span>
@@ -134,7 +134,7 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                                         <div class="dimmer-cal-value" id="dimmer-cal-value">-</div>
                                         <div class="dimmer-cal-label">
                                             <span data-lang="dimmer.sensitivity">Sensitivity</span>
-                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.sensitivity_info">Brightness change per encoder step (1-5).</span></span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.sensitivity_info">Sets how much brightness changes per encoder tick. 1 = most precise, 5 = fastest.</span></span>
                                         </div>
                                     </div>
                                     <button class="dimmer-cal-btn" id="cal-btn-plus" onclick="adjustCalibration(1)" disabled>+</button>
@@ -166,7 +166,7 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                                     <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.dimmer_device_connection">Search and connect to dimmer devices on your local network.</span></span>
                                 </div>
                                 <div class="dimmer-inline-form">
-                                    <input type="text" id="quick-dimmer-ip-input" placeholder="IP Adresi">
+                                    <input type="text" id="quick-dimmer-ip-input" data-lang-placeholder="dimmer.ip_placeholder" placeholder="IP Address">
                                     <button class="btn btn-primary" onclick="connectDimmerFromQuick()" data-lang="common.connect">Connect</button>
                                     <button class="btn btn-secondary" onclick="startNetworkScan()">
                                         <span data-lang="dimmer.scan">Scan</span>
@@ -176,6 +176,12 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                                 <div class="saved-devices-list" id="quick-saved-devices-list">
                                     <div class="saved-device-empty" data-lang="dimmer.no_devices">No saved devices yet.</div>
                                 </div>
+                            </div>
+                            
+                            <!-- Kullanım Talimatı -->
+                            <div class="mode-usage-guide">
+                                <span class="usage-guide-text" data-lang="dimmer.usage_guide">Usage: Rotate encoder to adjust brightness. Press button to toggle light on/off.</span>
+                                <a href="https://github.com/smrtkrft/SynDimm" target="_blank" class="usage-guide-link" data-lang="common.detailed_usage">Detailed usage: github.com/smrtkrft/SynDimm</a>
                             </div>
                         </div>
                         
@@ -195,8 +201,8 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                                     <div class="shutter-cal-center">
                                         <div class="shutter-cal-value" id="shutter-cal-value">-</div>
                                         <div class="shutter-cal-label">
-                                            <span data-lang="dimmer.sensitivity">Sensitivity</span>
-                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.sensitivity_info">Position change per encoder step (1-5).</span></span>
+                                            <span data-lang="shutter.sensitivity">Sensitivity</span>
+                                            <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.sensitivity_info_shutter">Sets how much position changes per encoder tick. 1 = most precise, 5 = fastest.</span></span>
                                         </div>
                                     </div>
                                     <button class="shutter-cal-btn" id="shutter-cal-btn-plus" onclick="adjustShutterStep(1)" disabled>+</button>
@@ -210,7 +216,7 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                                     <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.shutter_device_connection">Search and connect to shutter devices on your local network.</span></span>
                                 </div>
                                 <div class="shutter-inline-form">
-                                    <input type="text" id="quick-shutter-ip-input" placeholder="IP Adresi">
+                                    <input type="text" id="quick-shutter-ip-input" data-lang-placeholder="shutter.ip_placeholder" placeholder="IP Address">
                                     <button class="btn btn-primary" onclick="connectShutterFromQuick()" data-lang="common.connect">Connect</button>
                                     <button class="btn btn-secondary" onclick="startShutterNetworkScan()">
                                         <span data-lang="shutter.scan">Scan</span>
@@ -224,6 +230,12 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                             
                             <div class="shutter-warning">
                                 <span class="warning-icon">⚠</span> <span data-lang="shutter.info_text">Shutter is controlled by encoder.</span>
+                            </div>
+                            
+                            <!-- Kullanım Talimatı -->
+                            <div class="mode-usage-guide">
+                                <span class="usage-guide-text" data-lang="shutter.usage_guide">Usage: Rotate encoder right to close shutter, left to open. Button stops movement or performs full open/close.</span>
+                                <a href="https://github.com/smrtkrft/SynDimm" target="_blank" class="usage-guide-link" data-lang="common.detailed_usage">Detailed usage: github.com/smrtkrft/SynDimm</a>
                             </div>
                         </div>
                         
@@ -661,6 +673,12 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                                     </div>
                                 </div>
                             </div>
+                            
+                            <!-- Kullanım Talimatı -->
+                            <div class="mode-usage-guide">
+                                <span class="usage-guide-text" data-lang="safe.usage_guide">Usage: Enter your password sequence with encoder. Example for L3-R2-B: rotate left 3x, right 2x, press button.</span>
+                                <a href="https://github.com/smrtkrft/SynDimm" target="_blank" class="usage-guide-link" data-lang="common.detailed_usage">Detailed usage: github.com/smrtkrft/SynDimm</a>
+                            </div>
                         </div>
                         
                     </div>
@@ -786,7 +804,7 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                             <div class="form-group">
                                 <label>
                                     <span data-lang="connection.static_ip">Static IP</span>
-                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.static_ip_info">Leave empty for automatic IP (DHCP).</span></span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.static_ip_info">Fill in for static IP, leave empty for DHCP. Example: 192.168.1.100</span></span>
                                 </label>
                                 <input type="text" id="quick-primary-static" data-lang-placeholder="connection.leave_empty_dhcp">
                             </div>
@@ -828,7 +846,7 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                             <div class="form-group">
                                 <label>
                                     <span data-lang="connection.static_ip">Static IP</span>
-                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.static_ip_info">Leave empty for automatic IP (DHCP).</span></span>
+                                    <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.static_ip_info">Fill in for static IP, leave empty for DHCP. Example: 192.168.1.100</span></span>
                                 </label>
                                 <input type="text" id="quick-backup-static" data-lang-placeholder="connection.leave_empty_dhcp">
                             </div>
@@ -865,6 +883,7 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                     </div>
                     <div id="quick-ota-status" class="ota-quick-status" style="display: none;"></div>
                     <div id="quick-ota-update-available" class="ota-update-available" style="display: none;">
+                        <div class="ota-update-icon">⬆</div>
                         <div class="ota-new-version">
                             <span data-lang="info.new_version">New Version</span>
                             <span id="quick-ota-new-version" class="version-badge">-</span>

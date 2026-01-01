@@ -1,7 +1,7 @@
 /**
  * SK_lang_de.h
  * SmartKraft SynDimm - German Language Pack (Deutsch)
- * Version: v1.2.0
+ * Version: v1.1.0
  */
 
 #ifndef SK_LANG_DE_H
@@ -46,17 +46,18 @@ const char LANG_DE_JSON[] PROGMEM = R"rawliteral({
     "wifi_settings_info": "Konfigurieren Sie die primären und Backup-WLAN-Einstellungen, um Ihr Gerät mit dem Netzwerk zu verbinden. Sie können auch steuern, ob das Gerät über den Access Point (AP) Modus ein eigenes Netzwerk erstellt.",
     "version_info": "Nach Software-Updates über OTA (Over-the-Air) suchen.",
     "factory_reset_info": "Setzt alle Einstellungen auf Werksstandard zurück. Diese Aktion kann nicht rückgängig gemacht werden.",
-    "dimmer_mode_info": "Steuert die Beleuchtungshelligkeit durch Encoder-Drehung.",
+    "dimmer_mode_info": "Steuert die Beleuchtungshelligkeit durch Drehen des Encoders, Ein/Aus durch Drücken.",
     "shutter_mode_info": "Steuert die Rollladenposition mit dem Encoder.",
     "safe_mode_info": "Löst API-Aufrufe mit Passwortsequenzen aus.",
     "dimmer_device_connection": "Suchen und verbinden Sie sich mit Dimmer-Geräten in Ihrem lokalen Netzwerk.",
     "shutter_device_connection": "Suchen und verbinden Sie sich mit Rolladen-Geräten in Ihrem lokalen Netzwerk.",
     "scan_network": "Lokales Netzwerk nach kompatiblen Smart-Geräten durchsuchen.",
-    "sensitivity_info": "Niedriger Wert = präzise Steuerung (langsame Änderungen). Hoher Wert = schnelle Steuerung (große Schritte).",
+    "sensitivity_info": "Legt fest, wie stark sich die Helligkeit pro Encoder-Tick ändert. 1 = präziseste (kleine Schritte), 5 = schnellste (große Schritte).",
+    "sensitivity_info_shutter": "Legt fest, wie stark sich die Rollladenposition pro Encoder-Tick ändert. 1 = präziseste (kleine Schritte), 5 = schnellste (große Schritte).",
     "default_brightness": "Wenn aktiviert, startet der Dimmer beim Einschalten mit dieser Helligkeitsstufe.",
     "wifi_scan_info": "Nach verfügbaren WLAN-Netzwerken suchen.",
     "wifi_password_info": "Für offene Netzwerke leer lassen.",
-    "static_ip_info": "Für automatische IP (DHCP) leer lassen.",
+    "static_ip_info": "Ausfüllen für feste IP-Adresse. Für automatische IP (DHCP) leer lassen. Beispiel: 192.168.1.100",
     "mdns_info": "Gerät durch Eingabe von [name].local im Browser erreichen. WICHTIG: Geben Sie jedem Gerät einen anderen Namen, gleiche Namen verursachen Netzwerkkonflikte!",
     "safe_hero_subtitle": "Passwortgeschützter API-Auslöser",
     "enable_password_info": "Passwort vorübergehend aktivieren oder deaktivieren ohne Einstellungen zu löschen.",
@@ -99,8 +100,7 @@ const char LANG_DE_JSON[] PROGMEM = R"rawliteral({
     "not_connected": "Nicht verbunden",
     "no_device_connected": "Kein Gerät verbunden",
     "sensitivity": "Empfindlichkeit",
-    "default_brightness": "Standard-Helligkeit",
-    "enter_ip": "Bitte IP eingeben!",
+    "default_brightness": "Standard-Helligkeit",    "ip_placeholder": "IP-Adresse",    "enter_ip": "Bitte IP eingeben!",
     "invalid_ip": "Ungültige IP!",
     "calibration_saved": "Kalibrierung gespeichert!",
     "calibration_failed": "Kalibrierung konnte nicht gespeichert werden",
@@ -110,7 +110,8 @@ const char LANG_DE_JSON[] PROGMEM = R"rawliteral({
     "unknown": "Unbekannt",
     "shelly_dimmer": "Shelly Dimmer",
     "shelly_dali": "Shelly DALI",
-    "tasmota": "Tasmota"
+    "tasmota": "Tasmota",
+    "usage_guide": "Verwendung: Drehen Sie den Encoder, um die Helligkeit anzupassen. Drücken Sie die Taste, um das Licht ein-/auszuschalten. Bei aktivierter Standardhelligkeit startet das Licht jedes Mal auf Ihrem eingestellten Niveau."
   },
   
   "shutter": {
@@ -119,11 +120,11 @@ const char LANG_DE_JSON[] PROGMEM = R"rawliteral({
     "ip_address": "IP-ADRESSE",
     "status": "STATUS",
     "position": "POSITION",
-    "encoder_step": "ENCODER-SCHRITT",
-    "connected": "Verbunden",
+    "encoder_step": "ENCODER-SCHRITT",    "sensitivity": "Empfindlichkeit",    "connected": "Verbunden",
     "not_connected": "Nicht verbunden",
     "device_connection": "Gerät verbinden",
     "manual_ip": "Manuelle IP-Eingabe",
+    "ip_placeholder": "IP-Adresse",
     "connect": "Verbinden",
     "disconnect": "Trennen",
     "scan_network": "Netzwerk scannen",
@@ -150,7 +151,8 @@ const char LANG_DE_JSON[] PROGMEM = R"rawliteral({
     "device_removed": "Rolladengerät entfernt",
     "remove_failed": "Gerät konnte nicht entfernt werden",
     "shelly_25": "Shelly 2.5",
-    "shelly_plus_2pm": "Shelly Plus 2PM"
+    "shelly_plus_2pm": "Shelly Plus 2PM",
+    "usage_guide": "Verwendung: Encoder nach rechts drehen zum Schließen (runter), nach links zum Öffnen (hoch). Bei nicht kalibriertem Gerät ist die Encoder-Drehung deaktiviert. Taste: Stoppt bei Bewegung, bei Stillstand vollständiges Öffnen oder Schließen entgegen der letzten Bewegung."
   },
 
   "safe": {
@@ -196,7 +198,8 @@ const char LANG_DE_JSON[] PROGMEM = R"rawliteral({
     "save_failed": "Fehler: Konnte nicht gespeichert werden",
     "testing": "API wird getestet...",
     "test_success": "API-Test erfolgreich!",
-    "test_failed": "API-Test fehlgeschlagen"
+    "test_failed": "API-Test fehlgeschlagen",
+    "usage_guide": "Verwendung: Geben Sie Ihre definierte Passwortsequenz mit dem Encoder ein. Für L3-R2-B Passwort: 3x links drehen, 2x rechts drehen, Taste drücken. Bei korrekter Eingabe wird die API automatisch ausgelöst."
   },
   
   "alarm": {
@@ -415,7 +418,8 @@ const char LANG_DE_JSON[] PROGMEM = R"rawliteral({
     "active": "Aktiv",
     "automatic": "Automatisch",
     "not_configured": "Nicht konfiguriert",
-    "note": "Hinweis:"
+    "note": "Hinweis:",
+    "detailed_usage": "Detaillierte Nutzung: github.com/smrtkrft/SynDimm"
   }
 })rawliteral";
 

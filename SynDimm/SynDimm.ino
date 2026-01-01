@@ -1,7 +1,7 @@
 /**
  * SynDimm.ino
  * SmartKraft SynDimm - Main Application
- * Version: v1.2.0
+ * Version: v1.1.0
  * 
  * ESP32-C6 with KY-040 Rotary Encoder
  * Web Interface with AP Mode

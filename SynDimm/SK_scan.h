@@ -1,5 +1,5 @@
 /**
- * SK_scan.h - Unified Network Scanner v1.2.0
+ * SK_scan.h - Unified Network Scanner v1.1.0
  * Dimmer/Shutter/Switch device discovery with FreeRTOS
  */
 #ifndef SK_SCAN_H

@@ -1,7 +1,7 @@
 /**
  * SK_config.h
  * SmartKraft SynDimm - Configuration & Constants
- * Version: v1.2.0
+ * Version: v1.1.0
  * 
  * ========================================
  * KRITIK KURAL - ASLA DEĞİŞTİRME!
@@ -39,7 +39,7 @@
 #define ERROR_PRINTF(...) Serial.printf(__VA_ARGS__)
 
 // Version Information
-#define VERSION "v1.2.0"
+#define VERSION "v1.1.0"
 #define DEVICE_NAME "SmartKraft SynDimm"
 
 // ========================================
