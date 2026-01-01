@@ -200,6 +200,8 @@ bool removeDimmerDevice(String ip);
 String getSavedDevicesJSON();
 void saveLastConnection(String ip);
 void autoReconnect();
+void disconnectDimmer();
+void clearLastConnection();
 
 // Initialize Dimmer System
 void initDimmer() {

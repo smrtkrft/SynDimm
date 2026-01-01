@@ -163,6 +163,8 @@ void saveShutterConfig();
 void loadShutterConfig();
 void saveShutterLastIP(String ip);
 void autoReconnectShutter();
+void disconnectShutter();
+void clearShutterLastConnection();
 
 // Saved Devices Management
 void loadSavedShutterDevices();

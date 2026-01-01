@@ -656,6 +656,22 @@ private:
         }
     }
     
+    // Encoder Mode Change Toggle
+    void handleSetEncoderModeChange() {
+        if (!modeManager) {
+            sendError(500, "Mode manager not initialized");
+            return;
+        }
+        if (!requirePost()) return;
+        
+        JsonDocument doc;
+        if (!parseJsonBody(doc)) return;
+        
+        bool enabled = doc["enabled"].as<bool>();
+        modeManager->setEncoderModeChangeEnabled(enabled);
+        sendSuccess();
+    }
+    
     // Safe Mode Endpoints
     SafeLock* safeLockPtr = nullptr;
     SafeLockAPIHandler* safeApiHandlerPtr = nullptr;
@@ -1002,6 +1018,7 @@ public:
         // Mode manager routes
         server->on("/getCurrentMode", HTTP_GET, [this]() { handleGetCurrentMode(); });
         server->on("/setMode", HTTP_POST, [this]() { handleSetMode(); });
+        server->on("/setEncoderModeChange", HTTP_POST, [this]() { handleSetEncoderModeChange(); });
         
         // Safe mode routes
         server->on("/getSafeStatus", HTTP_GET, [this]() { handleGetSafeStatus(); });

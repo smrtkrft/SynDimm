@@ -267,6 +267,17 @@ body.light-theme .ratio-btn-compact.active { color: #ffffff; }
 body.light-theme .btn-status-connect { color: var(--text-primary); }
 body.light-theme .theme-btn.active { color: #ffffff; background: #333333; }
 
+/* Light Theme - Toggle Switch */
+body.light-theme .toggle-slider { background-color: rgba(0, 0, 0, 0.1); border-color: rgba(0, 0, 0, 0.2); }
+body.light-theme .toggle-slider:before { background-color: rgba(0, 0, 0, 0.4); }
+body.light-theme .toggle-switch input:checked + .toggle-slider { background-color: rgba(16, 185, 129, 0.2); border-color: #10b981; }
+body.light-theme .toggle-switch input:checked + .toggle-slider:before { background-color: #10b981; }
+body.light-theme .toggle-label { color: var(--text-primary); }
+body.light-theme .safe-toggle-row { background: var(--bg-card); border-color: var(--border-color); }
+body.light-theme .mode-toggle-row { background: var(--bg-card); border-color: var(--border-color); }
+body.light-theme .mode-toggle-row .toggle-label { color: var(--text-secondary); }
+body.light-theme .mode-toggle-row .toggle-label-active { color: var(--text-primary); }
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 19.2px; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 0; display: flex; justify-content: center; align-items: flex-start; transition: background 0.3s ease, color 0.3s ease; }
 .container { max-width: 900px; width: 100%; background: var(--bg-primary); min-height: 100vh; }
@@ -510,6 +521,12 @@ button .info-tooltip-i { margin-left: 6px; width: 14px; height: 14px; font-size:
 .toggle-switch input:checked + .toggle-slider { background-color: rgba(16, 185, 129, 0.3); border-color: #10b981; }
 .toggle-switch input:checked + .toggle-slider:before { transform: translateX(24px); background-color: #10b981; }
 .toggle-label { font-size: 0.95em; color: var(--text-primary); font-weight: 500; }
+
+/* Mode Toggle Row - Mod seçimi başlığı altında encoder toggle */
+.mode-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px; padding: 12px 15px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); }
+.mode-toggle-row .toggle-info { display: flex; align-items: center; gap: 8px; flex: 1; }
+.mode-toggle-row .toggle-label { font-size: 0.9em; color: var(--text-secondary); font-weight: 400; }
+.mode-toggle-row .toggle-label-active { color: var(--text-primary); font-weight: 500; }
 
 /* Safe Config Section - İyileştirilmiş */
 .safe-config-section { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 0; }

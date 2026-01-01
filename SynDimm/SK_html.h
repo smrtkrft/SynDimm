@@ -80,6 +80,18 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
                     <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.mode_selection_info">Select the operating mode for the encoder. Each mode offers different functionality.</span></span>
                 </h2>
                 
+                <!-- Encoder Mod Değiştirme Toggle -->
+                <div class="mode-toggle-row">
+                    <div class="toggle-info">
+                        <span class="toggle-label" id="encoder-mode-label" data-lang="quick.encoder_mode_change">Encoder Mode Change</span>
+                        <span class="info-tooltip-i">i<span class="tooltip-content" data-lang="tooltip.encoder_mode_change">When enabled, you can change modes by holding the encoder button and rotating. When disabled, mode changes are only possible via web interface.</span></span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="encoder-mode-toggle" onchange="toggleEncoderModeChange(this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                
                 <!-- Mod Seçimi Butonları -->
                 <div class="mode-buttons">
                     <button class="mode-btn" id="mode-btn-dimmer" onclick="selectMode('DIMMER')">

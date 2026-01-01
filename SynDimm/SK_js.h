@@ -207,6 +207,12 @@ function loadCurrentMode() {
             if(badge) { badge.textContent = isActive ? t('modes.active') : t('modes.passive'); badge.className = 'badge badge-' + (isActive ? 'connected' : 'not-configured'); }
             if(btn) { btn.classList.remove('active'); if(isActive) btn.classList.add('active'); }
         });
+        // Encoder mod değiştirme toggle durumunu güncelle
+        const encoderToggle = $('encoder-mode-toggle');
+        if(encoderToggle) {
+            encoderToggle.checked = d.encoderModeChangeEnabled !== false;
+            updateEncoderToggleLabel(encoderToggle.checked);
+        }
     }).catch(() => {
         ['dimmer','shutter','safe','alarm'].forEach(m => {
             const badge = $(m + '-badge');
@@ -214,6 +220,27 @@ function loadCurrentMode() {
         });
     });
 }
+
+// Encoder mod değiştirme toggle fonksiyonu
+function toggleEncoderModeChange(enabled) {
+    post('/setEncoderModeChange', { enabled: enabled }).then(() => {
+        updateEncoderToggleLabel(enabled);
+        showNotification(t('notifications.setting_saved'), 'success');
+    }).catch(() => {
+        // Hata durumunda toggle'ı eski haline getir
+        const toggle = $('encoder-mode-toggle');
+        if(toggle) toggle.checked = !enabled;
+        showNotification(t('notifications.setting_failed'), 'error');
+    });
+}
+
+function updateEncoderToggleLabel(enabled) {
+    const label = $('encoder-mode-label');
+    if(label) {
+        label.classList.toggle('toggle-label-active', enabled);
+    }
+}
+
 function selectMode(mode) { 
     post('/setMode', { mode: mode }).then(() => {
         loadCurrentMode();

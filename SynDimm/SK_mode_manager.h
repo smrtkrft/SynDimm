@@ -24,6 +24,7 @@ namespace {
     Preferences modePrefs;
     const char* MODE_PREFS_NS = "mode_mgr";
     const char* MODE_KEY = "active_mode";
+    const char* ENCODER_MODE_KEY = "enc_mode_en";  // Encoder ile mod değiştirme ayarı
 }
 
 // Mod değişim callback tipi
@@ -34,6 +35,7 @@ private:
     SystemMode activeMode;
     SystemMode previewMode;
     bool inModeChangeMode;   // Buton basılı tutularak çevriliyor mu
+    bool encoderModeChangeEnabled;  // Encoder ile mod değiştirme aktif mi
     SKBuzzer* buzzer;
     ModeChangeCallback onModeChangeCallback;  // Mod değişim callback'i
     
@@ -93,6 +95,7 @@ public:
     SKModeManager(SKBuzzer* buzzerInstance) {
         buzzer = buzzerInstance;
         inModeChangeMode = false;
+        encoderModeChangeEnabled = true;  // Varsayılan: açık
         activeMode = MODE_DIMMER;
         previewMode = activeMode;
         onModeChangeCallback = nullptr;
@@ -101,7 +104,12 @@ public:
     void begin() {
         activeMode = loadActiveMode();
         previewMode = activeMode;
-        DEBUG_PRINTF("[ModeManager] Initialized with mode: %s\n", getModeNameStr(activeMode));
+        // Encoder mod değiştirme ayarını yükle
+        modePrefs.begin(MODE_PREFS_NS, true);
+        encoderModeChangeEnabled = modePrefs.getBool(ENCODER_MODE_KEY, true);
+        modePrefs.end();
+        DEBUG_PRINTF("[ModeManager] Initialized with mode: %s, encoder mode change: %s\n", 
+                     getModeNameStr(activeMode), encoderModeChangeEnabled ? "enabled" : "disabled");
     }
     
     // No timeout needed - mode change is immediate on button release
@@ -112,6 +120,12 @@ public:
     // Called when encoder rotates while button is held
     // Returns true if mode change was triggered (for encoder to mark)
     bool handleModeRotation(char direction) {
+        // Encoder ile mod değiştirme kapalıysa işlem yapma
+        if (!encoderModeChangeEnabled) {
+            DEBUG_PRINTLN("[ModeManager] Encoder mode change disabled - ignoring rotation");
+            return false;
+        }
+        
         inModeChangeMode = true;
         
         if (direction == 'R') {
@@ -185,11 +199,25 @@ public:
         onModeChangeCallback = callback;
     }
     
+    // Encoder ile mod değiştirme ayarı
+    bool isEncoderModeChangeEnabled() const {
+        return encoderModeChangeEnabled;
+    }
+    
+    void setEncoderModeChangeEnabled(bool enabled) {
+        encoderModeChangeEnabled = enabled;
+        modePrefs.begin(MODE_PREFS_NS, false);
+        modePrefs.putBool(ENCODER_MODE_KEY, enabled);
+        modePrefs.end();
+        DEBUG_PRINTF("[ModeManager] Encoder mode change: %s\n", enabled ? "enabled" : "disabled");
+    }
+    
     // JSON status for web (simplified - mode change is instant via encoder)
     String getStatusJSON() {
         String json = "{";
         json += "\"activeMode\":" + String((int)activeMode) + ",";
-        json += "\"activeModeStr\":\"" + String(getModeNameStr(activeMode)) + "\"";
+        json += "\"activeModeStr\":\"" + String(getModeNameStr(activeMode)) + "\",";
+        json += "\"encoderModeChangeEnabled\":" + String(encoderModeChangeEnabled ? "true" : "false");
         json += "}";
         return json;
     }
