@@ -21,7 +21,7 @@
 // DEBUG AYARLARI
 // ========================================
 // Geliştirme için aç: #define DEBUG_MODE
-#define DEBUG_MODE
+// #define DEBUG_MODE  // RELEASE: Debug kapalı
 
 #ifdef DEBUG_MODE
   #define DEBUG_PRINT(x)    Serial.print(x)

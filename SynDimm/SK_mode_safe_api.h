@@ -186,14 +186,36 @@ public:
   static void onPasswordMatch(uint8_t passwordIndex, SafeLock* safeLock, SafeLockAPIHandler* apiHandler) {
     DEBUG_PRINTF("[SafeAPI] Password #%d matched, triggering API...\n", passwordIndex);
     
+    // Pointer kontrolleri
+    if (!safeLock) {
+      DEBUG_PRINTLN("[SafeAPI] HATA: safeLock pointer NULL!");
+      return;
+    }
+    if (!apiHandler) {
+      DEBUG_PRINTLN("[SafeAPI] HATA: apiHandler pointer NULL!");
+      return;
+    }
+    
+    // LittleFS hazır mı?
+    if (!safeLock->isLittleFsReady()) {
+      DEBUG_PRINTLN("[SafeAPI] HATA: LittleFS hazir degil!");
+      return;
+    }
+    
     // LittleFS'ten lazy-load API config
+    DEBUG_PRINTF("[SafeAPI] Config yuklemeden once, hasApiConfig: %d\n", safeLock->hasApiConfig(passwordIndex));
     SafeApiConfig apiConfig = safeLock->getApiConfig(passwordIndex);
     
-    // GÜVENLİK: URL Serial'e loglanmıyor
-    DEBUG_PRINTF("[SafeAPI] API enabled: %d\n", apiConfig.enabled);
+    // GÜVENLİK: URL Serial'e loglanmıyor ama debug için URL uzunluğunu göster
+    DEBUG_PRINTF("[SafeAPI] API enabled: %d, URL uzunluk: %d\n", apiConfig.enabled, apiConfig.url.length());
     
     if (!apiConfig.enabled) {
       DEBUG_PRINTLN("[SafeAPI] API devre disi, cikiliyor");
+      return;
+    }
+    
+    if (apiConfig.url.length() == 0) {
+      DEBUG_PRINTLN("[SafeAPI] API URL bos, cikiliyor");
       return;
     }
     

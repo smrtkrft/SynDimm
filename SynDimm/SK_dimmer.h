@@ -180,13 +180,11 @@ namespace {
 // Forward declarations
 bool connectToDimmer(String ip);
 DimmerEndpoints getEndpointsForModel(DimmerType type);
-DimmerType detectDimmerType(String response);
+
 bool getShellyGen1Status();
 bool getShellyGen3Status();
-bool getShellyDALIStatus();
 bool setShellyGen1Brightness(int brightness);
 bool setShellyGen3Brightness(int brightness);
-bool setShellyDALIBrightness(int brightness);
 bool getShellyStatus();
 bool setShellyBrightness(int brightness);
 bool toggleShellyPower();
@@ -320,37 +318,6 @@ DimmerEndpoints getEndpointsForModel(DimmerType type) {
 }
 
 // ========================================
-// LEGACY DETECTION FUNCTIONS
-// ========================================
-
-// Detect Dimmer Type from response (kept for compatibility)
-DimmerType detectDimmerType(String response) {
-    DEBUG_PRINTF("[DIMMER] Detecting type from response (first 200 chars): %s\n", response.substring(0, 200).c_str());
-    
-    // Check for Shelly Gen2/Gen3 (RPC)
-    if (response.indexOf("\"type\":\"SHDM-") >= 0 || response.indexOf("/rpc/") >= 0) {
-        DEBUG_PRINTLN("[DIMMER] Detected: Shelly Gen2/Gen3");
-        return DIMMER_SHELLY_DIMMER_2_GEN3;
-    }
-    
-    // Check for Shelly Gen1 (REST)
-    if (response.indexOf("\"type\":") >= 0 && 
-        (response.indexOf("\"lights\"") >= 0 || response.indexOf("\"brightness\"") >= 0)) {
-        DEBUG_PRINTLN("[DIMMER] Detected: Shelly Gen1");
-        return DIMMER_SHELLY_DIMMER_2;
-    }
-    
-    // Check for Tasmota
-    if (response.indexOf("Tasmota") >= 0 || response.indexOf("POWER") >= 0) {
-        DEBUG_PRINTLN("[DIMMER] Detected: Tasmota");
-        return DIMMER_TASMOTA;
-    }
-    
-    DEBUG_PRINTLN("[DIMMER] Detected: Generic/Unknown");
-    return DIMMER_GENERIC;
-}
-
-// ========================================
 // MODEL-SPECIFIC STATUS FUNCTIONS
 // ========================================
 
@@ -429,12 +396,6 @@ bool getShellyGen3Status() {
     return true;
 }
 
-// Shelly DALI - Get Status
-bool getShellyDALIStatus() {
-    // DALI uses same RPC as Gen3 but may have additional fields
-    return getShellyGen3Status();
-}
-
 // Main Shelly Status Function (dispatches to correct model)
 bool getShellyStatus() {
     if (dimmerDevice.type >= 10 && dimmerDevice.type < 20) {
@@ -509,12 +470,6 @@ bool setShellyGen3Brightness(int brightness) {
     }
     
     return false;
-}
-
-// Shelly DALI - Set Brightness
-bool setShellyDALIBrightness(int brightness) {
-    // DALI uses same RPC as Gen3
-    return setShellyGen3Brightness(brightness);
 }
 
 // Main Shelly Brightness Function (dispatches to correct model)

@@ -396,10 +396,14 @@ void loop() {
     char event = encoder.read();
     
     // Check if button is held while rotating - MODE CHANGE
+    // Requires 1 second hold before rotation triggers mode change
     if (encoder.isButtonHeld() && (event == 'L' || event == 'R')) {
-      // Button held + rotation = mode change
-      modeManager.handleModeRotation(event);
-      encoder.setModeChangeTriggered();
+      // Button must be held for at least 1 second before mode change activates
+      if (encoder.isButtonHeldLongEnough()) {
+        modeManager.handleModeRotation(event);
+        encoder.setModeChangeTriggered();
+      }
+      // If held less than 1 second, rotation is ignored for mode change
     }
     // Mode change confirmation (button released after rotation)
     else if (event == 'M') {

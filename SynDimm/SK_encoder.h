@@ -72,6 +72,7 @@ private:
   bool buttonIsHeld;                            // Buton şu an basılı mı
   bool modeChangeTriggered;                     // Basılı tutarken çevirme yapıldı mı
   const unsigned long buttonDebounceDelay = 50; // 50ms button debounce
+  const unsigned long modeChangeDelay = 1000;   // 1 second = enable mode change
   const unsigned long rebootPressTime = 5000;   // 5 seconds = reboot
   const unsigned long factoryResetTime = 10000; // 10 seconds = factory reset
   
@@ -288,6 +289,19 @@ public:
   // Check if button is currently held (for mode change detection)
   bool isButtonHeld() const {
     return buttonIsHeld;
+  }
+  
+  // Check if button has been held long enough for mode change (1 second)
+  bool isButtonHeldLongEnough() const {
+    if (!buttonIsHeld) return false;
+    unsigned long holdDuration = millis() - buttonPressTime;
+    return holdDuration >= modeChangeDelay;
+  }
+  
+  // Get button hold duration in ms
+  unsigned long getButtonHoldDuration() const {
+    if (!buttonIsHeld) return 0;
+    return millis() - buttonPressTime;
   }
   
   // Mark that mode change was triggered while button held

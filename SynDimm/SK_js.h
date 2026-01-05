@@ -707,12 +707,21 @@ function startTeachingPolling(idx) {
         const timerEl = $('teaching-timer-' + idx);
         if(timerEl) timerEl.textContent = remaining + 's';
         
-        // Timeout check
+        // Timeout check - cancel on backend too!
         if(remaining <= 0) {
             stopTeachingPolling();
-            hideTeachingOverlay(idx);
-            showNotification(t('safe.teaching_timeout'), 'warning');
-            loadSafePasswords(); // Reload passwords to refresh UI state
+            // IMPORTANT: Cancel teaching on backend to reset state
+            post('/cancelSafeTeaching', {})
+                .then(() => {
+                    hideTeachingOverlay(idx);
+                    showNotification(t('safe.teaching_timeout'), 'warning');
+                    loadSafePasswords();
+                })
+                .catch(() => {
+                    hideTeachingOverlay(idx);
+                    showNotification(t('safe.teaching_timeout'), 'warning');
+                    loadSafePasswords();
+                });
             return;
         }
         
@@ -954,7 +963,6 @@ function updateDimmerUI(d) {
         updateDefaultBrightnessUI(d.defaultBrightnessEnabled, d.defaultBrightnessValue || 50);
     }
 }
-function updateCalibrationValue(v) { setText('calibration-value', v); }
 function adjustCalibration(delta) {
     const el = $('dimmer-cal-value'), cur = parseInt(el.textContent);
     if(isNaN(cur)) return;

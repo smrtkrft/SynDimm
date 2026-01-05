@@ -161,7 +161,18 @@ struct __attribute__((packed)) SafePassword {
       }
     }
     
-    return (stepCount >= SAFE_MIN_PASSWORD_STEPS && stepCount <= SAFE_MAX_PASSWORD_STEPS);
+    // Temel uzunluk kontrolü
+    if (stepCount < SAFE_MIN_PASSWORD_STEPS || stepCount > SAFE_MAX_PASSWORD_STEPS) {
+      return false;
+    }
+    
+    // B karakteri varsa SADECE son adımda olabilir
+    // Ortada B olan şifreler (örn: L2-B-R3) geçersiz
+    if (requireButton && steps[stepCount - 1].direction != 'B') {
+      return false;
+    }
+    
+    return true;
   }
 };
 
@@ -253,6 +264,24 @@ private:
   void (*onPasswordMatchCallback)(uint8_t passwordIndex);
   void (*onTeachingCompleteCallback)(uint8_t passwordIndex, const String& pattern);
   void (*onTeachingCancelledCallback)(uint8_t passwordIndex, const char* reason);
+  
+  // LittleFS'i lazy-init et (hazır değilse yeniden başlat)
+  bool ensureLittleFS() {
+    if (littleFsReady) return true;
+    
+    DEBUG_PRINTLN("[SafeLock] LittleFS yeniden baslatiliyor...");
+    if (LittleFS.begin(true)) {
+      littleFsReady = true;
+      // /safe dizinini oluştur
+      if (!LittleFS.exists(SAFE_API_CONFIG_DIR)) {
+        LittleFS.mkdir(SAFE_API_CONFIG_DIR);
+      }
+      DEBUG_PRINTLN("[SafeLock] LittleFS yeniden baslatildi!");
+      return true;
+    }
+    DEBUG_PRINTLN("[SafeLock] LittleFS yeniden baslatilamadi!");
+    return false;
+  }
   
   // API Config dosya yolunu oluştur
   String getApiConfigPath(uint8_t index) {
@@ -388,19 +417,36 @@ public:
   void begin() {
     DEBUG_PRINTLN("[SafeLock] Baslatiliyor...");
     
-    // LittleFS başlat
-    if (!LittleFS.begin(true)) {
-      DEBUG_PRINTLN("[SafeLock] LittleFS baslatilamadi!");
-      littleFsReady = false;
+    // LittleFS başlat - birden fazla deneme yap
+    littleFsReady = false;
+    for (int attempt = 0; attempt < 3; attempt++) {
+      if (LittleFS.begin(true)) {  // true = format on fail
+        littleFsReady = true;
+        DEBUG_PRINTF("[SafeLock] LittleFS hazir (deneme %d)\n", attempt + 1);
+        break;
+      } else {
+        DEBUG_PRINTF("[SafeLock] LittleFS baslatma denemesi %d basarisiz\n", attempt + 1);
+        delay(100);  // Kısa bekleme
+      }
+    }
+    
+    if (!littleFsReady) {
+      DEBUG_PRINTLN("[SafeLock] LittleFS baslatilamadi! API config'ler calismayacak.");
     } else {
-      littleFsReady = true;
-      DEBUG_PRINTLN("[SafeLock] LittleFS hazir");
-      
       // /safe dizinini oluştur
       if (!LittleFS.exists(SAFE_API_CONFIG_DIR)) {
-        LittleFS.mkdir(SAFE_API_CONFIG_DIR);
-        DEBUG_PRINTLN("[SafeLock] /safe dizini olusturuldu");
+        if (LittleFS.mkdir(SAFE_API_CONFIG_DIR)) {
+          DEBUG_PRINTLN("[SafeLock] /safe dizini olusturuldu");
+        } else {
+          DEBUG_PRINTLN("[SafeLock] /safe dizini olusturulamadi!");
+        }
+      } else {
+        DEBUG_PRINTLN("[SafeLock] /safe dizini mevcut");
       }
+      
+      // LittleFS bilgilerini göster
+      DEBUG_PRINTF("[SafeLock] LittleFS Total: %u, Used: %u\n", 
+                   LittleFS.totalBytes(), LittleFS.usedBytes());
     }
     
     // NVS'ten şifre pattern'lerini yükle
@@ -453,31 +499,38 @@ public:
   // LittleFS'e API config kaydet
   bool saveApiConfig(uint8_t index, const SafeApiConfig& config) {
     if (index >= SAFE_MAX_PASSWORDS) return false;
-    if (!littleFsReady) {
-      DEBUG_PRINTLN("[SafeLock] LittleFS hazir degil!");
+    
+    // LittleFS hazır değilse yeniden başlatmayı dene
+    if (!ensureLittleFS()) {
+      DEBUG_PRINTLN("[SafeLock] saveApiConfig: LittleFS baslatilamadi!");
       return false;
     }
     
     String path = getApiConfigPath(index);
     String json = config.toJson();
     
+    DEBUG_PRINTF("[SafeLock] saveApiConfig: Kaydediliyor %s\n", path.c_str());
+    DEBUG_PRINTF("[SafeLock] saveApiConfig: JSON = %s\n", json.c_str());
+    
     File file = LittleFS.open(path, "w");
     if (!file) {
-      DEBUG_PRINTF("[SafeLock] Dosya acilamadi: %s\n", path.c_str());
+      DEBUG_PRINTF("[SafeLock] saveApiConfig: Dosya acilamadi: %s\n", path.c_str());
       return false;
     }
     
     size_t written = file.print(json);
+    file.flush();  // Flush ekle - veriyi diske yaz
     file.close();
     
     if (written > 0) {
       // hasApiConfig: dosya kaydedildiyse true (enabled değerine bakılmaksızın)
       passwords[index].hasApiConfig = true;
       savePasswords();
-      DEBUG_PRINTF("[SafeLock] API config kaydedildi: %s (%d byte)\n", path.c_str(), written);
+      DEBUG_PRINTF("[SafeLock] saveApiConfig: BASARILI - %s (%d byte)\n", path.c_str(), written);
       return true;
     }
     
+    DEBUG_PRINTLN("[SafeLock] saveApiConfig: HATA - 0 byte yazildi!");
     return false;
   }
   
@@ -485,11 +538,20 @@ public:
   SafeApiConfig loadApiConfig(uint8_t index) {
     SafeApiConfig config;
     
-    if (index >= SAFE_MAX_PASSWORDS) return config;
-    if (!littleFsReady) return config;
+    if (index >= SAFE_MAX_PASSWORDS) {
+      DEBUG_PRINTF("[SafeLock] loadApiConfig: Gecersiz index %d\n", index);
+      return config;
+    }
+    
+    // LittleFS hazır değilse yeniden başlatmayı dene
+    if (!ensureLittleFS()) {
+      DEBUG_PRINTLN("[SafeLock] loadApiConfig: LittleFS baslatilamadi!");
+      return config;
+    }
     
     // Dosya kontrolü yap (hasApiConfig yerine doğrudan dosya kontrolü)
     String path = getApiConfigPath(index);
+    DEBUG_PRINTF("[SafeLock] loadApiConfig: Dosya yolu: %s\n", path.c_str());
     
     if (!LittleFS.exists(path)) {
       DEBUG_PRINTF("[SafeLock] API config dosyasi yok: %s\n", path.c_str());
@@ -505,8 +567,12 @@ public:
     String json = file.readString();
     file.close();
     
+    DEBUG_PRINTF("[SafeLock] JSON icerik: %s\n", json.c_str());
+    
     if (config.fromJson(json)) {
-      DEBUG_PRINTF("[SafeLock] API config yuklendi: %s (%d byte)\n", path.c_str(), json.length());
+      DEBUG_PRINTF("[SafeLock] API config yuklendi: %s (enabled=%d, url_len=%d)\n", path.c_str(), config.enabled, config.url.length());
+    } else {
+      DEBUG_PRINTLN("[SafeLock] JSON parse HATASI!");
     }
     
     return config;
@@ -515,7 +581,13 @@ public:
   // API config sil
   bool deleteApiConfig(uint8_t index) {
     if (index >= SAFE_MAX_PASSWORDS) return false;
-    if (!littleFsReady) return false;
+    
+    // LittleFS hazır değilse sadece flag'i temizle
+    if (!ensureLittleFS()) {
+      passwords[index].hasApiConfig = false;
+      savePasswords();
+      return true;
+    }
     
     String path = getApiConfigPath(index);
     
@@ -647,7 +719,8 @@ public:
     if (index >= SAFE_MAX_PASSWORDS) return false;
     
     // GÜVENLİK: Şifre Serial'e loglanmıyor
-    DEBUG_PRINTF("[SafeLock] setPassword: index=%d, active=%d\n", index, isActive);
+    DEBUG_PRINTF("[SafeLock] setPassword: index=%d, active=%d, api.enabled=%d, api.url_len=%d\n", 
+                 index, isActive, apiConfig.enabled, apiConfig.url.length());
     
     // Boş şifre gelirse sadece API config ve active durumunu güncelle
     if (passwordStr.length() == 0) {
@@ -655,8 +728,10 @@ public:
       
       // API config varsa LittleFS'e kaydet
       if (apiConfig.enabled) {
+        DEBUG_PRINTLN("[SafeLock] setPassword: API config kaydediliyor (bos sifre)...");
         saveApiConfig(index, apiConfig);
       } else {
+        DEBUG_PRINTLN("[SafeLock] setPassword: API config siliniyor (bos sifre, disabled)...");
         deleteApiConfig(index);
       }
       
@@ -675,15 +750,16 @@ public:
     
     // API config varsa LittleFS'e kaydet
     if (apiConfig.enabled) {
+      DEBUG_PRINTLN("[SafeLock] setPassword: API config kaydediliyor...");
       passwords[index].hasApiConfig = true;
       saveApiConfig(index, apiConfig);
     } else {
+      DEBUG_PRINTLN("[SafeLock] setPassword: API config siliniyor (disabled)...");
       deleteApiConfig(index);
     }
     
     // GÜVENLİK: Şifre ve URL Serial'e loglanmıyor
-    DEBUG_PRINTF("[SafeLock] Slot #%d configured (active=%d)\n", index, isActive);
-    DEBUG_PRINTF("[SafeLock] API enabled: %d\n", apiConfig.enabled);
+    DEBUG_PRINTF("[SafeLock] Slot #%d configured (active=%d, hasApi=%d)\n", index, isActive, passwords[index].hasApiConfig);
     
     return savePasswords();
   }
@@ -720,8 +796,13 @@ public:
     return passwords[index].hasApiConfig;
   }
   
-  // LittleFS hazır mı?
-  bool isLittleFsReady() { return littleFsReady; }
+  // LittleFS hazır mı? (hazır değilse yeniden başlatmayı dene)
+  bool isLittleFsReady() { 
+    if (!littleFsReady) {
+      ensureLittleFS();
+    }
+    return littleFsReady; 
+  }
   
   // Callback ayarla
   void setPasswordMatchCallback(void (*callback)(uint8_t)) {
@@ -746,9 +827,15 @@ public:
       return false;
     }
     
+    // Eğer teaching aktifse ve timeout geçmişse, otomatik iptal et
     if (teachingActive) {
-      DEBUG_PRINTLN("[SafeLock] Teaching: Already in teaching mode");
-      return false;
+      if (millis() - teachingStartTime > TEACHING_TIMEOUT) {
+        DEBUG_PRINTLN("[SafeLock] Teaching: Previous session timed out, auto-cancelling");
+        cancelTeaching("auto_timeout");
+      } else {
+        DEBUG_PRINTLN("[SafeLock] Teaching: Already in teaching mode");
+        return false;
+      }
     }
     
     // Teaching buffer'ı temizle

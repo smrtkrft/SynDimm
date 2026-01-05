@@ -208,8 +208,6 @@ body.light-theme .saved-device-item { background: var(--bg-card); border-color: 
 body.light-theme .saved-device-ip { color: var(--text-primary); }
 body.light-theme .saved-device-type { color: var(--text-muted); }
 
-/* Light Theme - Status Bar (shutter) */
-body.light-theme .shutter-status-bar { background: var(--bg-card); border-color: var(--border-color); }
 body.light-theme .status-col { border-right-color: var(--border-light); }
 body.light-theme .status-col-label { color: var(--text-muted); }
 body.light-theme .status-col-value { color: var(--text-primary); }
@@ -1094,8 +1092,6 @@ body.light-theme .safe-hero { background: radial-gradient(ellipse at center, rgb
 body.light-theme .safe-hero-title { color: var(--text-primary); }
 body.light-theme .safe-hero-subtitle { color: var(--text-muted); }
 
-/* Shutter Status Bar (legacy - can be removed later) */
-.shutter-status-bar { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 20px 25px; margin-bottom: 25px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
 .shutter-info-text { padding: 12px 16px; border-radius: 6px; font-size: 0.85em; line-height: 1.5; margin-top: 15px; }
 .shutter-info-text.warning { background: rgba(255, 193, 7, 0.15); border: 1px solid rgba(255, 193, 7, 0.4); color: #ffc107; }
 .shutter-info-text .warning-icon { font-size: 1.1em; margin-right: 8px; }
@@ -1119,9 +1115,8 @@ body.light-theme .safe-hero-subtitle { color: var(--text-muted); }
 .saved-device-btn.delete { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; }
 .saved-device-btn.delete:hover { background: rgba(239, 68, 68, 0.25); }
 
-/* Status Bar Responsive (for shutter) */
+/* Responsive Adjustments */
 @media (max-width: 768px) {
-    .shutter-status-bar { grid-template-columns: repeat(2, 1fr); gap: 20px 0; padding: 15px 20px; }
     .status-col { border-right: none; border-bottom: none; padding: 0 10px; }
     .status-col:nth-child(odd) { border-right: 1px solid var(--border-light); }
     .dimmer-inline-form { flex-direction: column; }
@@ -1129,7 +1124,6 @@ body.light-theme .safe-hero-subtitle { color: var(--text-muted); }
     .dimmer-brightness-display { font-size: 3.5em; }
 }
 @media (max-width: 480px) {
-    .shutter-status-bar { grid-template-columns: 1fr; gap: 15px; padding: 15px; }
     .status-col { padding: 10px 0; border-bottom: 1px solid var(--border-color); }
     .status-col:nth-child(odd) { border-right: none; }
     .status-col:last-child { border-bottom: none; }
