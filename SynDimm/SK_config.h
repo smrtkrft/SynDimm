@@ -22,6 +22,7 @@
 // ========================================
 // Geliştirme için aç: #define DEBUG_MODE
 // #define DEBUG_MODE  // RELEASE: Debug kapalı
+#define DEBUG_WIZ  // Sadece WiZ debug açık
 
 #ifdef DEBUG_MODE
   #define DEBUG_PRINT(x)    Serial.print(x)
@@ -31,6 +32,15 @@
   #define DEBUG_PRINT(x)
   #define DEBUG_PRINTLN(x)
   #define DEBUG_PRINTF(...)
+#endif
+
+// WiZ için ayrı debug (sadece bağlantı testi için)
+#ifdef DEBUG_WIZ
+  #define WIZ_DEBUG(x)    Serial.println(x)
+  #define WIZ_DEBUGF(...) Serial.printf(__VA_ARGS__)
+#else
+  #define WIZ_DEBUG(x)
+  #define WIZ_DEBUGF(...)
 #endif
 
 // Kritik hatalar her zaman gösterilir

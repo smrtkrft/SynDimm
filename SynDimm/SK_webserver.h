@@ -14,11 +14,31 @@
 #include "SK_js.h"
 #include "SK_scan.h"
 #include "SK_dimmer.h"
-#include "SK_shutter.h"
+#include "SK_wiz.h"
+// #include "SK_shutter.h"  // TEMP DISABLED
 #include "SK_mode_safe.h"
 #include "SK_mode_safe_api.h"
 #include "SK_ota.h"
 #include "SK_lang.h"
+
+// TEMP: Shutter stub functions
+inline void initShutter() {}
+inline void autoReconnectShutter() {}
+inline String getShutterStatusJSON() { return "{\"connected\":false}"; }
+inline String getSavedShutterDevicesJSON() { return "{\"devices\":[]}"; }
+inline bool connectToShutter(const String&) { return false; }
+inline void disconnectShutter() {}
+inline void setShutterPosition(int) {}
+inline void stopShutter() {}
+inline void shutterUp() {}
+inline void shutterDown() {}
+inline void setShutterEncoderStep(int) {}
+inline void removeSavedShutterDevice(const String&) {}
+inline void clearShutterLastConnection() {}
+inline void setEncoderStep(int) {}
+inline bool removeShutterDevice(const String&) { return false; }
+struct ShutterDevice { bool isConnected = false; };
+inline ShutterDevice shutterDevice;
 
 class SKWebServer {
 private:
@@ -384,18 +404,26 @@ private:
     
     // Dimmer Endpoints
     void handleConnectDimmer() {
+        Serial.println("[DIMMER] handleConnectDimmer called");
         JsonDocument doc;
-        if (!parseJsonBody(doc)) return;
+        if (!parseJsonBody(doc)) {
+            Serial.println("[DIMMER] parseJsonBody failed");
+            return;
+        }
         
         String ip = doc["ip"].as<String>();
+        Serial.print("[DIMMER] IP: "); Serial.println(ip);
+        
         if (ip.length() == 0) {
             sendError(400, "IP address required");
             return;
         }
         
         if (connectToDimmer(ip)) {
+            Serial.println("[DIMMER] Connected OK");
             sendSuccess("Connected to dimmer");
         } else {
+            Serial.println("[DIMMER] Connection FAILED");
             server->send(200, "application/json", "{\"success\":false,\"message\":\"Connection failed\"}");
         }
     }
@@ -409,8 +437,39 @@ private:
     }
     
     void handleGetDimmerStatus() {
-        String json = getDimmerStatusJSON();
-        server->send(200, "application/json", json);
+        // WiZ ve Shelly durumlarını birleştir
+        JsonDocument doc;
+        
+        // Shelly dimmer durumu
+        doc["shelly"]["connected"] = dimmerDevice.isConnected;
+        doc["shelly"]["ip"] = dimmerDevice.ip;
+        doc["shelly"]["name"] = dimmerDevice.name;
+        doc["shelly"]["brightness"] = dimmerDevice.brightness;
+        doc["shelly"]["isOn"] = dimmerDevice.isOn;
+        doc["shelly"]["type"] = (int)dimmerDevice.type;
+        
+        // WiZ durumu
+        doc["wiz"]["connected"] = wizDevice.isConnected;
+        doc["wiz"]["ip"] = wizDevice.ip;
+        doc["wiz"]["mac"] = wizDevice.mac;
+        doc["wiz"]["brightness"] = wizDevice.brightness;
+        doc["wiz"]["state"] = wizDevice.state;
+        doc["wiz"]["r"] = wizDevice.r;
+        doc["wiz"]["g"] = wizDevice.g;
+        doc["wiz"]["b"] = wizDevice.b;
+        doc["wiz"]["hue"] = wizDevice.hue;
+        doc["wiz"]["supportsRGB"] = wizDevice.supportsRGB;
+        doc["wiz"]["colorControlActive"] = isWiZColorControlActive();
+        
+        // Genel durum
+        doc["ratio"] = dimmerConfig.dimmerRatio;
+        doc["defaultBrightnessEnabled"] = dimmerConfig.defaultBrightnessEnabled;
+        doc["defaultBrightnessValue"] = dimmerConfig.defaultBrightnessValue;
+        doc["activeDevice"] = wizDevice.isConnected ? "wiz" : (dimmerDevice.isConnected ? "shelly" : "none");
+        
+        String output;
+        serializeJson(doc, output);
+        server->send(200, "application/json", output);
     }
     
     void handleSetDimmerRatio() {
@@ -427,6 +486,113 @@ private:
         sendSuccess("Ratio saved");
     }
     
+    // ========== WIZ API HANDLERS ==========
+    
+    void handleConnectWiZ() {
+        WIZ_DEBUG("[WIZ] handleConnectWiZ called");
+        JsonDocument doc;
+        if (!parseJsonBody(doc)) {
+            WIZ_DEBUG("[WIZ] parseJsonBody failed");
+            return;
+        }
+        
+        String ip = doc["ip"].as<String>();
+        WIZ_DEBUGF("[WIZ] IP from request: %s\n", ip.c_str());
+        
+        if (ip.length() == 0) {
+            WIZ_DEBUG("[WIZ] Empty IP!");
+            sendError(400, "IP required");
+            return;
+        }
+        
+        if (connectToWiZ(ip)) {
+            sendSuccess("Connected to WiZ");
+        } else {
+            sendError(500, "Failed to connect to WiZ");
+        }
+    }
+    
+    void handleDisconnectWiZ() {
+        if (!requirePost()) return;
+        disconnectWiZ();
+        sendSuccess("Disconnected from WiZ");
+    }
+    
+    void handleGetWiZStatus() {
+        String json = getWiZStatusJSON();
+        server->send(200, "application/json", json);
+    }
+    
+    void handleSetWiZBrightness() {
+        JsonDocument doc;
+        if (!parseJsonBody(doc)) return;
+        
+        int brightness = doc["brightness"].as<int>();
+        if (brightness < 10 || brightness > 100) {
+            sendError(400, "Brightness must be between 10-100");
+            return;
+        }
+        
+        if (setWiZBrightness(wizDevice.ip, brightness)) {
+            sendSuccess("Brightness set");
+        } else {
+            sendError(500, "Failed to set brightness");
+        }
+    }
+    
+    void handleSetWiZColor() {
+        JsonDocument doc;
+        if (!parseJsonBody(doc)) return;
+        
+        if (doc["hue"].is<int>()) {
+            int hue = doc["hue"].as<int>();
+            if (setWiZHue(wizDevice.ip, hue)) {
+                sendSuccess("Color set");
+            } else {
+                sendError(500, "Failed to set color");
+            }
+        } else if (doc["r"].is<int>()) {
+            uint8_t r = doc["r"] | 0;
+            uint8_t g = doc["g"] | 0;
+            uint8_t b = doc["b"] | 0;
+            if (setWiZRGB(wizDevice.ip, r, g, b)) {
+                sendSuccess("Color set");
+            } else {
+                sendError(500, "Failed to set color");
+            }
+        } else {
+            sendError(400, "hue or r,g,b required");
+        }
+    }
+    
+    void handleToggleWiZ() {
+        if (!requirePost()) return;
+        if (toggleWiZ(wizDevice.ip)) {
+            sendSuccess(wizDevice.state ? "Turned on" : "Turned off");
+        } else {
+            sendError(500, "Failed to toggle");
+        }
+    }
+    
+    void handleDiscoverWiZ() {
+        if (!requirePost()) return;
+        
+        auto devices = discoverWiZDevices(3000);
+        
+        JsonDocument doc;
+        JsonArray arr = doc.to<JsonArray>();
+        
+        for (auto& d : devices) {
+            JsonObject obj = arr.add<JsonObject>();
+            obj["ip"] = d.ip;
+            obj["mac"] = d.mac;
+        }
+        
+        String output;
+        serializeJson(doc, output);
+        server->send(200, "application/json", output);
+    }
+    
     void handleScanNetwork() {
         DEBUG_PRINTLN("[WEB] /scanNetwork called");
         if (!requirePost()) return;
@@ -439,7 +605,7 @@ private:
         }
         
         ScanConfig config;
-        config.filters = FILTER_DIMMERS | FILTER_SHUTTERS;
+        config.filters = FILTER_DIMMERS | FILTER_SHUTTERS | FILTER_WIZ;  // WiZ dahil
         config.parallelCount = 10;
         config.tcpTimeout = 500;
         config.httpTimeout = 3000;
@@ -457,14 +623,19 @@ private:
     }
     
     void handleGetScanResults() {
-        DEBUG_PRINTLN("[WEB] /getScanResults called");
+        Serial.println("[WEB] /getScanResults called");
         
         // Get results from unified scanner
         JsonDocument doc;
         JsonArray devices = doc["devices"].to<JsonArray>();
         
         auto discoveredDevices = getDiscoveredDevices();
+        Serial.printf("[WEB] Found %d devices\n", discoveredDevices.size());
+        
         for (const auto& device : discoveredDevices) {
+            Serial.printf("[WEB] Device: %s, cat=%d, name=%s\n", 
+                device.ip.c_str(), (int)device.category, device.displayName.c_str());
+            
             JsonObject obj = devices.add<JsonObject>();
             obj["ip"] = device.ip;
             obj["modelName"] = device.modelName;
@@ -473,6 +644,10 @@ private:
             obj["generation"] = device.generation;
             obj["supportsDimming"] = device.supportsDimming;
             obj["supportsShutter"] = device.supportsShutter;
+            obj["supportsRGBW"] = device.supportsRGBW;
+            obj["specificType"] = device.specificType;
+            obj["macAddress"] = device.macAddress;
+            obj["isWiZ"] = (device.category == CATEGORY_WIZ);
         }
         
         doc["scanning"] = isNetworkScanning();
@@ -1030,6 +1205,15 @@ public:
         server->on("/getScanProgress", HTTP_GET, [this]() { handleGetScanProgress(); });
         server->on("/getSavedDevices", HTTP_GET, [this]() { handleGetSavedDevices(); });
         server->on("/removeSavedDevice", HTTP_POST, [this]() { handleRemoveSavedDevice(); });
+        
+        // WiZ routes
+        server->on("/connectWiZ", HTTP_POST, [this]() { handleConnectWiZ(); });
+        server->on("/disconnectWiZ", HTTP_POST, [this]() { handleDisconnectWiZ(); });
+        server->on("/getWiZStatus", HTTP_GET, [this]() { handleGetWiZStatus(); });
+        server->on("/setWiZBrightness", HTTP_POST, [this]() { handleSetWiZBrightness(); });
+        server->on("/setWiZColor", HTTP_POST, [this]() { handleSetWiZColor(); });
+        server->on("/toggleWiZ", HTTP_POST, [this]() { handleToggleWiZ(); });
+        server->on("/discoverWiZ", HTTP_POST, [this]() { handleDiscoverWiZ(); });
         
         // Shutter routes
         server->on("/connectShutter", HTTP_POST, [this]() { handleConnectShutter(); });

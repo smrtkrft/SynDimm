@@ -906,7 +906,18 @@ function loadDimmerStatus() {
     api('/getDimmerStatus').then(d => updateDimmerUI(d)).catch(() => {});
 }
 function updateDimmerUI(d) {
-    // Hero Display elements (new Design 3)
+    // Aktif cihazı belirle (WiZ öncelikli)
+    const hasWiz = d.wiz && d.wiz.connected;
+    const hasShelly = d.shelly && d.shelly.connected;
+    const connected = hasWiz || hasShelly;
+    
+    // Aktif cihaz bilgileri
+    const brightness = hasWiz ? d.wiz.brightness : (hasShelly ? d.shelly.brightness : 0);
+    const isOn = hasWiz ? d.wiz.state : (hasShelly ? d.shelly.isOn : false);
+    const ip = hasWiz ? d.wiz.ip : (hasShelly ? d.shelly.ip : '');
+    const deviceType = hasWiz ? 'WiZ' : (hasShelly ? (d.shelly.name || 'Shelly') : '');
+    
+    // Hero Display elements
     const hero = $('dimmer-hero');
     const brightnessDisplay = $('dimmer-brightness-display');
     const powerStatus = $('dimmer-power-status');
@@ -916,49 +927,27 @@ function updateDimmerUI(d) {
     const calBtnMinus = $('cal-btn-minus');
     const calBtnPlus = $('cal-btn-plus');
     
-    if(d.connected) {
-        // Update hero class for CSS styling
-        if(hero) hero.className = 'dimmer-hero' + (d.isOn ? '' : ' connected-off');
-        
-        // Update brightness display
-        if(brightnessDisplay) brightnessDisplay.innerHTML = (d.brightness || 0) + '<span>%</span>';
-        
-        // Update power status
-        if(powerStatus) powerStatus.textContent = d.isOn ? t('common.on') : t('common.off');
-        
-        // Update connection status
+    if(connected) {
+        if(hero) hero.className = 'dimmer-hero' + (isOn ? '' : ' connected-off');
+        if(brightnessDisplay) brightnessDisplay.innerHTML = brightness + '<span>%</span>';
+        if(powerStatus) powerStatus.textContent = isOn ? t('common.on') : t('common.off');
         if(connectionStatus) connectionStatus.textContent = t('dimmer.connected');
-        
-        // Update IP + device type display
-        if(ipDisplay) {
-            const deviceInfo = d.deviceType ? (d.ip + ' - ' + d.deviceType) : d.ip;
-            ipDisplay.textContent = deviceInfo;
-        }
-        
-        // Update calibration value
+        if(ipDisplay) ipDisplay.textContent = ip + ' - ' + deviceType;
         if(calValue) calValue.textContent = d.ratio || 3;
-        
-        // Enable calibration buttons
         if(calBtnMinus) calBtnMinus.disabled = (d.ratio || 3) <= 1;
         if(calBtnPlus) calBtnPlus.disabled = (d.ratio || 3) >= 5;
-        
     } else {
-        // Update hero class for disconnected state
         if(hero) hero.className = 'dimmer-hero disconnected';
-        
-        // Not connected state
         if(brightnessDisplay) brightnessDisplay.innerHTML = '--<span>%</span>';
         if(powerStatus) powerStatus.textContent = t('common.off');
         if(connectionStatus) connectionStatus.textContent = t('dimmer.not_connected');
         if(ipDisplay) ipDisplay.textContent = t('dimmer.no_device_connected');
         if(calValue) calValue.textContent = '-';
-        
-        // Disable calibration buttons
         if(calBtnMinus) calBtnMinus.disabled = true;
         if(calBtnPlus) calBtnPlus.disabled = true;
     }
     
-    // Update default brightness UI (always, regardless of connection)
+    // Update default brightness UI
     if(d.defaultBrightnessEnabled !== undefined) {
         updateDefaultBrightnessUI(d.defaultBrightnessEnabled, d.defaultBrightnessValue || 50);
     }
@@ -993,6 +982,31 @@ function disconnectDimmer() {
     if(!confirm(t('notifications.confirm_disconnect'))) return;
     post('/disconnectDimmer', {}).then(d => { if(d.success) { showNotification(t('dimmer.disconnected'), 'success'); loadDimmerStatus(); } }).catch(() => {});
 }
+
+// === WiZ BULB ===
+function connectWiZ(ip) {
+    console.log('connectWiZ called with IP:', ip);
+    showNotification('WiZ bağlanıyor...', 'info');
+    post('/connectWiZ', { ip }).then(d => {
+        console.log('connectWiZ response:', d);
+        if(d.success) { showNotification('WiZ bağlandı!', 'success'); loadDimmerStatus(); loadSavedDevices(); }
+        else showNotification('WiZ bağlantı hatası: ' + (d.message || ''), 'error');
+    }).catch(e => { console.error('connectWiZ error:', e); showNotification('Bağlantı hatası: ' + e, 'error'); });
+}
+function disconnectWiZ() {
+    if(!confirm(t('notifications.confirm_disconnect'))) return;
+    post('/disconnectWiZ', {}).then(d => { if(d.success) { showNotification('WiZ bağlantısı kesildi', 'success'); loadDimmerStatus(); } }).catch(() => {});
+}
+function setWiZBrightness(val) {
+    post('/setWiZBrightness', { brightness: parseInt(val) }).catch(() => {});
+}
+function setWiZColor(hue) {
+    post('/setWiZColor', { hue: parseInt(hue) }).catch(() => {});
+}
+function toggleWiZ() {
+    post('/toggleWiZ', {}).then(d => { if(d.success) loadDimmerStatus(); }).catch(() => {});
+}
+
 function loadSavedDevices() {
     api('/getSavedDevices').then(d => displaySavedDevices(d.devices || [])).catch(() => {});
 }
@@ -1005,12 +1019,14 @@ function loadDiscoveredDevices() {
 function displayDiscoveredDevices(devs) {
     const c = $('quick-saved-devices-list');
     if(!c) return;
-    const cats = { 1: t('dimmer.shelly_dimmer'), 2: t('shutter.shelly_shutter'), 3: t('dimmer.switch') };
+    const cats = { 1: t('dimmer.shelly_dimmer'), 2: t('shutter.shelly_shutter'), 3: t('dimmer.switch'), 6: 'Philips WiZ' };
     c.innerHTML = '<div class="discovered-header">' + t('dimmer.found_devices') + ' (' + devs.length + ')</div>' + 
         devs.map(d => `<div class="saved-device-item discovered"><div class="saved-device-info"><div class="saved-device-ip">${d.ip}</div><div class="saved-device-type">${d.displayName || cats[d.category] || t('dimmer.unknown')}</div></div><div class="saved-device-actions"><button class="btn-device-connect" onclick="connectToDiscoveredDevice('${d.ip}', ${d.category})">${t('common.connect')}</button></div></div>`).join('');
 }
 function connectToDiscoveredDevice(ip, category) {
+    console.log('connectToDiscoveredDevice called:', ip, category);
     if(category === 2) { $('quick-shutter-ip-input').value = ip; connectShutter(ip); }
+    else if(category === 6) { console.log('Calling connectWiZ'); connectWiZ(ip); }
     else { $('quick-dimmer-ip-input').value = ip; connectDimmerFromQuick(); }
 }
 function displaySavedDevices(devs) {

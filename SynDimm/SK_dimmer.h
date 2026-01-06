@@ -96,6 +96,12 @@ enum DimmerType {
     
     // Other brands
     DIMMER_TASMOTA = 100,
+    
+    // Philips WiZ Series (UDP Protocol)
+    DIMMER_WIZ_RGBW = 150,            // WiZ RGB + White bulb
+    DIMMER_WIZ_TUNABLE = 151,         // WiZ Tunable White bulb
+    DIMMER_WIZ_DIMMABLE = 152,        // WiZ Dimmable only bulb
+    
     DIMMER_GENERIC = 200
 };
 

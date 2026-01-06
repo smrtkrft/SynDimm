@@ -37,7 +37,8 @@
 #include "SK_mode_manager.h"
 #include "SK_webserver.h"
 #include "SK_dimmer.h"
-#include "SK_shutter.h"
+#include "SK_wiz.h"
+// #include "SK_shutter.h"  // TEMP DISABLED - alan kazanmak icin
 #include "SK_mode_safe.h"
 #include "SK_mode_safe_api.h"
 #include "SK_ota.h"
@@ -50,6 +51,9 @@ SKModeManager modeManager(&buzzer);
 SKWebServer webServer;
 SafeLock safeLock;
 SafeLockAPIHandler safeApiHandler;
+
+// RGB kontrol session - buton basılı tutulup renk değiştirme başladıysa true
+bool rgbColorSession = false;
 
 void setup() {
   // Initialize Serial
@@ -128,23 +132,27 @@ void setup() {
   // Initialize Dimmer System
   initDimmer();
   
+  // Initialize WiZ UDP System
+  initWiZUDP();
+  
   // Initialize Shutter System
-  initShutter();
+  // initShutter();  // TEMP DISABLED
   
   // Mod değişim callback'i - modlar arası geçişte otomatik reconnect
   // NOT: initDimmer ve initShutter'dan SONRA ayarlanmalı
   modeManager.setModeChangeCallback([](SystemMode oldMode, SystemMode newMode) {
     DEBUG_PRINTF("[MODE] Mode changed: %d -> %d\n", (int)oldMode, (int)newMode);
     
-    // Dimmer moduna geçildiğinde otomatik olarak son cihaza bağlan
+    // Dimmer moduna geçildiğinde otomatik olarak son cihazlara bağlan
     if (newMode == MODE_DIMMER) {
       DEBUG_PRINTLN("[MODE] Entering DIMMER mode - triggering auto-reconnect");
-      autoReconnect();
+      autoReconnect();      // Shelly dimmer
+      autoReconnectWiZ();   // WiZ bulb
     }
     // Shutter moduna geçildiğinde otomatik olarak son cihaza bağlan
     else if (newMode == MODE_SHUTTER) {
-      DEBUG_PRINTLN("[MODE] Entering SHUTTER mode - triggering auto-reconnect");
-      autoReconnectShutter();
+      DEBUG_PRINTLN("[MODE] Entering SHUTTER mode");
+      // autoReconnectShutter();  // TEMP DISABLED
     }
   });
 
@@ -188,8 +196,9 @@ void setup() {
   
   // Always try to connect to saved devices (background, read-only for inactive modes)
   DEBUG_PRINTLN("[STARTUP] Connecting to saved devices...");
-  autoReconnect();        // Dimmer - always try
-  autoReconnectShutter(); // Shutter - always try
+  autoReconnect();        // Shelly Dimmer - always try
+  autoReconnectWiZ();     // WiZ Bulb - always try
+  // autoReconnectShutter(); // TEMP DISABLED
   DEBUG_PRINTLN("[STARTUP] Device connections complete");
   
   // İlk OTA kontrolü (WiFi bağlıysa, sadece bilgilendirme)
@@ -382,7 +391,7 @@ void loop() {
       dimmerLoop();
       break;
     case MODE_SHUTTER:
-      updateShutter();
+      // updateShutter();  // TEMP DISABLED
       break;
     case MODE_SAFE:
       // Safe mod loop gerektirmez, event-driven çalışır
@@ -395,18 +404,46 @@ void loop() {
   if (encoder.available()) {
     char event = encoder.read();
     
-    // Check if button is held while rotating - MODE CHANGE
-    // Requires 1 second hold before rotation triggers mode change
+    // Check if button is held while rotating
     if (encoder.isButtonHeld() && (event == 'L' || event == 'R')) {
-      // Button must be held for at least 1 second before mode change activates
-      if (encoder.isButtonHeldLongEnough()) {
+      unsigned long holdTime = encoder.getButtonHoldDuration();
+      
+      // RGB session aktifse, sadece renk kontrolü yap (mod değişikliği engellenir)
+      if (rgbColorSession) {
+        if (wizDevice.isConnected) {
+          adjustWiZHue(event == 'R' ? 1 : -1, 15);
+          encoder.setModeChangeTriggered();
+        }
+      }
+      // 0-1 saniye basılı = RENK KONTROLÜ BAŞLA (WiZ için)
+      else if (holdTime < 1000 && activeMode == MODE_DIMMER) {
+        if (wizDevice.isConnected) {
+          Serial.println("[ENC] WiZ color session STARTED");
+          rgbColorSession = true;  // Session başlat
+          setWiZColorControlActive(true);
+          adjustWiZHue(event == 'R' ? 1 : -1, 15);
+          encoder.setModeChangeTriggered();
+        }
+      }
+      // >1 saniye basılı = MOD DEĞİŞİKLİĞİ (sadece session aktif değilse)
+      else if (holdTime >= 1000 && !rgbColorSession) {
+        setWiZColorControlActive(false);
         modeManager.handleModeRotation(event);
         encoder.setModeChangeTriggered();
       }
-      // If held less than 1 second, rotation is ignored for mode change
+    }
+    // Buton bırakıldı - RGB session'u bitir
+    else if (event == 'B') {
+      if (rgbColorSession) {
+        Serial.println("[ENC] WiZ color session ENDED");
+        rgbColorSession = false;
+        setWiZColorControlActive(false);
+      }
+      // Normal buton işlemi değil, sadece session kapat
     }
     // Mode change confirmation (button released after rotation)
     else if (event == 'M') {
+      rgbColorSession = false;  // Session'u da kapat
       modeManager.confirmModeChange();
     }
     // Normal event handling - route to active mode
@@ -451,31 +488,39 @@ void loop() {
 // ========================================
 
 void handleDimmerEncoderEvent(char event) {
-  switch(event) {
-    case 'L':
-      adjustBrightness(-1);
-      break;
-    case 'R':
-      adjustBrightness(1);
-      break;
-    case 'B':
-      toggleDimmer();
-      break;
+  // Önce WiZ bağlı mı kontrol et
+  if (wizDevice.isConnected) {
+    switch(event) {
+      case 'L':
+        adjustWiZBrightness(-1, dimmerConfig.dimmerRatio);
+        break;
+      case 'R':
+        adjustWiZBrightness(1, dimmerConfig.dimmerRatio);
+        break;
+      case 'B':
+        toggleWiZ(wizDevice.ip);
+        break;
+    }
+  }
+  // Shelly dimmer bağlıysa
+  else if (dimmerDevice.isConnected) {
+    switch(event) {
+      case 'L':
+        adjustBrightness(-1);
+        break;
+      case 'R':
+        adjustBrightness(1);
+        break;
+      case 'B':
+        toggleDimmer();
+        break;
+    }
   }
 }
 
 void handleShutterEncoderEvent(char event) {
-  switch(event) {
-    case 'L':
-      handleShutterEncoderRotate(-1);  // -1 = left = up
-      break;
-    case 'R':
-      handleShutterEncoderRotate(1);   // +1 = right = down
-      break;
-    case 'B':
-      handleShutterEncoderButton();
-      break;
-  }
+  // TEMP DISABLED
+  (void)event;
 }
 
 void handleSafeEncoderEvent(char event) {

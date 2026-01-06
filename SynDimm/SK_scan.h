@@ -8,6 +8,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
+#include <WiFiUdp.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <vector>
@@ -20,6 +21,7 @@
 #define FILTER_SWITCHES    4
 #define FILTER_RGBW        8
 #define FILTER_RELAYS      16
+#define FILTER_WIZ         32
 #define FILTER_ALL         255
 
 // Scan Configuration
@@ -35,7 +37,8 @@ enum DeviceCategory {
     CATEGORY_SHUTTER = 2,
     CATEGORY_SWITCH = 3,
     CATEGORY_RGBW = 4,
-    CATEGORY_RELAY = 5
+    CATEGORY_RELAY = 5,
+    CATEGORY_WIZ = 6            // Philips WiZ cihazları
 };
 
 struct DiscoveredDevice {
@@ -499,6 +502,85 @@ void networkScanTask(void* parameter) {
     
     DEBUG_PRINTF("[SCAN] Phase 1 Complete: %d alive IPs found\n", aliveIPs.size());
     
+    // Phase 1.5: WiZ Discovery (UDP Broadcast)
+    if (currentScanConfig.filters & FILTER_WIZ) {
+        DEBUG_PRINTLN("[SCAN] Phase 1.5: WiZ UDP Discovery...");
+        
+        WiFiUDP wizScanUDP;
+        wizScanUDP.begin(38899);
+        
+        // Broadcast getPilot to all WiZ devices
+        String wizMessage = "{\"method\":\"getPilot\",\"params\":{}}";
+        IPAddress broadcastIP(255, 255, 255, 255);
+        
+        wizScanUDP.beginPacket(broadcastIP, 38899);
+        wizScanUDP.print(wizMessage);
+        wizScanUDP.endPacket();
+        
+        // Collect responses for 2 seconds
+        unsigned long wizStartTime = millis();
+        while (millis() - wizStartTime < 2000 && scanProgress.isScanning) {
+            int packetSize = wizScanUDP.parsePacket();
+            if (packetSize > 0) {
+                char buffer[512];
+                int len = wizScanUDP.read(buffer, sizeof(buffer) - 1);
+                buffer[len] = '\0';
+                
+                IPAddress remoteIP = wizScanUDP.remoteIP();
+                String ip = remoteIP.toString();
+                
+                // Parse response
+                JsonDocument doc;
+                if (deserializeJson(doc, buffer) == DeserializationError::Ok) {
+                    JsonObject result = doc["result"];
+                    if (result && result["mac"].is<const char*>()) {
+                        DiscoveredDevice wizDev;
+                        wizDev.ip = ip;
+                        wizDev.macAddress = result["mac"].as<String>();
+                        wizDev.displayName = "Philips WiZ Bulb";
+                        wizDev.modelName = "WiZ";
+                        wizDev.category = CATEGORY_WIZ;
+                        wizDev.supportsDimming = true;
+                        wizDev.supportsRGBW = result["r"].is<int>();
+                        wizDev.isValid = true;
+                        wizDev.specificType = wizDev.supportsRGBW ? 150 : 152;  // DIMMER_WIZ_RGBW or DIMMER_WIZ_DIMMABLE
+                        wizDev.generation = 0;  // WiZ has no generation
+                        
+                        // Check if already found
+                        bool exists = false;
+                        for (auto& d : discoveredDevices) {
+                            if (d.macAddress == wizDev.macAddress) {
+                                exists = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!exists) {
+                            if (xSemaphoreTake(scanMutex, portMAX_DELAY)) {
+                                if (discoveredDevices.size() < 30) {
+                                    discoveredDevices.push_back(wizDev);
+                                    scanProgress.devicesFound++;
+                                    DEBUG_PRINTF("[SCAN] WiZ FOUND: %s (MAC: %s, RGB: %s)\n", 
+                                                 ip.c_str(), wizDev.macAddress.c_str(),
+                                                 wizDev.supportsRGBW ? "Yes" : "No");
+                                }
+                                xSemaphoreGive(scanMutex);
+                            }
+                            
+                            if (deviceFoundCallback) {
+                                deviceFoundCallback(wizDev);
+                            }
+                        }
+                    }
+                }
+            }
+            vTaskDelay(50 / portTICK_PERIOD_MS);
+        }
+        
+        wizScanUDP.stop();
+        DEBUG_PRINTF("[SCAN] WiZ Discovery complete\n");
+    }
+    
     // Phase 2: Device detection and filtering
     DEBUG_PRINTLN("[SCAN] Phase 2: Detecting devices...");
     
@@ -530,6 +612,12 @@ void networkScanTask(void* parameter) {
         
         if (currentScanConfig.filters & FILTER_SWITCHES) {
             if (device.category == CATEGORY_SWITCH && device.supportsSwitch) {
+                matchesFilter = true;
+            }
+        }
+        
+        if (currentScanConfig.filters & FILTER_WIZ) {
+            if (device.category == CATEGORY_WIZ) {
                 matchesFilter = true;
             }
         }

@@ -958,7 +958,7 @@ const char SK_HTML_PART3[] PROGMEM = R"rawliteral(</span>
         </div>
     </div>
     
-    <script src="/script.js"></script>
+    <script src="/script.js?v=3"></script>
 </body>
 </html>)rawliteral";
 
