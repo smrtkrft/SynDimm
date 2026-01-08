@@ -1,7 +1,7 @@
 /**
  * SK_mode_safe_api.h
  * SmartKraft SynDimm - Safe Lock API Handler
- * Version: v1.3.0
+ * Version: v1.1.1
  * 
  * ========================================
  * SAFE MOD - API TETİKLEYİCİ

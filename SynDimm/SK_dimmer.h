@@ -1,7 +1,7 @@
 /**
  * SK_dimmer.h
  * SmartKraft SynDimm - Dimmer Control System
- * Version: v1.1.0
+ * Version: v1.1.1
  * 
  * ========================================
  * KRITIK KURAL - ASLA DEĞİŞTİRME!

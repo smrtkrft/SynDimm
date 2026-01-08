@@ -1,7 +1,7 @@
 /**
  * SK_wiz.h
  * SmartKraft SynDimm - Philips WiZ Bulb Control
- * Version: v1.2.0
+ * Version: v1.1.1
  * 
  * ========================================
  * WiZ LAMBA KONTROLÜ
@@ -524,6 +524,75 @@ void disconnectWiZ() {
     wizDevice.ip = "";
     wizColorControlActive = false;
     clearLastWiZConnection();
+}
+
+// ========================================
+// WIZ LOOP (AUTO-RECONNECT & STATUS UPDATE)
+// ========================================
+
+// WiZ status update ve auto-reconnect değişkenleri
+namespace {
+    unsigned long lastWiZStatusUpdate = 0;
+    unsigned long lastWiZReconnectAttempt = 0;
+    uint8_t wizStatusFailCount = 0;
+    uint8_t wizReconnectAttemptCount = 0;
+    
+    static const unsigned long WIZ_STATUS_UPDATE_INTERVAL = 5000;    // 5 saniyede bir durum sorgusu
+    static const unsigned long WIZ_RECONNECT_INTERVAL = 5000;        // 5 saniyede bir yeniden bağlantı
+    static const unsigned long WIZ_SLOW_RECONNECT_INTERVAL = 30000;  // 30 saniyede bir (yavaş mod)
+    static const uint8_t WIZ_MAX_STATUS_FAILURES = 3;                // 3 başarısız sorgu = disconnect
+    static const uint8_t WIZ_MAX_RECONNECT_ATTEMPTS = 12;            // 12 deneme sonra yavaş mod
+}
+
+// WiZ Loop - dimmerLoop ile aynı mantık
+void wizLoop() {
+    // WiFi bağlı değilse çık
+    if (WiFi.status() != WL_CONNECTED) return;
+    
+    unsigned long currentTime = millis();
+    
+    // Bağlıyken periyodik durum güncellemesi
+    if (wizDevice.isConnected && (currentTime - lastWiZStatusUpdate > WIZ_STATUS_UPDATE_INTERVAL)) {
+        lastWiZStatusUpdate = currentTime;
+        
+        if (!getWiZStatus(wizDevice.ip)) {
+            wizStatusFailCount++;
+            WIZ_DEBUGF("[WIZ] Status fail #%d\n", wizStatusFailCount);
+            
+            if (wizStatusFailCount >= WIZ_MAX_STATUS_FAILURES) {
+                WIZ_DEBUG("[WIZ] Device unreachable - auto disconnect");
+                wizDevice.isConnected = false;
+                wizDevice.errorMessage = "Connection lost";
+                wizStatusFailCount = 0;
+                wizReconnectAttemptCount = 0;
+            }
+        } else {
+            wizStatusFailCount = 0;  // Başarılıysa sıfırla
+        }
+    }
+    
+    // Bağlı değilse ve kayıtlı IP varsa auto-reconnect
+    if (!wizDevice.isConnected && lastConnectedWiZIP.length() > 0) {
+        unsigned long reconnectInterval = (wizReconnectAttemptCount >= WIZ_MAX_RECONNECT_ATTEMPTS) 
+                                          ? WIZ_SLOW_RECONNECT_INTERVAL 
+                                          : WIZ_RECONNECT_INTERVAL;
+        
+        if (currentTime - lastWiZReconnectAttempt > reconnectInterval) {
+            lastWiZReconnectAttempt = currentTime;
+            wizReconnectAttemptCount++;
+            
+            WIZ_DEBUGF("[WIZ] Auto-reconnect #%d to %s\n", wizReconnectAttemptCount, lastConnectedWiZIP.c_str());
+            
+            if (connectToWiZ(lastConnectedWiZIP)) {
+                WIZ_DEBUG("[WIZ] Auto-reconnect successful!");
+                wizReconnectAttemptCount = 0;
+            } else {
+                if (wizReconnectAttemptCount >= WIZ_MAX_RECONNECT_ATTEMPTS) {
+                    WIZ_DEBUGF("[WIZ] Switching to slow reconnect (every %lu sec)\n", WIZ_SLOW_RECONNECT_INTERVAL / 1000);
+                }
+            }
+        }
+    }
 }
 
 #endif // SK_WIZ_H

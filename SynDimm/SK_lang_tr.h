@@ -1,7 +1,7 @@
 /**
  * SK_lang_tr.h
  * SmartKraft SynDimm - Turkish Language Pack (Türkçe)
- * Version: v1.1.0
+ * Version: v1.1.1
  */
 
 #ifndef SK_LANG_TR_H

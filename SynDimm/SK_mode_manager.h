@@ -1,7 +1,7 @@
 /**
  * SK_mode_manager.h
  * SmartKraft SynDimm - Mode Management System
- * Version: v1.3.0
+ * Version: v1.1.1
  * 
  * Manages system modes: DIMMER, SHUTTER, SAFE
  * Mode switching methods:

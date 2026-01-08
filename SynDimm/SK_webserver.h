@@ -1,5 +1,5 @@
 /**
- * SK_webserver.h - Web Server Management v1.1.0
+ * SK_webserver.h - Web Server Management v1.1.1
  * KRITIK: Web arayüzü SADECE ESP32-C6 local erişim içindir!
  */
 
@@ -47,6 +47,13 @@ private:
     class SKWiFi* wifiManager;  // Forward declaration pointer
     class SKModeManager* modeManager;  // Mode manager pointer
     void (*httpRequestCallback)();  // HTTP request callback
+    
+    // Web Server Restart Timer (2 saatte bir yeniden başlatma)
+    unsigned long lastServerRestartTime;
+    unsigned long lastClientActivityTime;
+    static const unsigned long SERVER_RESTART_INTERVAL = 7200000UL;  // 2 saat = 7200000ms
+    static const unsigned long CLIENT_TIMEOUT = 300000UL;  // 5 dakika client aktivitesi yoksa uyarı
+    uint32_t serverRestartCount;
     
     // ========== HELPER FUNCTIONS ==========
     
@@ -1133,6 +1140,9 @@ public:
         modeManager = nullptr;
         httpRequestCallback = nullptr;
         instance = this;
+        lastServerRestartTime = 0;
+        lastClientActivityTime = 0;
+        serverRestartCount = 0;
     }
     
     ~SKWebServer() {
@@ -1258,6 +1268,52 @@ public:
     // Handle client requests
     void handleClient() {
         server->handleClient();
+        
+        // Client aktivitesi takibi
+        if (httpRequestCallback) {
+            lastClientActivityTime = millis();
+        }
+        
+        // Web Server periyodik yeniden başlatma (2 saatte bir)
+        unsigned long currentTime = millis();
+        if (lastServerRestartTime == 0) {
+            lastServerRestartTime = currentTime;
+        }
+        
+        if (currentTime - lastServerRestartTime >= SERVER_RESTART_INTERVAL) {
+            restartServer();
+        }
+    }
+    
+    // Web Server'u yeniden başlat (bağlantı sorunlarını önlemek için)
+    void restartServer() {
+        serverRestartCount++;
+        DEBUG_PRINTLN("\n========================================");
+        DEBUG_PRINTLN("   WEB SERVER YENIDEN BASLATILIYOR");
+        DEBUG_PRINTLN("========================================");
+        DEBUG_PRINTF("[WEBSERVER] Restart #%lu - Uptime: %lu dakika\n", 
+                     serverRestartCount, (millis() - lastServerRestartTime) / 60000);
+        DEBUG_PRINTF("[WEBSERVER] Free Heap: %lu bytes\n", ESP.getFreeHeap());
+        
+        // Server'u durdur
+        server->stop();
+        delay(100);
+        
+        // Server'u yeniden başlat
+        server->begin();
+        
+        lastServerRestartTime = millis();
+        DEBUG_PRINTLN("[WEBSERVER] Yeniden baslatildi!");
+        DEBUG_PRINTLN("========================================\n");
+    }
+    
+    // Server restart istatistikleri
+    uint32_t getServerRestartCount() {
+        return serverRestartCount;
+    }
+    
+    unsigned long getServerUptime() {
+        return (millis() - lastServerRestartTime) / 1000;  // saniye olarak
     }
     
     // Get server instance

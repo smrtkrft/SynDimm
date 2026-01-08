@@ -1,7 +1,7 @@
 /**
  * SK_ota.h
  * SmartKraft SynDimm - GitHub OTA Update System
- * Version: v1.1.0
+ * Version: v1.1.1
  * 
  * ========================================
  * GitHub OTA Update Features:

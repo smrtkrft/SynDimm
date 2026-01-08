@@ -1,7 +1,7 @@
 /**
  * SK_encoder.h
  * SmartKraft SynDimm - KY-040 Rotary Encoder Management
- * Version: v1.1.0
+ * Version: v1.1.1
  * 
  * ========================================
  * KRITIK KURAL - ASLA DEĞİŞTİRME!

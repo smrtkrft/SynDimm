@@ -1,7 +1,7 @@
 /**
  * SK_lang_de.h
  * SmartKraft SynDimm - German Language Pack (Deutsch)
- * Version: v1.1.0
+ * Version: v1.1.1
  */
 
 #ifndef SK_LANG_DE_H

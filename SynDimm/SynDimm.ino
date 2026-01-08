@@ -1,7 +1,7 @@
 /**
  * SynDimm.ino
  * SmartKraft SynDimm - Main Application
- * Version: v1.1.0
+ * Version: v1.1.1
  * 
  * ESP32-C6 with KY-040 Rotary Encoder
  * Web Interface with AP Mode
@@ -389,6 +389,7 @@ void loop() {
   switch(activeMode) {
     case MODE_DIMMER:
       dimmerLoop();
+      wizLoop();  // WiZ auto-reconnect ve status update
       break;
     case MODE_SHUTTER:
       // updateShutter();  // TEMP DISABLED

@@ -1,7 +1,7 @@
 /**
  * SK_mode_safe.h
  * SmartKraft SynDimm - Safe Lock Mode
- * Version: v1.3.0
+ * Version: v1.1.1
  * 
  * ========================================
  * SAFE MOD - KASA KİLİDİ MANTİĞI

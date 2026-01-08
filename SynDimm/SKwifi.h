@@ -1,7 +1,7 @@
 /**
  * SKwifi.h
  * SmartKraft SynDimm - WiFi & AP Mode Management
- * Version: v1.3.0
+ * Version: v1.1.1
  * 
  * ========================================
  * KRITIK KURAL - ASLA DEĞİŞTİRME!

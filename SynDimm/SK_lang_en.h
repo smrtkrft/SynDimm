@@ -1,7 +1,7 @@
 /**
  * SK_lang_en.h
  * SmartKraft SynDimm - English Language Pack
- * Version: v1.1.0
+ * Version: v1.1.1
  */
 
 #ifndef SK_LANG_EN_H

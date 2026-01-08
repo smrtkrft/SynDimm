@@ -1,7 +1,7 @@
 /**
  * SK_buzzer.h
  * SmartKraft SynDimm - Buzzer Control System
- * Version: v1.1.0
+ * Version: v1.1.1
  * 
  * GPIO 17 - ESP32-C6
  * Non-blocking PWM buzzer control

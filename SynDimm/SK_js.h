@@ -1,6 +1,6 @@
 /**
  * SK_js.h - SmartKraft SynDimm JavaScript Functions
- * Version: v1.1.0
+ * Version: v1.1.1
  */
 #ifndef SK_JS_H
 #define SK_JS_H
