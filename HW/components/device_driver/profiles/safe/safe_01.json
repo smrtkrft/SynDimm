@@ -1,0 +1,15 @@
+{
+  "id": "safe_01",
+  "name": "Ön Kapı",
+  "mode": "safe",
+  "password": [4, -2, 3, -1],
+  "on_unlock": {
+    "protocol": "http",
+    "method": "POST",
+    "url": "http://192.168.1.100/api/unlock",
+    "headers": {
+      "Authorization": "Bearer abc123"
+    },
+    "body": "{\"action\":\"unlock\"}"
+  }
+}

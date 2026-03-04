@@ -1,0 +1,29 @@
+{
+  "id": "tasmota_dimmer",
+  "name": "Tasmota Dimmer",
+  "manufacturer": "Tasmota",
+  "mode": "dimmer",
+  "protocol": "mqtt",
+  "broker": "",
+  "broker_port": 1883,
+  "topic_prefix": "cmnd/tasmota_dimmer",
+  "state_topic": "stat/tasmota_dimmer",
+  "commands": {
+    "set_value": {
+      "topic": "{prefix}/Dimmer",
+      "payload": "{value}",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    "toggle": {
+      "topic": "{prefix}/Power",
+      "payload": "TOGGLE"
+    },
+    "status": {
+      "subscribe": "{state}/RESULT",
+      "value_key": "Dimmer",
+      "state_key": "POWER"
+    }
+  }
+}

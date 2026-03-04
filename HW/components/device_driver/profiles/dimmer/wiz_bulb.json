@@ -1,0 +1,25 @@
+{
+  "id": "wiz_bulb",
+  "name": "WiZ Smart Bulb",
+  "manufacturer": "WiZ",
+  "mode": "dimmer",
+  "protocol": "udp",
+  "host": "",
+  "port": 38899,
+  "commands": {
+    "set_value": {
+      "packet": "{\"method\":\"setPilot\",\"params\":{\"dimming\":{value}}}",
+      "min": 10,
+      "max": 100,
+      "step": 1
+    },
+    "toggle": {
+      "packet": "{\"method\":\"setState\",\"params\":{\"state\":{toggle}}}"
+    },
+    "status": {
+      "packet": "{\"method\":\"getPilot\"}",
+      "value_key": "dimming",
+      "state_key": "state"
+    }
+  }
+}

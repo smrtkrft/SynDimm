@@ -1,0 +1,28 @@
+{
+  "id": "shelly_25_shutter",
+  "name": "Shelly 2.5 Shutter",
+  "manufacturer": "Shelly",
+  "mode": "shutter",
+  "protocol": "http",
+  "host": "",
+  "port": 80,
+  "commands": {
+    "set_value": {
+      "method": "GET",
+      "path": "/roller/0?go=to_pos&roller_pos={value}",
+      "min": 0,
+      "max": 100,
+      "step": 5
+    },
+    "stop": {
+      "method": "GET",
+      "path": "/roller/0?go=stop"
+    },
+    "status": {
+      "method": "GET",
+      "path": "/status",
+      "value_key": "current_pos",
+      "state_key": "state"
+    }
+  }
+}

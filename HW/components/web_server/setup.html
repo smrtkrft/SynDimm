@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>SynDimm - Setup</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#000;color:#fff;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;-webkit-font-smoothing:antialiased;padding:24px}
+.setup-box{width:100%;max-width:360px;text-align:center}
+.logo{font-size:28px;font-weight:700;letter-spacing:1px;margin-bottom:4px}
+.sub{font-size:13px;color:rgba(255,255,255,0.3);letter-spacing:3px;text-transform:uppercase;margin-bottom:32px}
+.title{font-size:16px;font-weight:600;margin-bottom:16px;color:rgba(255,255,255,0.8)}
+.field{margin-bottom:12px}
+.field input{width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:10px;color:#fff;font-size:13px;font-family:inherit;outline:none;transition:border-color .2s}
+.field input:focus{border-color:#fff}
+.field input::placeholder{color:rgba(255,255,255,0.3)}
+.btn{width:100%;padding:12px 20px;border:none;border-radius:10px;background:#fff;color:#000;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .2s;margin-top:4px}
+.btn:hover{opacity:.85}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.status{margin-top:16px;font-size:12px;color:rgba(255,255,255,0.3);min-height:20px;transition:color .3s}
+.status.ok{color:rgba(255,255,255,0.7)}
+.status.err{color:rgb(239,68,68)}
+.hint{font-size:11px;color:rgba(255,255,255,0.2);margin-top:24px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="setup-box">
+    <div class="logo">SynDimm</div>
+    <div class="sub">SmartKraft</div>
+    <div class="title">WiFi Kurulumu</div>
+    <div class="field">
+        <input type="text" id="ssid" placeholder="WiFi SSID" autocomplete="off">
+    </div>
+    <div class="field">
+        <input type="password" id="pass" placeholder="Sifre">
+    </div>
+    <div class="field">
+        <input type="text" id="ip" placeholder="Statik IP (opsiyonel)">
+    </div>
+    <button class="btn" id="btn" onclick="doConnect()">Baglan</button>
+    <div class="status" id="status"></div>
+    <div class="hint">
+        Cihazinizi WiFi agina bagladiktan sonra<br>
+        arayuz otomatik olarak yuklenecektir.
+    </div>
+</div>
+<script>
+function doConnect(){
+    var ssid=document.getElementById('ssid').value.trim();
+    var pass=document.getElementById('pass').value;
+    var ip=document.getElementById('ip').value.trim();
+    if(!ssid){document.getElementById('status').textContent='SSID gerekli';document.getElementById('status').className='status err';return}
+    var btn=document.getElementById('btn');
+    var st=document.getElementById('status');
+    btn.disabled=true;btn.textContent='Baglaniyor...';
+    st.textContent='WiFi agina baglaniliyor...';st.className='status ok';
+    var xhr=new XMLHttpRequest();
+    xhr.open('POST','/api/wifi/connect');
+    xhr.setRequestHeader('Content-Type','application/json');
+    xhr.onload=function(){
+        if(xhr.status===200){
+            st.textContent='Baglanti baslatildi. Yonlendiriliyor...';st.className='status ok';
+            setTimeout(function(){window.location.href='/';},5000);
+        }else{
+            st.textContent='Hata: '+xhr.status;st.className='status err';
+            btn.disabled=false;btn.textContent='Baglan';
+        }
+    };
+    xhr.onerror=function(){
+        st.textContent='Baglanti hatasi';st.className='status err';
+        btn.disabled=false;btn.textContent='Baglan';
+    };
+    xhr.send(JSON.stringify({ssid:ssid,password:pass,static_ip:ip}));
+}
+document.getElementById('ssid').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('pass').focus()});
+document.getElementById('pass').addEventListener('keydown',function(e){if(e.key==='Enter')doConnect()});
+document.getElementById('ip').addEventListener('keydown',function(e){if(e.key==='Enter')doConnect()});
+</script>
+</body>
+</html>

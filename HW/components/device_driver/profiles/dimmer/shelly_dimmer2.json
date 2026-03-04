@@ -1,0 +1,29 @@
+{
+  "id": "shelly_dimmer2",
+  "name": "Shelly Dimmer 2",
+  "manufacturer": "Shelly",
+  "mode": "dimmer",
+  "protocol": "http",
+  "host": "",
+  "port": 80,
+  "auth": null,
+  "commands": {
+    "set_value": {
+      "method": "GET",
+      "path": "/light/0?brightness={value}",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    "toggle": {
+      "method": "GET",
+      "path": "/light/0?turn=toggle"
+    },
+    "status": {
+      "method": "GET",
+      "path": "/status",
+      "value_key": "brightness",
+      "state_key": "ison"
+    }
+  }
+}

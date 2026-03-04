@@ -1,0 +1,41 @@
+# ============================================
+# SynDimm - ESP32-C6 SDK Configuration
+# ============================================
+
+# --- Target ---
+CONFIG_IDF_TARGET="esp32c6"
+
+# --- Flash (Dahili 4MB) ---
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# --- Partition Table ---
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# --- OTA ---
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# --- SPI Flash (Harici 32MB - Macronix MX25L25645G) ---
+CONFIG_SPI_FLASH_SUPPORT_BIST=y
+CONFIG_SPI_FLASH_SUPPORT_MXIC_CHIP=y
+
+# --- WiFi ---
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
+
+# --- HTTP Server ---
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_MAX_URI_LEN=512
+
+# --- LWIP (max_open_sockets=13 icin: 13+3=16 socket gerekli) ---
+CONFIG_LWIP_MAX_SOCKETS=16
+
+# --- TLS/SSL (SMTP icin) ---
+CONFIG_ESP_TLS_USING_MBEDTLS=y
+
+# --- NVS ---
+CONFIG_NVS_ENCRYPTION=n
+
+# --- Log Level ---
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_DEFAULT_LEVEL=3

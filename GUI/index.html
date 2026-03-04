@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>SynDimm</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="brand">
+    <h1 class="brand-title">SynDimm</h1>
+    <p class="brand-sub">SmartKraft</p>
+</header>
+
+<div class="empty-state" id="empty-state" style="display:none">
+    <img src="pic/logo.png" alt="SynDimm" class="empty-logo logo-dark">
+    <img src="pic/darklogo.png" alt="SynDimm" class="empty-logo logo-light">
+    <p class="empty-warn">Hicbir mod yapilandirilmadi</p>
+    <p class="empty-hint">Ayarlar &gt; Modlar sekmesinden yeni mod ekleyin</p>
+</div>
+
+<div class="orbital-container" id="orbital-container">
+    <div class="orbital-ring"></div>
+    <div class="orbital-glow"></div>
+    <div class="center-display" id="center">
+        <div id="value-display">
+            <span class="big-value" id="big-val">72</span><span class="big-unit" id="big-unit">%</span>
+        </div>
+        <div class="safe-icon" id="safe-icon">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="11" width="18" height="11" rx="2"/><circle cx="12" cy="16" r="1"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        </div>
+        <div class="status-line" id="status-line"><span class="on">On</span> &middot; Connected</div>
+        <div class="safe-label" id="safe-label" style="display:none">Password Lock</div>
+    </div>
+</div>
+
+<div class="device-info" id="device-info"></div>
+
+<nav class="mode-nav" id="mode-nav">
+    <!-- Dynamically built by app.js -->
+    <button class="gear-btn" onclick="toggleSettings()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
+</nav>
+
+<div class="modal-bg" id="modal">
+    <div class="modal-box">
+        <div class="modal-head"><h3>Settings</h3><button class="modal-close" onclick="toggleSettings()">&times;</button></div>
+        <div class="modal-tabs">
+            <button class="modal-tab active" onclick="switchTab('modlar',this)">Modlar</button>
+            <button class="modal-tab" onclick="switchTab('sistem',this)">Sistem</button>
+            <button class="modal-tab" onclick="switchTab('info',this)">Info</button>
+        </div>
+        <div class="tab-content">
+
+        <!-- ── Modlar ──────────────────────────────────── -->
+        <div class="tab-panel active" data-tab="modlar">
+            <div class="s-label">Mod Yapilandirmasi</div>
+            <div class="s-row">
+                <span>Coklu Mod</span>
+                <div class="s-toggle" id="multi-mode-toggle" onclick="toggleMultiMode()"></div>
+            </div>
+            <p class="s-hint">Tek mod: Sadece bir cihaz. Coklu mod: Birden fazla cihaz arasi gecis.</p>
+
+            <div class="s-label">Mod Listesi</div>
+            <div id="mode-list"></div>
+            <button class="s-btn s-btn-secondary" onclick="showAddMode()" id="add-mode-btn" style="margin-top:10px">+ Yeni Mod Ekle</button>
+
+            <div id="add-mode-form" style="display:none">
+                <div class="s-label">Yeni Mod</div>
+                <div class="s-field">
+                    <input class="s-input" type="text" id="new-mode-name" placeholder="Mod adi (orn: Salon Dimmer)">
+                </div>
+                <div class="s-field">
+                    <select class="s-input s-select" id="new-mode-type">
+                        <option value="dimmer">Dimmer</option>
+                        <option value="shutter">Shutter</option>
+                        <option value="safe">Safe</option>
+                    </select>
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button class="s-btn" onclick="addMode()" style="flex:1">Ekle</button>
+                    <button class="s-btn s-btn-secondary" onclick="hideAddMode()" style="flex:1">Iptal</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Sistem ──────────────────────────────────── -->
+        <div class="tab-panel" data-tab="sistem">
+            <div id="sistem-main">
+                <div class="settings-top-row">
+                    <div class="s-field">
+                        <label>Tema</label>
+                        <select class="s-input s-select" id="theme-select" onchange="setTheme(this.value)">
+                            <option value="dark">Koyu</option>
+                            <option value="light">Acik</option>
+                        </select>
+                    </div>
+                    <div class="s-field">
+                        <label>Dil</label>
+                        <select class="s-input s-select" id="lang-select" onchange="setLanguage(this.value)">
+                            <option value="tr">Turkce</option>
+                            <option value="en">English</option>
+                            <option value="de">Deutsch</option>
+                            <option value="es">Espanol</option>
+                            <option value="fr">Francais</option>
+                            <option value="it">Italiano</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="s-label">Baglanti</div>
+                <div class="info-cards">
+                    <div class="info-card" onclick="showSistemDetail('wifi')">
+                        <div class="info-card-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+                        </div>
+                        <div class="info-card-text">
+                            <strong>WiFi</strong>
+                            <span>Ana ag baglantisi</span>
+                        </div>
+                        <svg class="info-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
+                    <div class="info-card" onclick="showSistemDetail('backup')">
+                        <div class="info-card-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><circle cx="12" cy="20" r="1"/><path d="M2 2l20 20" stroke-width="2"/></svg>
+                        </div>
+                        <div class="info-card-text">
+                            <strong>WiFi Yedek</strong>
+                            <span>Yedek ag yapilandirmasi</span>
+                        </div>
+                        <svg class="info-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
+                    <div class="info-card" onclick="showSistemDetail('ap')">
+                        <div class="info-card-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>
+                        </div>
+                        <div class="info-card-text">
+                            <strong>AP Mod</strong>
+                            <span>Erisim noktasi ayarlari</span>
+                        </div>
+                        <svg class="info-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
+                </div>
+
+                <div class="s-label">Guncellemeler</div>
+                <div class="info-cards">
+                    <div class="info-card" id="dev-card-fw">
+                        <div class="info-card-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg>
+                        </div>
+                        <div class="info-card-text">
+                            <strong>Firmware (HW)</strong>
+                            <span id="fw-version-card">--</span>
+                        </div>
+                        <svg class="info-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
+                    <div class="info-card" id="dev-card-gui">
+                        <div class="info-card-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                        </div>
+                        <div class="info-card-text">
+                            <strong>Arayuz (GUI)</strong>
+                            <span id="gui-version-card">--</span>
+                        </div>
+                        <svg class="info-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
+                </div>
+
+                <div class="s-divider"></div>
+                <div style="display:flex;gap:8px">
+                    <button class="s-btn s-btn-warn" onclick="deviceRestart()" style="flex:1">Yeniden Baslat</button>
+                    <button class="s-btn s-btn-danger" onclick="factoryReset()" style="flex:1">Fabrika Sifirla</button>
+                </div>
+            </div>
+
+            <!-- WiFi Detay -->
+            <div id="sistem-detail-wifi" class="info-detail" style="display:none">
+                <button class="info-back" onclick="hideSistemDetail()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    Geri
+                </button>
+                <div class="s-label">WiFi Baglantisi</div>
+                <div class="wifi-status" id="wifi-status">
+                    <div class="wifi-dot" id="wifi-dot"></div>
+                    <div class="wifi-info"><strong id="wifi-ssid">--</strong> &middot; <span id="wifi-ip">--</span></div>
+                    <div class="wifi-rssi" id="wifi-rssi"></div>
+                </div>
+                <div class="s-field">
+                    <input class="s-input" type="text" id="wifi-inp-ssid" placeholder="SSID">
+                </div>
+                <div class="s-field">
+                    <input class="s-input" type="password" id="wifi-inp-pass" placeholder="Sifre">
+                </div>
+                <div class="s-field">
+                    <input class="s-input" type="text" id="wifi-inp-ip" placeholder="Statik IP (opsiyonel)">
+                </div>
+                <div class="s-field">
+                    <button class="s-btn" id="wifi-connect-btn" onclick="wifiConnect()">Baglan</button>
+                </div>
+                <div class="s-field" style="margin-top:8px">
+                    <label class="s-hint">mDNS Hostname</label>
+                    <div style="display:flex;gap:8px">
+                        <input class="s-input" type="text" id="mdns-hostname" placeholder="ornek: my-device">
+                        <button class="s-btn s-btn-secondary" onclick="saveMdns()" style="width:auto;white-space:nowrap">Kaydet</button>
+                    </div>
+                    <span class="s-hint" id="mdns-current"></span>
+                </div>
+            </div>
+
+            <!-- WiFi Yedek Detay -->
+            <div id="sistem-detail-backup" class="info-detail" style="display:none">
+                <button class="info-back" onclick="hideSistemDetail()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    Geri
+                </button>
+                <div class="s-label">Yedek Ag</div>
+                <div class="s-field">
+                    <input class="s-input" type="text" id="wifi-bak-ssid" placeholder="Yedek SSID">
+                </div>
+                <div class="s-field">
+                    <input class="s-input" type="password" id="wifi-bak-pass" placeholder="Yedek Sifre">
+                </div>
+                <div class="s-field">
+                    <input class="s-input" type="text" id="wifi-bak-ip" placeholder="Statik IP (opsiyonel)">
+                </div>
+                <div class="s-field">
+                    <button class="s-btn s-btn-secondary" id="wifi-backup-btn" onclick="wifiBackupSave()">Yedek Agi Kaydet</button>
+                </div>
+            </div>
+
+            <!-- AP Mod Detay -->
+            <div id="sistem-detail-ap" class="info-detail" style="display:none">
+                <button class="info-back" onclick="hideSistemDetail()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    Geri
+                </button>
+                <div class="s-label">Access Point</div>
+                <div class="s-row"><span>AP Modu</span><div class="s-toggle" id="ap-toggle" onclick="toggleAP()"></div></div>
+                <div class="s-row"><span>AP SSID</span><span class="s-val" id="ap-ssid">--</span></div>
+            </div>
+
+            <!-- FW OTA Detay -->
+            <div id="dev-detail-fw" class="info-detail" style="display:none">
+                <button class="info-back" onclick="hideDevDetail()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    Geri
+                </button>
+
+                <div class="s-label">Firmware Durumu</div>
+                <div class="ota-status-card">
+                    <div class="ota-status-row">
+                        <span class="ota-status-label">Mevcut Surum</span>
+                        <span class="ota-status-value" id="fw-version">--</span>
+                    </div>
+                    <div class="ota-status-row">
+                        <span class="ota-status-label">Partition</span>
+                        <span class="ota-status-value" id="fw-partition">--</span>
+                    </div>
+                    <div class="ota-status-row">
+                        <span class="ota-status-label">Rollback</span>
+                        <span class="ota-status-value" id="fw-rollback">--</span>
+                    </div>
+                </div>
+
+                <div id="fw-ota-progress" class="ota-progress" style="display:none">
+                    <div class="ota-bar"><div class="ota-fill" id="fw-ota-fill"></div></div>
+                    <span class="ota-text" id="fw-ota-text"></span>
+                </div>
+
+                <div style="display:flex;gap:8px;margin-top:12px">
+                    <button class="s-btn" id="fw-check-btn" onclick="fwOtaCheck()" style="flex:1">Kontrol Et</button>
+                    <button class="s-btn s-btn-secondary" id="fw-start-btn" onclick="fwOtaStart()" style="flex:1;display:none">Guncelle</button>
+                </div>
+                <button class="s-btn s-btn-secondary" id="fw-rollback-btn" onclick="fwOtaRollback()" style="display:none;margin-top:6px">Onceki Surume Don</button>
+            </div>
+
+            <!-- GUI OTA Detay -->
+            <div id="dev-detail-gui" class="info-detail" style="display:none">
+                <button class="info-back" onclick="hideDevDetail()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    Geri
+                </button>
+
+                <div class="s-label">Arayuz Durumu</div>
+                <div class="ota-status-card">
+                    <div class="ota-status-row">
+                        <span class="ota-status-label">Surum</span>
+                        <span class="ota-status-value" id="gui-version">--</span>
+                    </div>
+                    <div class="ota-status-row">
+                        <span class="ota-status-label">Aktif Slot</span>
+                        <span class="ota-status-value" id="gui-slot">--</span>
+                    </div>
+                </div>
+
+                <div id="gui-ota-progress" class="ota-progress" style="display:none">
+                    <div class="ota-bar"><div class="ota-fill" id="gui-ota-fill"></div></div>
+                    <span class="ota-text" id="gui-ota-text"></span>
+                </div>
+
+                <div style="display:flex;gap:8px;margin-top:12px">
+                    <button class="s-btn" id="gui-start-btn" onclick="guiOtaStart()" style="flex:1">Arayuzu Guncelle</button>
+                    <button class="s-btn s-btn-secondary" id="gui-rollback-btn" onclick="guiOtaRollback()" style="flex:1">Onceki Slot</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Info ────────────────────────────────────── -->
+        <div class="tab-panel" data-tab="info">
+            <div id="info-main">
+                <div class="info-grid">
+                    <div class="info-card" onclick="showInfoDetail('guide')">
+                        <div class="info-card-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+                        </div>
+                        <div class="info-card-text">
+                            <strong>Kullanim Kilavuzu</strong>
+                            <span>Nasil kullanilir</span>
+                        </div>
+                        <svg class="info-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
+                    <div class="info-card" onclick="showInfoDetail('devnotes')">
+                        <div class="info-card-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 12h6M9 16h6"/></svg>
+                        </div>
+                        <div class="info-card-text">
+                            <strong>Developer Notlari</strong>
+                            <span>Teknik bilgiler</span>
+                        </div>
+                        <svg class="info-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
+                    <div class="info-card" onclick="showInfoDetail('sysinfo')">
+                        <div class="info-card-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                        </div>
+                        <div class="info-card-text">
+                            <strong>Sistem Bilgisi</strong>
+                            <span>Donanim detaylari</span>
+                        </div>
+                        <svg class="info-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
+                    <div class="info-card" onclick="showInfoDetail('logs')">
+                        <div class="info-card-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                        </div>
+                        <div class="info-card-text">
+                            <strong>Loglar</strong>
+                            <span>Sistem kayitlari</span>
+                        </div>
+                        <svg class="info-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
+                </div>
+
+                <div class="brand-signature">
+                    <span class="brand-sig-name">SynDimm</span>
+                    <span class="brand-sig-by">by SmartKraft</span>
+                    <a class="brand-sig-link" href="https://github.com/smrtkrft/SynDimm/" target="_blank" rel="noopener">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                        GitHub
+                    </a>
+                </div>
+            </div>
+
+            <!-- Kullanim Kilavuzu detay -->
+            <div id="info-detail-guide" class="info-detail" style="display:none">
+                <button class="info-back" onclick="hideInfoDetail()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    Geri
+                </button>
+                <div class="s-label">Kullanim Kilavuzu</div>
+                <div class="guide-box">
+                    <p><strong>Dimmer:</strong> Ana ekrandaki dairesel alani dondurerek parlaklik ayarlayin.</p>
+                    <p><strong>Shutter:</strong> Panjur acikligini yuzde olarak kontrol edin.</p>
+                    <p><strong>Safe:</strong> Sifre kilidi ile cihazinizi koruyun.</p>
+                    <p><strong>Ayarlar:</strong> Alt bardaki disli ikonuna tiklayarak WiFi, guncelleme ve sistem ayarlarina erisin.</p>
+                </div>
+            </div>
+
+            <!-- Developer Notlari detay -->
+            <div id="info-detail-devnotes" class="info-detail" style="display:none">
+                <button class="info-back" onclick="hideInfoDetail()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    Geri
+                </button>
+                <div class="s-label">Developer Notlari</div>
+                <div class="guide-box">
+                    <p><strong>Mimari:</strong> ESP32 tabanli, dual-core islemci. FreeRTOS uzerinde async task yapisi.</p>
+                    <p><strong>Iletisim:</strong> WebSocket + SSE ile gercek zamanli veri akisi. REST API ile yapilandirma.</p>
+                    <p><strong>OTA:</strong> Firmware ve GUI icin ayri OTA kanallari. A/B slot destegi ile rollback imkani.</p>
+                    <p><strong>Depolama:</strong> NVS (Non-Volatile Storage) ile kalici ayarlar. Harici SPI flash uzerinde GUI dosyalari.</p>
+                </div>
+            </div>
+
+            <!-- Sistem Bilgisi detay -->
+            <div id="info-detail-sysinfo" class="info-detail" style="display:none">
+                <button class="info-back" onclick="hideInfoDetail()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    Geri
+                </button>
+
+                <div class="s-label">Donanim</div>
+                <div class="s-row"><span>Cip</span><span class="s-val" id="sys-chip">--</span></div>
+                <div class="s-row"><span>Revizyon</span><span class="s-val" id="sys-rev">--</span></div>
+                <div class="s-row"><span>Flash</span><span class="s-val" id="sys-flash">--</span></div>
+                <div class="s-row"><span>MAC</span><span class="s-val" id="sys-mac" style="font-family:monospace;font-size:12px">--</span></div>
+
+                <div class="s-label">Bellek (RAM)</div>
+                <div class="usage-section" id="usage-ram">
+                    <div class="usage-bar"><div class="usage-fill" id="ram-fill"></div></div>
+                    <span class="usage-text" id="ram-text">--</span>
+                </div>
+
+                <div class="s-label">Dahili Flash (Partition Kullanimi)</div>
+                <div class="usage-section" id="usage-flash">
+                    <div class="usage-bar"><div class="usage-fill" id="flash-fill"></div></div>
+                    <span class="usage-text" id="flash-text">--</span>
+                </div>
+
+                <div class="s-label">Harici Flash - Slot A</div>
+                <div class="usage-section" id="usage-slot-a">
+                    <div class="usage-bar"><div class="usage-fill" id="slot-a-fill"></div></div>
+                    <span class="usage-text" id="slot-a-text">--</span>
+                </div>
+
+                <div class="s-label">Harici Flash - Slot B</div>
+                <div class="usage-section" id="usage-slot-b">
+                    <div class="usage-bar"><div class="usage-fill" id="slot-b-fill"></div></div>
+                    <span class="usage-text" id="slot-b-text">--</span>
+                </div>
+
+                <div class="s-label">Yazilim</div>
+                <div class="s-row"><span>Firmware</span><span class="s-val" id="sys-fw">--</span></div>
+                <div class="s-row"><span>IDF Surumu</span><span class="s-val" id="sys-idf">--</span></div>
+                <div class="s-row"><span>Calisma Suresi</span><span class="s-val" id="sys-uptime">--</span></div>
+            </div>
+
+            <!-- Loglar detay -->
+            <div id="info-detail-logs" class="info-detail" style="display:none">
+                <button class="info-back" onclick="hideInfoDetail()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    Geri
+                </button>
+                <div class="s-label">Sistem Loglari</div>
+                <p class="s-hint">Son 10 hata ve baglanti kopma kaydi burada listelenecek. Backend log deposu henuz mevcut degil &mdash; NVS tabanli hata kayit sistemi eklenecek.</p>
+                <div id="log-list">
+                    <div class="log-empty">Log kaydi yok</div>
+                </div>
+            </div>
+        </div>
+
+        </div><!-- /tab-content -->
+        <div class="modal-footer">
+            <button class="btn-footer-cancel" id="footerCancelBtn" onclick="footerCancel()">Iptal</button>
+            <button class="btn-footer-save" id="footerSaveBtn" onclick="footerSave()">Kaydet</button>
+        </div>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
