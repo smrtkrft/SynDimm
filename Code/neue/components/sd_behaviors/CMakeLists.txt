@@ -1,5 +1,6 @@
 idf_component_register(
-    SRCS "src/sd_behaviors.c" "src/drv_dimmer.c"
+    SRCS "src/sd_behaviors.c" "src/drv_dimmer.c" "src/drv_shutter.c"
+         "src/drv_mqtt_remote.c"
     INCLUDE_DIRS "include"
     REQUIRES sk_core json sd_buzzer sd_util
 )

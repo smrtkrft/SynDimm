@@ -1,0 +1,22 @@
+{
+  "v": 2,
+  "id": "shelly25_cover",
+  "name": "Shelly 2.5 Roller",
+  "manufacturer": "Shelly",
+  "protocol": "http",
+  "port": 80,
+  "behaviors": ["shutter"],
+  "commands": {
+    "set_value": {
+      "method": "GET",
+      "path": "/roller/0?go=to_pos&roller_pos={value}",
+      "min": 0,
+      "max": 100,
+      "step": 5
+    },
+    "stop": {
+      "method": "GET",
+      "path": "/roller/0?go=stop"
+    }
+  }
+}

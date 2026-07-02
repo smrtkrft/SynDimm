@@ -15,7 +15,9 @@ esp_err_t sd_behaviors_init(void);
 
 // Yerleşik sürücü tanımları (statik ömürlü).
 const sd_behavior_t *sd_behavior_dimmer(void);
-// T3.3: sd_behavior_shutter(), sd_behavior_mqtt_remote(); T4.2: sd_behavior_safe()
+const sd_behavior_t *sd_behavior_shutter(void);
+const sd_behavior_t *sd_behavior_mqtt_remote(void);
+// T4.2: sd_behavior_safe()
 
 #ifdef __cplusplus
 }

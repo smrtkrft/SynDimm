@@ -1,0 +1,26 @@
+{
+  "v": 2,
+  "id": "hue_bulb",
+  "name": "Philips Hue Bulb",
+  "manufacturer": "Philips",
+  "protocol": "http",
+  "port": 80,
+  "behaviors": ["dimmer"],
+  "commands": {
+    "set_value": {
+      "method": "PUT",
+      "path": "/api/{auth_key}/lights/{device_id}/state",
+      "body": "{\"bri\":{value}}",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "map_min": 0,
+      "map_max": 254
+    },
+    "toggle": {
+      "method": "PUT",
+      "path": "/api/{auth_key}/lights/{device_id}/state",
+      "body": "{\"on\":{toggle}}"
+    }
+  }
+}

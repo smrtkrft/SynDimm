@@ -53,10 +53,12 @@ const sd_behavior_t *sd_behavior_at(int idx)
 
 esp_err_t sd_behaviors_init(void)
 {
-    // Yerleşik sürücüler — T3.3: shutter, mqtt_remote; T4.2: safe.
+    // Yerleşik sürücüler — T4.2: safe eklenecek.
     ESP_ERROR_CHECK(sd_behavior_register(sd_behavior_dimmer()));
+    ESP_ERROR_CHECK(sd_behavior_register(sd_behavior_shutter()));
+    ESP_ERROR_CHECK(sd_behavior_register(sd_behavior_mqtt_remote()));
 
-    sk_capabilities_register_book("sd_behaviors", "1.0.0");
+    sk_capabilities_register_book("sd_behaviors", "1.1.0");
     ESP_LOGI(TAG, "ready (%d surucu)", s_count);
     return ESP_OK;
 }
