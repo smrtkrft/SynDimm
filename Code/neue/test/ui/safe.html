@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SynDimm · Safe Modu — 5 Görünüm Konsepti</title>
+<style>
+/* ============================================================
+   Safe modu ANA EKRAN konseptleri — yalnız görünüm (etkileşim yok).
+   Sorun: dimmer'a benzeyen merkez (değer yok, yay yok) safe'e
+   oturmuyordu. 5 farklı yorum, hepsi SKAPP tactile tokenlarıyla.
+   ============================================================ */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0E0D0A; --bg-2:#1F1D18; --bg-3:#25221C;
+  --fg:#F5EFDE; --fg-rgb:245,239,222;
+  --fg-2:rgba(245,239,222,.70); --fg-3:rgba(245,239,222,.45);
+  --border:rgba(245,239,222,.12); --outline:rgba(245,239,222,.25);
+  --tertiary:#D4A017; --tertiary-rgb:212,160,23; --danger:#D32F2F;
+  --well-dark:rgba(0,0,0,.28); --well-light:rgba(255,255,255,.04);
+  --pel-light:#2A2620; --pel-dark:rgba(0,0,0,.8);
+}
+[data-theme="light"]{
+  --bg:#F5F2EC; --bg-2:#EBE5D2; --bg-3:#E6DFCA;
+  --fg:#0A0A0A; --fg-rgb:10,10,10;
+  --fg-2:rgba(10,10,10,.70); --fg-3:rgba(10,10,10,.45);
+  --border:rgba(10,10,10,.12); --outline:rgba(10,10,10,.25);
+  --well-dark:rgba(0,0,0,.09); --well-light:rgba(255,255,255,.48);
+  --pel-light:#FFFBED; --pel-dark:rgba(120,108,86,.30);
+}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--fg);min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  padding:36px 18px 60px;-webkit-font-smoothing:antialiased;
+  transition:background .4s,color .4s}
+.well{box-shadow:inset 4px 4px 3px var(--well-dark),
+                 inset -4px -4px 3px var(--well-light)}
+.pel{background:var(--bg);
+  box-shadow:4px 4px 8px var(--pel-dark), -3px -3px 7px var(--pel-light)}
+h1{font-size:20px;font-weight:700}
+.sub{font-size:11px;color:var(--fg-3);letter-spacing:3px;
+  text-transform:uppercase;margin:4px 0 30px}
+.theme-btn{position:fixed;top:26px;right:26px;z-index:50;width:42px;height:42px;
+  border-radius:50%;border:none;color:var(--fg-2);cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+.theme-btn .sun{display:none}
+[data-theme="light"] .theme-btn .sun{display:block}
+[data-theme="light"] .theme-btn .moon{display:none}
+
+.concept{width:100%;max-width:400px;margin-bottom:44px}
+.c-head{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+.c-head .no{font-family:ui-monospace,monospace;font-size:12px;color:var(--tertiary)}
+.c-head strong{font-size:15px}
+.c-note{font-size:11.5px;color:var(--fg-3);line-height:1.55;margin-bottom:14px}
+.stage{border-radius:24px;background:var(--bg);padding:34px 20px;
+  display:flex;flex-direction:column;align-items:center;min-height:340px;
+  justify-content:center;position:relative}
+.st-status{font-size:10.5px;letter-spacing:2px;text-transform:uppercase;
+  color:var(--fg-3);margin-top:16px}
+.st-status .gold{color:var(--tertiary)}
+.st-status .red{color:var(--danger)}
+
+/* ── K1: Kasa Kadranı ── */
+.k1-dial{position:relative;width:240px;height:240px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;background:var(--bg)}
+.k1-pointer{position:absolute;top:-3px;left:50%;transform:translateX(-50%);
+  width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;
+  border-top:11px solid var(--tertiary);filter:drop-shadow(0 0 4px rgba(var(--tertiary-rgb),.6))}
+.k1-inner{width:172px;height:172px;border-radius:50%;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  transform:rotate(-18deg)}
+.k1-inner svg{color:var(--tertiary);transform:rotate(18deg)}
+.k1-num{position:absolute;font-family:ui-monospace,monospace;font-size:10px;
+  color:var(--fg-3)}
+.k1-trace{position:absolute;width:9px;height:9px;border-radius:50%;
+  background:var(--tertiary);opacity:.85;box-shadow:0 0 6px rgba(var(--tertiary-rgb),.7)}
+.k1-trace.dim{opacity:.3;box-shadow:none}
+
+/* ── K2: Gizli Giriş ── */
+.k2-disc{width:216px;height:216px;border-radius:50%;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.k2-ring{position:absolute;width:264px;height:264px;border-radius:50%;
+  border:2px solid var(--border)}
+.k2-ring::before{content:'';position:absolute;inset:-2px;border-radius:50%;
+  border:2px solid transparent;border-top-color:var(--tertiary);
+  animation:orbit 3s linear infinite}
+@keyframes orbit{to{transform:rotate(360deg)}}
+.k2-pulse{width:10px;height:10px;border-radius:50%;background:var(--tertiary);
+  animation:pulse 1.6s ease infinite}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.8);opacity:.3}}
+
+/* ── K3: Segment Yolu ── */
+.k3-lock{width:96px;height:96px;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;margin-bottom:26px}
+.k3-lock svg{color:var(--tertiary)}
+.k3-path{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center}
+.k3-seg{display:flex;align-items:center;gap:5px;padding:9px 14px;border-radius:12px;
+  font-family:ui-monospace,monospace;font-size:13px;color:var(--fg)}
+.k3-seg.cur{color:var(--tertiary);outline:1.5px solid rgba(var(--tertiary-rgb),.6)}
+.k3-seg.ghost{color:var(--fg-3);box-shadow:none;border:1px dashed var(--border)}
+.k3-arrow{color:var(--fg-3);font-size:12px}
+
+/* ── K4: Vault Çarkı ── */
+.k4-outer{position:relative;width:250px;height:250px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center}
+.k4-wheel{width:190px;height:190px;border-radius:50%;position:relative;
+  display:flex;align-items:center;justify-content:center;transform:rotate(23deg)}
+.k4-spoke{position:absolute;width:14px;height:86px;border-radius:7px;
+  background:var(--bg);left:50%;top:50%;
+  box-shadow:3px 3px 6px var(--pel-dark),-2px -2px 5px var(--pel-light)}
+.k4-hub{width:66px;height:66px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;z-index:2}
+.k4-hub svg{color:var(--tertiary)}
+.k4-marks{position:absolute;inset:8px;pointer-events:none}
+.k4-marks line{stroke:var(--border);stroke-width:2}
+.k4-marks line.hit{stroke:var(--tertiary)}
+
+/* ── K5: Maskeli Giriş ── */
+.k5-row{display:flex;gap:10px;margin:22px 0 8px}
+.k5-cell{width:46px;height:52px;border-radius:12px;display:flex;
+  align-items:center;justify-content:center;font-size:20px;color:var(--fg)}
+.k5-cell.done::after{content:'●';font-size:13px;color:var(--fg-2)}
+.k5-cell.cur{outline:1.5px solid rgba(var(--tertiary-rgb),.6)}
+.k5-cell.cur::after{content:'●';font-size:13px;color:var(--tertiary);
+  animation:blink 1s step-end infinite}
+@keyframes blink{50%{opacity:.2}}
+.k5-cell.empty::after{content:'';width:12px;height:2px;border-radius:1px;
+  background:var(--fg-3)}
+.k5-dir{display:flex;gap:26px;align-items:center;margin-top:18px}
+.k5-dir .ar{font-size:26px;color:var(--fg-3)}
+.k5-dir .ar.hot{color:var(--tertiary);text-shadow:0 0 12px rgba(var(--tertiary-rgb),.5)}
+.k5-lockout{margin-top:18px;font-family:ui-monospace,monospace;font-size:13px;
+  color:var(--danger);letter-spacing:1px}
+</style>
+</head>
+<body>
+
+<button class="theme-btn pel" onclick="
+  const h=document.documentElement;
+  h.dataset.theme=h.dataset.theme==='light'?'dark':'light';
+  localStorage.setItem('sd-theme',h.dataset.theme);">
+  <svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  <svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+</button>
+
+<h1>Safe Modu — Ana Ekran Konseptleri</h1>
+<div class="sub">5 görünüm · yalnız tasarım · SmartKraft tactile</div>
+
+<!-- ═══ K1 · KASA KADRANI ═══ -->
+<div class="concept">
+  <div class="c-head"><span class="no">K1</span><strong>Kasa Kadranı</strong></div>
+  <div class="c-note">Gerçek kasa metaforu: sabit işaretçi üstte, rakamlı kadran
+    fiziksel enkoderle birlikte "döner". Girilen her segment kadran çevresine
+    altın bir iz bırakır — kaç segment girildiği görünür, İÇERİĞİ görünmez.</div>
+  <div class="stage well">
+    <div class="k1-dial well" id="k1"></div>
+    <div class="st-status">3. SEGMENT · <span class="gold">SAĞA ÇEVİRİN</span></div>
+  </div>
+</div>
+
+<!-- ═══ K2 · GİZLİ GİRİŞ ═══ -->
+<div class="concept">
+  <div class="c-head"><span class="no">K2</span><strong>Gizli Giriş</strong></div>
+  <div class="c-note">Maksimum mahremiyet: ekran HİÇBİR giriş detayı göstermez —
+    ne segment sayısı ne yön. Yalnız "giriş algılanıyor" nabzı ve dönen ince
+    halka. Omuz sörfüne tam kapalı; kasanın kendisi kadar ketum.</div>
+  <div class="stage well">
+    <div class="k2-ring"></div>
+    <div class="k2-disc pel">
+      <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" style="color:var(--tertiary)">
+        <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      <div class="k2-pulse"></div>
+    </div>
+    <div class="st-status">GİRİŞ ALGILANIYOR · <span class="gold">2 SN BEKLE = DENE</span></div>
+  </div>
+</div>
+
+<!-- ═══ K3 · SEGMENT YOLU ═══ -->
+<div class="concept">
+  <div class="c-head"><span class="no">K3</span><strong>Segment Yolu</strong></div>
+  <div class="c-note">En öğretici yorum: girilen segmentler yön ve tik sayısıyla
+    pelet zinciri olarak dizilir, aktif segment altın çerçeveli, beklenen kalan
+    adımlar hayalet kutu. İlk kurulum ve alışma dönemi için ideal; mahremiyet
+    gerektiğinde K1/K2'ye geçilir (tercihlerden seçilebilir olmalı).</div>
+  <div class="stage well">
+    <div class="k3-lock pel">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+        <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+    </div>
+    <div class="k3-path">
+      <span class="k3-seg pel">R4</span><span class="k3-arrow">→</span>
+      <span class="k3-seg pel">L2</span><span class="k3-arrow">→</span>
+      <span class="k3-seg pel cur">R2</span><span class="k3-arrow">→</span>
+      <span class="k3-seg ghost">?</span>
+    </div>
+    <div class="st-status"><span class="gold">3 / 4 SEGMENT</span> · BUTON = SEGMENTİ KAPAT</div>
+  </div>
+</div>
+
+<!-- ═══ K4 · VAULT ÇARKI ═══ -->
+<div class="concept">
+  <div class="c-head"><span class="no">K4</span><strong>Vault Çarkı</strong></div>
+  <div class="c-note">Banka kasası el çarkı: üç kollu çark enkoderle döner,
+    çevredeki çentikler doğru segment kapandıkça altına döner (ilerleme hissi,
+    içerik gizli). Eşleşince çark "açılır" animasyonu oynar. En oyunsu,
+    en dokunsal yorum.</div>
+  <div class="stage well">
+    <div class="k4-outer well">
+      <svg class="k4-marks" viewBox="0 0 234 234" id="k4m"></svg>
+      <div class="k4-wheel pel">
+        <div class="k4-spoke" style="transform:translate(-50%,-100%) rotate(0deg);transform-origin:bottom"></div>
+        <div class="k4-spoke" style="transform:translate(-50%,-100%) rotate(120deg);transform-origin:bottom"></div>
+        <div class="k4-spoke" style="transform:translate(-50%,-100%) rotate(240deg);transform-origin:bottom"></div>
+        <div class="k4-hub pel">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+        </div>
+      </div>
+    </div>
+    <div class="st-status"><span class="gold">2 SEGMENT TAMAM</span> · ÇEVİRMEYE DEVAM</div>
+  </div>
+</div>
+
+<!-- ═══ K5 · MASKELİ GİRİŞ ═══ -->
+<div class="concept">
+  <div class="c-head"><span class="no">K5</span><strong>Maskeli Giriş</strong></div>
+  <div class="c-note">PIN klavyesi dili: her segment maskeli bir hücre (●),
+    aktif hücre altın imleçli, yalnız ANLIK yön kocaman oklarla gösterilir
+    (tik sayısı gizli). Kilitlenme durumu geri sayımla aynı ekranda —
+    telefondan tanıdık, öğrenme maliyeti sıfır.</div>
+  <div class="stage well">
+    <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" style="color:var(--tertiary)">
+      <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+    <div class="k5-row">
+      <div class="k5-cell pel done"></div>
+      <div class="k5-cell pel done"></div>
+      <div class="k5-cell pel cur"></div>
+      <div class="k5-cell pel empty"></div>
+      <div class="k5-cell pel empty"></div>
+    </div>
+    <div class="k5-dir">
+      <span class="ar">◀</span>
+      <span style="font-size:10px;color:var(--fg-3);letter-spacing:2px">YÖN</span>
+      <span class="ar hot">▶</span>
+    </div>
+    <div class="k5-lockout">⚠ 3 YANLIŞ — 00:24 KİLİTLİ</div>
+  </div>
+</div>
+
+<div style="font-size:11px;color:var(--fg-3);max-width:400px;text-align:center;line-height:1.6">
+  Not: K5'teki kilitlenme örneği her konseptte aynı dille gösterilebilir.
+  Beğenilen konsept, design2.html'in safe merkezine işlenecek — istenirse
+  "görünüm gizliliği" (K3 açık ↔ K2 ketum) bir tercih anahtarı olabilir.</div>
+
+<script>
+/* K1: rakamlar + iz noktaları */
+(function(){
+  const d=document.getElementById('k1');
+  for(let i=0;i<12;i++){
+    const a=(i*30-90)*Math.PI/180, r=104;
+    const n=document.createElement('span');
+    n.className='k1-num';
+    n.textContent=i*5;
+    n.style.left=`calc(50% + ${r*Math.cos(a)}px - 8px)`;
+    n.style.top=`calc(50% + ${r*Math.sin(a)}px - 7px)`;
+    d.appendChild(n);
+  }
+  /* girilmiş 2 segment izi + aktif iz */
+  [[200,'dim'],[75,'dim'],[318,'']].forEach(([deg,cls])=>{
+    const a=(deg-90)*Math.PI/180, r=87;
+    const t=document.createElement('span');
+    t.className='k1-trace '+cls;
+    t.style.left=`calc(50% + ${r*Math.cos(a)}px - 4px)`;
+    t.style.top=`calc(50% + ${r*Math.sin(a)}px - 4px)`;
+    d.appendChild(t);
+  });
+  const inner=document.createElement('div');
+  inner.className='k1-inner pel';
+  inner.innerHTML=`<svg width="34" height="34" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" stroke-width="1.4">
+    <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>`;
+  const p=document.createElement('div');
+  p.className='k1-pointer';
+  d.appendChild(inner);d.appendChild(p);
+})();
+/* K4: çentikler (2'si altın) */
+(function(){
+  let s='';
+  for(let i=0;i<16;i++){
+    const a=i*22.5*Math.PI/180;
+    const hit=(i===3||i===9)?'hit':'';
+    s+=`<line class="${hit}" x1="${117+96*Math.cos(a)}" y1="${117+96*Math.sin(a)}"
+         x2="${117+106*Math.cos(a)}" y2="${117+106*Math.sin(a)}"/>`;
+  }
+  document.getElementById('k4m').innerHTML=s;
+})();
+(function(){
+  const t=localStorage.getItem('sd-theme');
+  if(t)document.documentElement.dataset.theme=t;
+})();
+</script>
+</body>
+</html>
