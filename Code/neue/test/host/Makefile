@@ -7,7 +7,7 @@ CFLAGS  := -std=c11 -Wall -Wextra -Werror -g
 
 COMP    := ../../components
 
-TESTS   := test_quiet test_gesture test_template test_binding
+TESTS   := test_quiet test_gesture test_template test_binding test_offline
 
 all: $(TESTS)
 
@@ -24,6 +24,9 @@ test_template: test_template.c $(COMP)/sd_proto/src/sd_template.c
 # o yüzden vendor derlemesinde uyarılar hataya çevrilmez.
 test_binding: test_binding.c $(COMP)/sd_mode_engine/src/sd_binding.c vendor/cJSON.c
 	$(CC) $(CFLAGS) -Wno-error -I$(COMP)/sd_mode_engine/include -Ivendor -o $@ $^
+
+test_offline: test_offline.c $(COMP)/sd_mode_engine/src/sd_offline.c
+	$(CC) $(CFLAGS) -I$(COMP)/sd_mode_engine/include -o $@ $^
 
 run: all
 	@set -e; for t in $(TESTS); do ./$$t; done; \
