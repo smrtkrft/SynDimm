@@ -39,6 +39,7 @@
 #include "sd_buzzer.h"
 #include "sd_encoder.h"
 #include "sd_feedback.h"
+#include "sd_profiles.h"
 
 // === EDIT [Identity] =================================================
 //
@@ -122,6 +123,9 @@ static void sd_app_init(bool recovery)
     // her koşulda çalışmalı — cihaz tuğlalaşmaz ilkesinin parçası.
     ESP_ERROR_CHECK(sd_encoder_init());
     ESP_ERROR_CHECK(sd_feedback_init());
+    // Profil deposu recovery'de de açık: bozuk konfigürasyon CLI'dan
+    // düzeltilebilsin (recovery'nin atladığı şey slot/davranış YÜKLEMEsi).
+    ESP_ERROR_CHECK(sd_profiles_init());
 
     (void)recovery;
 }
