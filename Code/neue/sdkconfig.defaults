@@ -1,0 +1,58 @@
+# SynDimm neue — BF sdkconfig.defaults'tan türetildi (bkz. plan T0.1).
+# Fark: partition tablosu SynDimm'inki; cihaz sabit güçte ama PM/tickless
+# bedava tasarruf olduğu için korunuyor.
+CONFIG_IDF_TARGET="esp32c6"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# Custom partition table — A/B OTA, 64KB NVS, SPIFFS yok.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+
+# USB Serial/JTAG: boot log + sk_transport_usb CLI.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_USB_SERIAL_JTAG_ENABLED=y
+CONFIG_ESP_CONSOLE_HISTORY_BUFFER_SIZE=2048
+
+# sk_ota rollback koruması.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# Bluetooth — NimBLE host (sk_transport_ble).
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_NVS_PERSIST=y
+# Curve25519 + ECDH çağrıları default 4096'da stack overflow yapıyor (BF'de
+# saha bulgusu: "Stack protection fault" nimble_host'ta). 8192 rahat alan.
+CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=8192
+
+# Default event loop stack — WiFi olayları event-bus abonelerine fan-out
+# ederken 2304 yetmiyor (BF saha bulgusu, Nis 2026). 6 KB.
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=6144
+
+# TLS sertifika paketi — sk_api HTTPS webhook'ları için (Let's Encrypt vb.).
+# Boyut kapısı aşılırsa budama merdiveni: FULL → CMN (plan: Boyut Kapıları).
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+
+# NVS şifreleme dev kartlarda kapalı; üretimde açılacak.
+CONFIG_NVS_ENCRYPTION=n
+
+# -Os: boyut optimizasyonu, assertion'lar açık kalır.
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_DEFAULT_LEVEL=3
+CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y
+CONFIG_BOOTLOADER_LOG_LEVEL=2
+
+# === Güç yönetimi ====================================================
+# Sabit güçte bile DFS + tickless idle bedava kazanç; USB takılıyken IDF
+# driver'ı kendi NO_LIGHT_SLEEP kilidini tutuyor (USJ_NO_AUTO_LS), yani
+# geliştirme deneyimi etkilenmez.
+CONFIG_PM_ENABLE=y
+CONFIG_FREERTOS_USE_TICKLESS_IDLE=y
+CONFIG_FREERTOS_IDLE_TIME_BEFORE_SLEEP=3
+CONFIG_BT_LE_SLEEP_ENABLE=y
+CONFIG_BT_LE_LP_CLK_SRC_MAIN_XTAL=y
+CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION=y
