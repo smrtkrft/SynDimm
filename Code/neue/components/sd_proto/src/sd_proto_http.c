@@ -66,10 +66,10 @@ esp_err_t sd_proto_http_execute(const cJSON *profile_root, const cJSON *cmd_node
     if (out_status) *out_status = 0;
     if (!tgt->host[0]) return ESP_ERR_INVALID_STATE;
 
-    const char *path = sd_proto_node_str(cmd_node, "path");
+    const char *path = sd_jsonu_str(cmd_node, "path");
     if (!path) return ESP_ERR_INVALID_ARG;
-    const char *method = sd_proto_node_str(cmd_node, "method");
-    const char *body   = sd_proto_node_str(cmd_node, "body");
+    const char *method = sd_jsonu_str(cmd_node, "method");
+    const char *body   = sd_jsonu_str(cmd_node, "body");
 
     sd_tmpl_vars_t vars = {
         .value     = sd_proto_mapped_value(cmd_node, value),

@@ -13,6 +13,7 @@
 
 #include "esp_log.h"
 
+#include "sd_util.h"
 #include "sd_behavior.h"
 #include "sd_behaviors.h"
 
@@ -31,18 +32,6 @@ typedef struct {
     int64_t last_rotate_ms;
 } dimmer_priv_t;
 
-static int node_int(const cJSON *obj, const char *key, int def)
-{
-    const cJSON *it = obj ? cJSON_GetObjectItemCaseSensitive(obj, key) : NULL;
-    return (it && cJSON_IsNumber(it)) ? (int)it->valuedouble : def;
-}
-
-static bool node_bool(const cJSON *obj, const char *key, bool def)
-{
-    const cJSON *it = obj ? cJSON_GetObjectItemCaseSensitive(obj, key) : NULL;
-    return cJSON_IsBool(it) ? cJSON_IsTrue(it) : def;
-}
-
 static esp_err_t dimmer_init(sd_behavior_ctx_t *ctx)
 {
     dimmer_priv_t *p = calloc(1, sizeof(*p));
@@ -56,22 +45,22 @@ static esp_err_t dimmer_init(sd_behavior_ctx_t *ctx)
         const cJSON *cmds = cJSON_GetObjectItemCaseSensitive(profile, "commands");
         sv = cmds ? cJSON_GetObjectItemCaseSensitive(cmds, "set_value") : NULL;
     }
-    p->min  = node_int(sv, "min", 0);
-    p->max  = node_int(sv, "max", 100);
-    p->step = node_int(sv, "step", 1);
+    p->min  = sd_jsonu_int(sv, "min", 0);
+    p->max  = sd_jsonu_int(sv, "max", 100);
+    p->step = sd_jsonu_int(sv, "step", 1);
     if (p->max <= p->min) { p->min = 0; p->max = 100; }   // bozuk profile karşı
 
     const cJSON *binding = sd_ctx_binding(ctx);
     const cJSON *params  = binding
         ? cJSON_GetObjectItemCaseSensitive(binding, "params") : NULL;
-    p->step  = node_int(params, "step", p->step);
+    p->step  = sd_jsonu_int(params, "step", p->step);
     if (p->step < 1) p->step = 1;
-    p->accel = node_bool(params, "accel", false);
+    p->accel = sd_jsonu_bool(params, "accel", false);
 
     const cJSON *presets = params
         ? cJSON_GetObjectItemCaseSensitive(params, "presets") : NULL;
-    p->preset_double = node_int(presets, "double_click", -1);
-    p->preset_long   = node_int(presets, "long_press", -1);
+    p->preset_double = sd_jsonu_int(presets, "double_click", -1);
+    p->preset_long   = sd_jsonu_int(presets, "long_press", -1);
     p->last_rotate_ms = 0;
 
     sd_ctx_set_priv(ctx, p);

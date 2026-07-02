@@ -1,7 +1,19 @@
 // sd_mode_engine — çekirdek. Port kaynakları: iki-task deseni + coalescing
-// device_driver.c:453-529, NVS debounce :174-196. Yenilikler: kendine-yeterli
-// kuyruk işleri (hot-reload ↔ ağ yarışı yok), slot-hata politikası,
-// recursive kilit, olay yayınları.
+// device_driver.c:453-529, NVS debounce :174-196.
+//
+// Kod incelemesi (Faz 2) sonrası tasarım notları:
+//   * Kuyruk işleri HAFİF: {slot,kind,value,toggle}. cJSON ağaçları yürütme
+//     anında kilit altında üretilir (hot-reload'la yarışmaz; detent başına
+//     heap fırtınası yok — coalesce'in düşürdüğü işler bedava).
+//   * Coalescing YALNIZ SD_SEND_VALUE'da (iki TOGGLE asla birleşmez —
+//     birleşse ışık ters durumda kalırdı).
+//   * mode.test "yakalama" modeliyle koşar: drv->test kilit altında işi
+//     ÜRETİR, ağ çağrısı kilitsiz yapılır; kuyruk karıştırma yok.
+//   * Olay yayınları kilit DIŞINDA (abone, yayıncının task'ında koşar —
+//     kilit altında yayın tüm motoru bloke ederdi).
+//   * s_offline erişimi eng_lock altında (32-bit'te int64 bölünmüş okuma).
+//   * Düşürülen işler job_discard'dan geçer: TEST hatayla TAMAMLANIR
+//     (sema verilir), NVS_SAVE timer'ı yeniden kurar.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,30 +33,38 @@
 
 #include "sd_buzzer.h"
 #include "sd_profiles.h"
+#include "sd_util.h"
 #include "sd_binding.h"
 #include "sd_offline.h"
 #include "sd_mode_engine_internal.h"
 
 static const char *TAG = "sd_engine";
 
-static sd_offline_t s_offline;   // erişim: yalnız cmd task + wifi handler
-                                 //   (feed/should_send cmd task; wifi_down/up
-                                 //   handler — alanlar bağımsız, yarış zararsız
-                                 //   düzeyde [sayaç sıfırlama], kabul edildi)
-
 slot_ctx_t s_slots[SD_MODE_SLOTS];
 bool       s_recovery;
 
 static int                s_active = 1;
 static bool               s_started;
-static SemaphoreHandle_t  s_lock;          // recursive
-static QueueHandle_t      s_queue;         // eng_job_t*
+static SemaphoreHandle_t  s_lock;            // recursive
+static QueueHandle_t      s_queue;           // eng_job_t*
 static esp_timer_handle_t s_nvs_timer;
+static volatile bool      s_nvs_pending;     // timer kurulu mu (churn önleme)
+static sd_offline_t       s_offline;         // erişim: eng_lock altında
+
+// mode.test yakalama durumu — yalnız cmd task, kilit altında yazar;
+// sd_ctx_send owner karşılaştırmasıyla yanlış task'ı dışlar.
+static struct {
+    bool         active;
+    TaskHandle_t owner;
+    eng_job_t   *captured;
+} s_capture;
 
 void eng_lock(void)   { xSemaphoreTakeRecursive(s_lock, portMAX_DELAY); }
 void eng_unlock(void) { xSemaphoreGiveRecursive(s_lock); }
 int  eng_active_slot(void) { return s_active; }
 int  sd_mode_engine_active_slot(void) { return s_active; }
+
+static inline int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
 
 // --- NVS yardımcıları ---------------------------------------------------
 
@@ -77,103 +97,108 @@ static esp_err_t nvs_store_str(const char *key, const char *val)
     return err;
 }
 
+// Kirli değerleri kilit altında ANLIK KOPYALA, NVS yazımını kilitsiz yap.
 static void nvs_save_values(void)
 {
-    nvs_handle_t h;
-    if (nvs_open(SD_ENGINE_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    struct { int32_t v; uint8_t st; bool dirty; } snap[SD_MODE_SLOTS];
     eng_lock();
     for (int i = 0; i < SD_MODE_SLOTS; i++) {
-        if (!s_slots[i].nvs_dirty) continue;
-        char key[16];
-        snprintf(key, sizeof(key), "v%d", i + 1);
-        nvs_set_i32(h, key, s_slots[i].value);
-        snprintf(key, sizeof(key), "s%d", i + 1);
-        nvs_set_u8(h, key, s_slots[i].state ? 1 : 0);
+        snap[i].dirty = s_slots[i].nvs_dirty;
+        snap[i].v     = s_slots[i].value;
+        snap[i].st    = s_slots[i].state ? 1 : 0;
         s_slots[i].nvs_dirty = false;
     }
     eng_unlock();
+
+    nvs_handle_t h;
+    if (nvs_open(SD_ENGINE_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    for (int i = 0; i < SD_MODE_SLOTS; i++) {
+        if (!snap[i].dirty) continue;
+        char key[16];
+        snprintf(key, sizeof(key), "v%d", i + 1);
+        nvs_set_i32(h, key, snap[i].v);
+        snprintf(key, sizeof(key), "s%d", i + 1);
+        nvs_set_u8(h, key, snap[i].st);
+    }
     nvs_commit(h);
     nvs_close(h);
 }
 
 // --- Kuyruk işleri --------------------------------------------------------
 
-static void job_free(eng_job_t *job)
+static eng_job_t *make_job(eng_job_type_t type, int slot, sd_send_kind_t kind,
+                           int value, bool toggle)
+{
+    eng_job_t *job = calloc(1, sizeof(*job));
+    if (!job) return NULL;
+    job->type   = type;
+    job->slot   = (uint8_t)slot;
+    job->kind   = kind;
+    job->value  = value;
+    job->toggle = toggle;
+    return job;
+}
+
+static void schedule_nvs_save(void);
+
+// Düşürülen iş asla sessizce kaybolmaz: TEST hatayla tamamlanır (bekleyen
+// CLI 5 sn timeout yemez), NVS_SAVE debounce'u yeniden kurar.
+static void job_discard(eng_job_t *job)
 {
     if (!job) return;
-    cJSON_Delete(job->mini_profile);
-    cJSON_Delete(job->cmd_node);
+    if (job->type == ENG_JOB_TEST && job->done) {
+        job->result = ESP_ERR_NO_MEM;
+        xSemaphoreGive(job->done);   // sahiplik CLI'ya geçti — free YOK
+        return;
+    }
+    if (job->type == ENG_JOB_NVS_SAVE) {
+        free(job);
+        s_nvs_pending = false;
+        schedule_nvs_save();
+        return;
+    }
     free(job);
 }
 
-// Doluysa en eskiyi düşürerek gönderir (device_driver.c:510-521 deseni).
+// Doluysa en eski SEND'i düşürerek gönderir (SEND-dışı işler korunur).
 static esp_err_t enqueue_job(eng_job_t *job)
 {
-    if (!s_queue) { job_free(job); return ESP_ERR_INVALID_STATE; }
-    if (xQueueSend(s_queue, &job, 0) == pdTRUE) return ESP_OK;
-    eng_job_t *old = NULL;
-    if (xQueueReceive(s_queue, &old, 0) == pdTRUE) job_free(old);
-    if (xQueueSend(s_queue, &job, 0) == pdTRUE) return ESP_OK;
-    job_free(job);
+    if (!s_queue) { job_discard(job); return ESP_ERR_INVALID_STATE; }
+    for (int attempt = 0; attempt < 2; attempt++) {
+        if (xQueueSend(s_queue, &job, 0) == pdTRUE) return ESP_OK;
+        eng_job_t *old = NULL;
+        if (xQueueReceive(s_queue, &old, 0) != pdTRUE) continue;
+        if (old->type == ENG_JOB_SEND) {
+            job_discard(old);                     // kurban: en eski SEND
+        } else {
+            // SEND-dışı işi geri koy (az önce yer açtık; üretici yarışında
+            // başarısız olursa güvenli tamamla).
+            if (xQueueSend(s_queue, &old, 0) != pdTRUE) job_discard(old);
+        }
+    }
+    job_discard(job);
     return ESP_ERR_NO_MEM;
 }
 
-// NVS debounce zamanlayıcısı: yalnız kuyruğa iş atar (timer-daemon'da NVS yok).
+// NVS debounce: 2 sn'lik TEK timer; her detent'te stop/start churn'ü yok
+// (kod incelemesi) — kurulu değilse kur, kuruluysa dokunma. Semantik:
+// İLK değişiklikten 2 sn sonra kaydet (sınırlı bayatlık, daha az churn).
 static void nvs_timer_cb(void *arg)
 {
     (void)arg;
-    eng_job_t *job = calloc(1, sizeof(*job));
-    if (!job) return;
-    job->type = ENG_JOB_NVS_SAVE;
-    enqueue_job(job);
+    eng_job_t *job = make_job(ENG_JOB_NVS_SAVE, 0, 0, 0, false);
+    s_nvs_pending = false;
+    if (job) enqueue_job(job);
 }
 
 static void schedule_nvs_save(void)
 {
-    esp_timer_stop(s_nvs_timer);
-    esp_timer_start_once(s_nvs_timer, (uint64_t)SD_ENGINE_NVS_DEBOUNCE_MS * 1000);
-}
-
-// SEND/TEST işi kur: profil komut düğümünü kopyala (kendine yeterli iş).
-// Kilit altında çağrılır.
-static eng_job_t *build_send_job(slot_ctx_t *ctx, eng_job_type_t type,
-                                 sd_send_kind_t kind, int value, bool toggle)
-{
-    static const char *KIND_NODE[] = {
-        [SD_SEND_VALUE]  = "set_value",
-        [SD_SEND_TOGGLE] = "toggle",
-        [SD_SEND_STOP]   = "stop",
-    };
-    if (!ctx->profile) return NULL;
-    const cJSON *cmds = cJSON_GetObjectItemCaseSensitive(ctx->profile, "commands");
-    const cJSON *node = cmds
-        ? cJSON_GetObjectItemCaseSensitive(cmds, KIND_NODE[kind]) : NULL;
-    if (!cJSON_IsObject(node)) return NULL;
-
-    eng_job_t *job = calloc(1, sizeof(*job));
-    if (!job) return NULL;
-    job->type   = type;
-    job->slot   = (uint8_t)ctx->slot;
-    job->kind   = kind;
-    job->value  = value;
-    job->toggle = toggle;
-    job->target = ctx->target;
-
-    job->mini_profile = cJSON_CreateObject();
-    const cJSON *proto  = cJSON_GetObjectItemCaseSensitive(ctx->profile, "protocol");
-    const cJSON *prefix = cJSON_GetObjectItemCaseSensitive(ctx->profile, "prefix");
-    if (cJSON_IsString(proto)) {
-        cJSON_AddStringToObject(job->mini_profile, "protocol", proto->valuestring);
+    if (s_nvs_pending) return;
+    s_nvs_pending = true;
+    if (esp_timer_start_once(s_nvs_timer,
+                             (uint64_t)SD_ENGINE_NVS_DEBOUNCE_MS * 1000) != ESP_OK) {
+        s_nvs_pending = false;   // timer zaten koşuyor olabilir — cb toparlar
     }
-    if (cJSON_IsString(prefix)) {
-        cJSON_AddStringToObject(job->mini_profile, "prefix", prefix->valuestring);
-    }
-    job->cmd_node = cJSON_Duplicate(node, true);
-    if (!job->mini_profile || !job->cmd_node) {
-        job_free(job);
-        return NULL;
-    }
-    return job;
 }
 
 // --- ctx servisleri ----------------------------------------------------------
@@ -208,17 +233,23 @@ void sd_ctx_set_value(sd_behavior_ctx_t *ctx, int value, bool state)
     ctx->nvs_dirty = true;
     eng_unlock();
     schedule_nvs_save();
-    // mode.value olayı burada YAYINLANMAZ (detent seli) — cmd task,
-    // coalesce edilmiş gönderim sonrası yayınlar (≤10 Hz).
+    // mode.value olayı gönderim yolunda yayınlanır (≤10 Hz) — detent seli yok.
 }
 
 esp_err_t sd_ctx_send(sd_behavior_ctx_t *ctx, sd_send_kind_t kind,
                       int value, bool toggle)
 {
-    eng_lock();
-    eng_job_t *job = build_send_job(ctx, ENG_JOB_SEND, kind, value, toggle);
-    eng_unlock();
-    if (!job) return ESP_ERR_NOT_FOUND;   // profil/komut düğümü yok
+    eng_job_t *job = make_job(ENG_JOB_SEND, ctx->slot, kind, value, toggle);
+    if (!job) return ESP_ERR_NO_MEM;
+
+    // mode.test yakalama: test'in ürettiği gönderim kuyruğa girmez,
+    // execute_test onu senkron koşar (yalnız cmd task + kilit altında).
+    if (s_capture.active &&
+        s_capture.owner == xTaskGetCurrentTaskHandle()) {
+        free(s_capture.captured);          // birden çok send → sonuncusu kalır
+        s_capture.captured = job;
+        return ESP_OK;
+    }
     return enqueue_job(job);
 }
 
@@ -254,6 +285,22 @@ static void slot_error(int slot, const char *reason)
                           "{\"slot\":%d,\"err\":\"%s\",\"count\":0}", slot, reason);
 }
 
+// Profil set_value aralığı — motor clamp'i ve sürücü aynı kaynağı okur.
+static int profile_range(const slot_ctx_t *ctx, int *out_lo)
+{
+    int lo = 0, hi = 100;
+    if (ctx->profile) {
+        const cJSON *cmds = cJSON_GetObjectItemCaseSensitive(ctx->profile, "commands");
+        const cJSON *sv = cmds
+            ? cJSON_GetObjectItemCaseSensitive(cmds, "set_value") : NULL;
+        lo = sd_jsonu_int(sv, "min", 0);
+        hi = sd_jsonu_int(sv, "max", 100);
+        if (hi <= lo) { lo = 0; hi = 100; }
+    }
+    if (out_lo) *out_lo = lo;
+    return hi;
+}
+
 // NVS'ten slotu yükle (kilit altında). Boş slot = OK.
 static esp_err_t load_slot(int idx)   // 0-based
 {
@@ -274,22 +321,19 @@ static esp_err_t load_slot(int idx)   // 0-based
         return ESP_FAIL;
     }
     ctx->binding = binding;
-
-    const cJSON *en = cJSON_GetObjectItemCaseSensitive(binding, "enabled");
-    ctx->enabled = cJSON_IsBool(en) ? cJSON_IsTrue(en) : true;
+    ctx->enabled = sd_jsonu_bool(binding, "enabled", true);
     if (!ctx->enabled) return ESP_OK;   // bağlama saklanır, sürücü yüklenmez
 
-    const cJSON *beh = cJSON_GetObjectItemCaseSensitive(binding, "behavior");
-    ctx->drv = sd_behavior_find(beh->valuestring);
+    ctx->drv = sd_behavior_find(sd_jsonu_str(binding, "behavior"));
     if (!ctx->drv) {
         slot_error(idx + 1, "behavior_unknown");
         ctx->enabled = false;
         return ESP_FAIL;
     }
 
-    const cJSON *prof = cJSON_GetObjectItemCaseSensitive(binding, "profile");
-    if (cJSON_IsString(prof)) {
-        ctx->profile = sd_profiles_load(prof->valuestring);
+    const char *prof_id = sd_jsonu_str(binding, "profile");
+    if (prof_id) {
+        ctx->profile = sd_profiles_load(prof_id);
         if (!ctx->profile) {
             slot_error(idx + 1, "profile_missing");
             ctx->drv = NULL;
@@ -301,36 +345,22 @@ static esp_err_t load_slot(int idx)   // 0-based
     const cJSON *targets = cJSON_GetObjectItemCaseSensitive(binding, "targets");
     const cJSON *t0 = targets ? cJSON_GetArrayItem(targets, 0) : NULL;
     if (cJSON_IsObject(t0)) {
-        const cJSON *host = cJSON_GetObjectItemCaseSensitive(t0, "host");
-        const cJSON *port = cJSON_GetObjectItemCaseSensitive(t0, "port");
-        const cJSON *did  = cJSON_GetObjectItemCaseSensitive(t0, "device_id");
-        const cJSON *ak   = cJSON_GetObjectItemCaseSensitive(t0, "auth_key");
-        if (cJSON_IsString(host)) {
-            strlcpy(ctx->target.host, host->valuestring, sizeof(ctx->target.host));
-        }
-        ctx->target.port = cJSON_IsNumber(port) ? port->valueint : 80;
-        if (cJSON_IsString(did)) {
-            strlcpy(ctx->target.device_id, did->valuestring,
-                    sizeof(ctx->target.device_id));
-        }
-        if (cJSON_IsString(ak)) {
-            strlcpy(ctx->target.auth_key, ak->valuestring,
-                    sizeof(ctx->target.auth_key));
-        }
+        const char *host = sd_jsonu_str(t0, "host");
+        const char *did  = sd_jsonu_str(t0, "device_id");
+        const char *ak   = sd_jsonu_str(t0, "auth_key");
+        if (host) strlcpy(ctx->target.host, host, sizeof(ctx->target.host));
+        ctx->target.port = sd_jsonu_int(t0, "port", 0);
+        if (did) strlcpy(ctx->target.device_id, did, sizeof(ctx->target.device_id));
+        if (ak)  strlcpy(ctx->target.auth_key, ak, sizeof(ctx->target.auth_key));
     }
-    // Profildeki varsayılan port'u hedef port belirtilmemişse kullan.
-    if (ctx->target.port <= 0 && ctx->profile) {
-        const cJSON *pport = cJSON_GetObjectItemCaseSensitive(ctx->profile, "port");
-        ctx->target.port = cJSON_IsNumber(pport) ? pport->valueint : 80;
+    if (ctx->target.port <= 0) {
+        ctx->target.port = sd_jsonu_int(ctx->profile, "port", 80);
     }
 
     const cJSON *params = cJSON_GetObjectItemCaseSensitive(binding, "params");
-    const cJSON *ge = params
-        ? cJSON_GetObjectItemCaseSensitive(params, "gestures_enabled") : NULL;
-    ctx->gestures_enabled = cJSON_IsBool(ge) ? cJSON_IsTrue(ge) : true;
+    ctx->gestures_enabled = sd_jsonu_bool(params, "gestures_enabled", true);
 
-    // Kalıcı değer önbelleği + profil aralığına kırpma (eski cur_value
-    // bug'ının düzeltmesi — device_driver.c:660 kırpmıyordu).
+    // Kalıcı değer + profil aralığına kırpma (eski cur_value bug fix'i).
     nvs_handle_t h;
     if (nvs_open(SD_ENGINE_NVS_NS, NVS_READONLY, &h) == ESP_OK) {
         char vkey[16];
@@ -341,17 +371,8 @@ static esp_err_t load_slot(int idx)   // 0-based
         snprintf(vkey, sizeof(vkey), "s%d", idx + 1);
         nvs_get_u8(h, vkey, &st);
         nvs_close(h);
-        int lo = 0, hi = 100;
-        if (ctx->profile) {
-            const cJSON *cmds = cJSON_GetObjectItemCaseSensitive(ctx->profile, "commands");
-            const cJSON *sv = cmds
-                ? cJSON_GetObjectItemCaseSensitive(cmds, "set_value") : NULL;
-            const cJSON *mn = sv ? cJSON_GetObjectItemCaseSensitive(sv, "min") : NULL;
-            const cJSON *mx = sv ? cJSON_GetObjectItemCaseSensitive(sv, "max") : NULL;
-            if (cJSON_IsNumber(mn)) lo = mn->valueint;
-            if (cJSON_IsNumber(mx)) hi = mx->valueint;
-            if (hi <= lo) { lo = 0; hi = 100; }
-        }
+        int lo;
+        int hi = profile_range(ctx, &lo);
         ctx->value = (v < lo) ? lo : ((v > hi) ? hi : (int)v);
         ctx->state = st != 0;
     }
@@ -365,27 +386,22 @@ static esp_err_t load_slot(int idx)   // 0-based
     }
 
     ESP_LOGI(TAG, "slot %d yuklendi: %s%s%s", idx + 1, ctx->drv->id,
-             ctx->profile ? " + " : "",
-             ctx->profile
-                 ? cJSON_GetStringValue(
-                       cJSON_GetObjectItemCaseSensitive(ctx->profile, "id"))
-                 : "");
+             prof_id ? " + " : "", prof_id ? prof_id : "");
     return ESP_OK;
 }
 
 static const char *slot_display_name(const slot_ctx_t *ctx)
 {
-    if (ctx->binding) {
-        const cJSON *n = cJSON_GetObjectItemCaseSensitive(ctx->binding, "name");
-        if (cJSON_IsString(n) && n->valuestring[0]) return n->valuestring;
-        const cJSON *b = cJSON_GetObjectItemCaseSensitive(ctx->binding, "behavior");
-        if (cJSON_IsString(b)) return b->valuestring;
-    }
-    return "empty";
+    const char *n = sd_jsonu_str(ctx->binding, "name");
+    if (n && n[0]) return n;
+    const char *b = sd_jsonu_str(ctx->binding, "behavior");
+    return b ? b : "empty";
 }
 
 void eng_set_active(int slot, bool persist)
 {
+    char evt[80];
+    evt[0] = '\0';
     eng_lock();
     if (slot >= 1 && slot <= SD_MODE_SLOTS && slot != s_active) {
         s_active = slot;
@@ -397,10 +413,11 @@ void eng_set_active(int slot, bool persist)
                 nvs_close(h);
             }
         }
-        sk_event_bus_publishf("mode.changed", "{\"slot\":%d,\"name\":\"%s\"}",
-                              slot, slot_display_name(&s_slots[slot - 1]));
+        snprintf(evt, sizeof(evt), "{\"slot\":%d,\"name\":\"%s\"}",
+                 slot, slot_display_name(&s_slots[slot - 1]));
     }
     eng_unlock();
+    if (evt[0]) sk_event_bus_publish("mode.changed", evt);   // kilit DIŞI
 }
 
 // --- Girdi yolu ------------------------------------------------------------------
@@ -414,23 +431,26 @@ void sd_mode_engine_input(const sd_input_event_t *evt)
         eng_unlock();
         return;
     }
-    if ((evt->type == SD_INPUT_DOUBLE_CLICK || evt->type == SD_INPUT_LONG_PRESS) &&
-        !ctx->gestures_enabled) {
-        eng_unlock();
-        return;   // bağlama bazında jest kapalı — yok say
-    }
+    // Jest kapılaması sd_encoder'daki TEK etkin bayrakta —
+    // burada ikinci kapı yok (kod incelemesi: katman karışıklığı).
     esp_err_t err = ctx->drv->on_input(ctx, evt);
+    bool tripped = false;
+    int  count = 0, slot = ctx->slot;
     if (err != ESP_OK && err != ESP_ERR_NOT_FOUND) {
-        if (++ctx->err_count >= SD_ENGINE_ERR_LIMIT) {
+        if (++ctx->err_count >= SD_ENGINE_ERR_LIMIT && !ctx->error) {
             ctx->error = true;
-            sk_event_bus_publishf("mode.error",
-                                  "{\"slot\":%d,\"err\":\"driver\",\"count\":%d}",
-                                  ctx->slot, ctx->err_count);
+            tripped = true;
+            count = ctx->err_count;
         }
     } else {
         ctx->err_count = 0;
     }
     eng_unlock();
+    if (tripped) {
+        sk_event_bus_publishf("mode.error",
+                              "{\"slot\":%d,\"err\":\"driver\",\"count\":%d}",
+                              slot, count);
+    }
 }
 
 void sd_mode_engine_slot_step(int dir)
@@ -441,24 +461,17 @@ void sd_mode_engine_slot_step(int dir)
     eng_set_active(target, true);
 }
 
-// --- CLI yardımcı yolları (sd_mode_cli.c çağırır) ------------------------------
-
-static int profile_range(const slot_ctx_t *ctx, int *out_lo)
+bool sd_mode_engine_active_gestures(void)
 {
-    int lo = 0, hi = 100;
-    if (ctx->profile) {
-        const cJSON *cmds = cJSON_GetObjectItemCaseSensitive(ctx->profile, "commands");
-        const cJSON *sv = cmds
-            ? cJSON_GetObjectItemCaseSensitive(cmds, "set_value") : NULL;
-        const cJSON *mn = sv ? cJSON_GetObjectItemCaseSensitive(sv, "min") : NULL;
-        const cJSON *mx = sv ? cJSON_GetObjectItemCaseSensitive(sv, "max") : NULL;
-        if (cJSON_IsNumber(mn)) lo = mn->valueint;
-        if (cJSON_IsNumber(mx)) hi = mx->valueint;
-        if (hi <= lo) { lo = 0; hi = 100; }
-    }
-    if (out_lo) *out_lo = lo;
-    return hi;
+    if (!s_started) return true;
+    eng_lock();
+    bool g = s_slots[s_active - 1].binding
+        ? s_slots[s_active - 1].gestures_enabled : true;
+    eng_unlock();
+    return g;
 }
+
+// --- CLI yardımcı yolları ------------------------------------------------------
 
 esp_err_t eng_set_value_direct(int slot, int value)
 {
@@ -472,11 +485,11 @@ esp_err_t eng_set_value_direct(int slot, int value)
     ctx->value = value;
     ctx->state = value > lo;
     ctx->nvs_dirty = true;
-    eng_job_t *job = build_send_job(ctx, ENG_JOB_SEND, SD_SEND_VALUE,
-                                    value, ctx->state);
+    bool state = ctx->state;
     eng_unlock();
     schedule_nvs_save();
-    if (!job) return ESP_ERR_NOT_FOUND;
+    eng_job_t *job = make_job(ENG_JOB_SEND, slot, SD_SEND_VALUE, value, state);
+    if (!job) return ESP_ERR_NO_MEM;
     return enqueue_job(job);
 }
 
@@ -487,11 +500,12 @@ esp_err_t eng_toggle_direct(int slot)
     if (!ctx->drv || !ctx->enabled) { eng_unlock(); return ESP_ERR_INVALID_STATE; }
     ctx->state = !ctx->state;
     ctx->nvs_dirty = true;
-    eng_job_t *job = build_send_job(ctx, ENG_JOB_SEND, SD_SEND_TOGGLE,
-                                    ctx->value, ctx->state);
+    int value = ctx->value;
+    bool state = ctx->state;
     eng_unlock();
     schedule_nvs_save();
-    if (!job) return ESP_ERR_NOT_FOUND;
+    eng_job_t *job = make_job(ENG_JOB_SEND, slot, SD_SEND_TOGGLE, value, state);
+    if (!job) return ESP_ERR_NO_MEM;
     return enqueue_job(job);
 }
 
@@ -520,53 +534,55 @@ esp_err_t eng_clear_slot(int slot)
     return err;
 }
 
-esp_err_t eng_run_test(int slot, int *out_status, int timeout_ms)
-{
-    eng_lock();
-    slot_ctx_t *ctx = &s_slots[slot - 1];
-    if (!ctx->drv || !ctx->enabled || !ctx->drv->test) {
-        eng_unlock();
-        return ESP_ERR_NOT_SUPPORTED;
-    }
-    // Test işi: drv->test cmd task'ta koşsun diye kuyruklanır.
-    eng_job_t *job = calloc(1, sizeof(*job));
-    if (!job) { eng_unlock(); return ESP_ERR_NO_MEM; }
-    job->type = ENG_JOB_TEST;
-    job->slot = (uint8_t)slot;
-    job->done = xSemaphoreCreateBinary();
-    job->out_err    = calloc(1, sizeof(esp_err_t));
-    job->out_status = calloc(1, sizeof(int));
-    eng_unlock();
-    if (!job->done || !job->out_err || !job->out_status) {
-        if (job->done) vSemaphoreDelete(job->done);
-        free(job->out_err); free(job->out_status); free(job);
-        return ESP_ERR_NO_MEM;
-    }
-    SemaphoreHandle_t done = job->done;
-    esp_err_t *perr = job->out_err;
-    int       *pst  = job->out_status;
+// --- Yürütme (yalnız cmd task) ----------------------------------------------
 
-    esp_err_t err = enqueue_job(job);
-    if (err != ESP_OK) {
-        vSemaphoreDelete(done); free(perr); free(pst);
-        return err;
+// İşi kilit altında somutlaştır: profil komut düğümü kopyası + mini profil +
+// hedef. Slot bu arada değiştiyse en GÜNCEL bağlama kullanılır (istenen).
+static bool materialize(const eng_job_t *job, cJSON **out_mini,
+                        cJSON **out_cmd, sd_target_t *out_tgt)
+{
+    static const char *KIND_NODE[] = {
+        [SD_SEND_VALUE]  = "set_value",
+        [SD_SEND_TOGGLE] = "toggle",
+        [SD_SEND_STOP]   = "stop",
+    };
+    bool ok = false;
+    eng_lock();
+    slot_ctx_t *ctx = &s_slots[job->slot - 1];
+    if (ctx->drv && ctx->enabled && ctx->profile) {
+        const cJSON *cmds = cJSON_GetObjectItemCaseSensitive(ctx->profile, "commands");
+        const cJSON *node = cmds
+            ? cJSON_GetObjectItemCaseSensitive(cmds, KIND_NODE[job->kind]) : NULL;
+        if (cJSON_IsObject(node)) {
+            *out_cmd  = cJSON_Duplicate(node, true);
+            *out_mini = cJSON_CreateObject();
+            const char *proto  = sd_jsonu_str(ctx->profile, "protocol");
+            const char *prefix = sd_jsonu_str(ctx->profile, "prefix");
+            if (*out_mini && proto)  cJSON_AddStringToObject(*out_mini, "protocol", proto);
+            if (*out_mini && prefix) cJSON_AddStringToObject(*out_mini, "prefix", prefix);
+            *out_tgt = ctx->target;
+            ok = (*out_cmd && *out_mini);
+        }
     }
-    if (xSemaphoreTake(done, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
-        // Zaman aşımı: cmd task hâlâ yazabilir — yapıları KASITLI sızdır
-        // (nadir yol, ~40B; use-after-free'den iyidir). done'ı cmd task verir.
-        ESP_LOGW(TAG, "mode.test %d zaman asimi (yapilar birakildi)", slot);
-        return ESP_ERR_TIMEOUT;
+    eng_unlock();
+    if (!ok) {
+        cJSON_Delete(*out_cmd);
+        cJSON_Delete(*out_mini);
+        *out_cmd = *out_mini = NULL;
     }
-    err = *perr;
-    if (out_status) *out_status = *pst;
-    vSemaphoreDelete(done);
-    free(perr); free(pst);
-    return err;
+    return ok;
 }
 
-// --- Offline izleyici entegrasyonu (T2.6) ----------------------------------------
-
-static inline int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
+static void publish_mode_value(int slot)
+{
+    char buf[80];
+    eng_lock();
+    slot_ctx_t *ctx = &s_slots[slot - 1];
+    snprintf(buf, sizeof(buf), "{\"slot\":%d,\"value\":%d,\"state\":%s}",
+             slot, ctx->value, ctx->state ? "true" : "false");
+    eng_unlock();
+    sk_event_bus_publish("mode.value", buf);   // kilit DIŞI yayın
+}
 
 // Uzlaştırma: slotun son değerini bir kez gönder (online dönüşü / got-ip).
 static void reconcile_slot(int idx0)
@@ -574,114 +590,138 @@ static void reconcile_slot(int idx0)
     eng_lock();
     slot_ctx_t *ctx = &s_slots[idx0];
     eng_job_t *job = (ctx->drv && ctx->enabled && ctx->profile)
-        ? build_send_job(ctx, ENG_JOB_SEND, SD_SEND_VALUE, ctx->value, ctx->state)
+        ? make_job(ENG_JOB_SEND, idx0 + 1, SD_SEND_VALUE, ctx->value, ctx->state)
         : NULL;
     eng_unlock();
     if (job) enqueue_job(job);
 }
 
-void eng_offline_feed(int slot, bool transport_ok)
+static void offline_feed(int slot, bool transport_ok)
 {
+    eng_lock();
     sd_offline_evt_t evt = sd_offline_feed(&s_offline, slot - 1,
                                            transport_ok, now_ms());
+    eng_unlock();
     if (evt == SD_OFFLINE_WENT) {
         sk_event_bus_publishf("target.offline", "{\"slot\":%d}", slot);
     } else if (evt == SD_OFFLINE_CAME) {
         sk_event_bus_publishf("target.online", "{\"slot\":%d}", slot);
-        reconcile_slot(slot - 1);   // son değeri hedefe eşitle
+        reconcile_slot(slot - 1);
     }
 }
 
-void eng_offline_wifi(bool connected)
+// Gönderimi yürüt; dönüş = transport sonucu, out_status = HTTP kodu.
+static esp_err_t execute_send(const eng_job_t *job, int *out_status)
 {
-    if (!connected) {
-        uint32_t newly = sd_offline_wifi_down(&s_offline);
-        for (int i = 0; i < SD_MODE_SLOTS; i++) {
-            if (newly & (1u << i)) {
-                sk_event_bus_publishf("target.offline", "{\"slot\":%d}", i + 1);
-            }
-        }
-    } else {
-        sd_offline_wifi_up(&s_offline);
-        for (int i = 0; i < SD_MODE_SLOTS; i++) reconcile_slot(i);
+    if (out_status) *out_status = 0;
+
+    eng_lock();
+    bool send_now = sd_offline_should_send(&s_offline, job->slot - 1, now_ms());
+    eng_unlock();
+    if (!send_now) {
+        // Offline probe kapısı kapalı: yerel değer zaten güncel, ağ atlanır.
+        publish_mode_value(job->slot);
+        return ESP_OK;
     }
-}
 
-static void on_wifi_state(const sk_event_t *evt, void *user)
-{
-    (void)user;
-    if (!evt || !evt->payload_json) return;
-    if (strstr(evt->payload_json, "\"state\":\"connected\"")) {
-        eng_offline_wifi(true);
-    } else if (strstr(evt->payload_json, "\"state\":\"disconnected\"")) {
-        eng_offline_wifi(false);
-    }
-}
-
-// --- sd_cmd task: coalescing + yürütme -----------------------------------------
-
-static void execute_send(eng_job_t *job)
-{
-    // Offline slotta gönderimler 5 sn'de bir proba düşer — düğme yerelde
-    // ilerlemeye devam eder, ağ boğulmaz (plan: Offline Semantiği).
-    if (!sd_offline_should_send(&s_offline, job->slot - 1, now_ms())) {
-        eng_lock();
-        slot_ctx_t *ctx = &s_slots[job->slot - 1];
-        sk_event_bus_publishf("mode.value",
-                              "{\"slot\":%d,\"value\":%d,\"state\":%s}",
-                              job->slot, ctx->value, ctx->state ? "true" : "false");
-        eng_unlock();
-        return;
+    cJSON *mini = NULL, *cmd = NULL;
+    sd_target_t tgt;
+    if (!materialize(job, &mini, &cmd, &tgt)) {
+        publish_mode_value(job->slot);
+        return ESP_ERR_NOT_FOUND;   // slot bu arada boşaldı/profilsiz
     }
 
     int status = 0;
-    esp_err_t err = sd_proto_execute(job->mini_profile, job->cmd_node,
-                                     &job->target, job->value, job->toggle,
+    esp_err_t err = sd_proto_execute(mini, cmd, &tgt, job->value, job->toggle,
                                      &status);
-    eng_offline_feed(job->slot, err == ESP_OK);
-    eng_lock();
-    slot_ctx_t *ctx = &s_slots[job->slot - 1];
-    sk_event_bus_publishf("mode.value",
-                          "{\"slot\":%d,\"value\":%d,\"state\":%s}",
-                          job->slot, ctx->value, ctx->state ? "true" : "false");
-    eng_unlock();
+    cJSON_Delete(mini);
+    cJSON_Delete(cmd);
+    if (out_status) *out_status = status;
+
+    offline_feed(job->slot, err == ESP_OK);
+    publish_mode_value(job->slot);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "slot %d gonderim hatasi: %s",
                  job->slot, esp_err_to_name(err));
     }
-    (void)status;
+    return err;
 }
 
+// mode.test: drv->test kilit altında SADECE iş üretir (yakalama modu),
+// ağ çağrısı kilitsiz koşar. Kuyruk karıştırma yok (kod incelemesi).
 static void execute_test(eng_job_t *job)
 {
-    esp_err_t err = ESP_ERR_INVALID_STATE;
+    eng_job_t *captured = NULL;
+    esp_err_t err;
+
     eng_lock();
     slot_ctx_t *ctx = &s_slots[job->slot - 1];
-    const sd_behavior_t *drv = ctx->drv;
-    eng_unlock();
-    if (drv && drv->test) err = drv->test(ctx);
-    // drv->test genelde sd_ctx_send kuyruklar — sırayı korumak için
-    // kuyruktaki o işi hemen işle: burada bekleyen SEND'leri boşalt.
-    eng_job_t *next = NULL;
-    while (xQueueReceive(s_queue, &next, 0) == pdTRUE) {
-        if (next->type == ENG_JOB_SEND && next->slot == job->slot) {
-            int status = 0;
-            esp_err_t serr = sd_proto_execute(next->mini_profile, next->cmd_node,
-                                              &next->target, next->value,
-                                              next->toggle, &status);
-            eng_offline_feed(next->slot, serr == ESP_OK);
-            if (err == ESP_OK) err = serr;
-            if (job->out_status) *job->out_status = status;
-            job_free(next);
-        } else {
-            // Başkasının işi — geri koy (tek eleman geri koymak sırayı bozar
-            // ama nadir; test tezgah yoludur).
-            xQueueSend(s_queue, &next, 0);
-            break;
-        }
+    if (!ctx->drv || !ctx->enabled || !ctx->drv->test) {
+        err = ESP_ERR_INVALID_STATE;
+    } else {
+        s_capture.active   = true;
+        s_capture.owner    = xTaskGetCurrentTaskHandle();
+        s_capture.captured = NULL;
+        err = ctx->drv->test(ctx);          // bloklamaz: iş üretir
+        captured           = s_capture.captured;
+        s_capture.active   = false;
+        s_capture.captured = NULL;
     }
-    *job->out_err = err;
-    xSemaphoreGive(job->done);   // bundan sonra job alanlarına DOKUNMA
+    eng_unlock();
+
+    if (err == ESP_OK && captured) {
+        err = execute_send(captured, &job->status);   // kilitsiz ağ çağrısı
+        free(captured);
+    }
+    job->result = err;
+    xSemaphoreGive(job->done);   // sahiplik CLI'ya geçti — job'a DOKUNMA
+}
+
+esp_err_t eng_run_test(int slot, int *out_status, int timeout_ms)
+{
+    eng_job_t *job = make_job(ENG_JOB_TEST, slot, SD_SEND_VALUE, 0, false);
+    if (!job) return ESP_ERR_NO_MEM;
+    job->done = xSemaphoreCreateBinary();
+    if (!job->done) { free(job); return ESP_ERR_NO_MEM; }
+
+    SemaphoreHandle_t done = job->done;
+    esp_err_t enq = enqueue_job(job);   // başarısızsa job_discard sema verdi
+    if (enq != ESP_OK && xSemaphoreTake(done, 0) != pdTRUE) {
+        // enqueue_job içeride discard etti; sema verilmiş olmalı — değilse
+        // güvenli tarafta kal, sızıntıyı kabul et.
+        return enq;
+    }
+    if (enq == ESP_OK && xSemaphoreTake(done, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
+        // Zaman aşımı: cmd task hâlâ yazabilir — job KASITLI sızdırılır
+        // (tek blok; use-after-free'den iyidir). Nadir yol, log'lanır.
+        ESP_LOGW(TAG, "mode.test %d zaman asimi (is blogu birakildi)", slot);
+        return ESP_ERR_TIMEOUT;
+    }
+    esp_err_t err = job->result;
+    if (out_status) *out_status = job->status;
+    vSemaphoreDelete(done);
+    free(job);
+    return err;
+}
+
+// --- sd_cmd task: tek dispatch noktası + VALUE coalescing ---------------------
+
+static void dispatch_job(eng_job_t *job)
+{
+    switch (job->type) {
+        case ENG_JOB_NVS_SAVE:
+            nvs_save_values();
+            free(job);
+            break;
+        case ENG_JOB_TEST:
+            execute_test(job);   // free CLI tarafında (sema sahipliği)
+            break;
+        case ENG_JOB_SEND:
+        default:
+            execute_send(job, NULL);
+            free(job);
+            break;
+    }
 }
 
 static void cmd_task(void *arg)
@@ -689,58 +729,70 @@ static void cmd_task(void *arg)
     (void)arg;
     ESP_LOGI(TAG, "sd_cmd task basladi");
     eng_job_t *job = NULL;
-    while (xQueueReceive(s_queue, &job, portMAX_DELAY) == pdTRUE) {
-        if (job->type == ENG_JOB_NVS_SAVE) {
-            nvs_save_values();
-            free(job);
+    for (;;) {
+        if (!job && xQueueReceive(s_queue, &job, portMAX_DELAY) != pdTRUE) {
             continue;
         }
-        if (job->type == ENG_JOB_TEST) {
-            execute_test(job);
-            free(job);   // done verildi; içerikler CLI'nın (veya sızdırıldı)
-            continue;
-        }
-        // SEND: drain-keep-latest coalescing (device_driver.c:466-480 portu).
-        // Aynı slot+kind'ten daha yenisi pencere içinde geldiyse eskisi düşer.
-        eng_job_t *next = NULL;
-        while (xQueueReceive(s_queue, &next,
-                             pdMS_TO_TICKS(SD_ENGINE_COALESCE_MS)) == pdTRUE) {
-            if (next->type == ENG_JOB_SEND &&
-                next->slot == job->slot && next->kind == job->kind) {
-                job_free(job);
-                job = next;             // en yenisini tut
-            } else {
-                break;                  // farklı iş: önce eldekini gönder
+        eng_job_t *carry = NULL;
+        if (job->type == ENG_JOB_SEND && job->kind == SD_SEND_VALUE) {
+            // Drain-keep-latest — YALNIZ VALUE (iki TOGGLE asla birleşmez).
+            eng_job_t *next = NULL;
+            while (xQueueReceive(s_queue, &next,
+                                 pdMS_TO_TICKS(SD_ENGINE_COALESCE_MS)) == pdTRUE) {
+                if (next->type == ENG_JOB_SEND &&
+                    next->kind == SD_SEND_VALUE && next->slot == job->slot) {
+                    free(job);
+                    job = next;          // en yenisini tut (hafif iş — bedava)
+                } else {
+                    carry = next;        // farklı iş: sonra işle
+                    break;
+                }
             }
         }
-        execute_send(job);
-        job_free(job);
-        if (next && next != job) {
-            if (next->type == ENG_JOB_NVS_SAVE) {
-                nvs_save_values();
-                free(next);
-            } else if (next->type == ENG_JOB_TEST) {
-                execute_test(next);
-                free(next);
-            } else {
-                execute_send(next);
-                job_free(next);
+        dispatch_job(job);
+        job = carry;                     // tek dispatch noktası (tekrar yok)
+    }
+}
+
+// --- WiFi / factory reset / init ------------------------------------------------
+
+static void on_wifi_state(const sk_event_t *evt, void *user)
+{
+    (void)user;
+    if (!evt || !evt->payload_json) return;
+    if (strstr(evt->payload_json, "\"state\":\"connected\"")) {
+        eng_lock();
+        sd_offline_wifi_up(&s_offline);
+        eng_unlock();
+        for (int i = 0; i < SD_MODE_SLOTS; i++) reconcile_slot(i);
+    } else if (strstr(evt->payload_json, "\"state\":\"disconnected\"")) {
+        eng_lock();
+        uint32_t newly = sd_offline_wifi_down(&s_offline);
+        eng_unlock();
+        for (int i = 0; i < SD_MODE_SLOTS; i++) {
+            if (newly & (1u << i)) {
+                sk_event_bus_publishf("target.offline", "{\"slot\":%d}", i + 1);
             }
         }
     }
 }
 
-// --- Factory reset / ref-checker / init ------------------------------------------
-
 static void on_factory_reset(const sk_event_t *evt, void *user)
 {
     (void)evt; (void)user;
+    // Debounce'u durdur + kirli bayrakları temizle ki silme SONRASI bir
+    // NVS_SAVE değerleri geri yazmasın (cihaz ~500 ms içinde restart olur).
+    eng_lock();
+    esp_timer_stop(s_nvs_timer);
+    s_nvs_pending = false;
+    for (int i = 0; i < SD_MODE_SLOTS; i++) s_slots[i].nvs_dirty = false;
     nvs_handle_t h;
     if (nvs_open(SD_ENGINE_NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
         nvs_erase_all(h);
         nvs_commit(h);
         nvs_close(h);
     }
+    eng_unlock();
     ESP_LOGW(TAG, "factory reset: mod slotlari silindi");
 }
 
@@ -750,9 +802,8 @@ static int profile_ref_count(const char *id)
     eng_lock();
     for (int i = 0; i < SD_MODE_SLOTS; i++) {
         if (!s_slots[i].binding || !s_slots[i].enabled) continue;
-        const cJSON *p = cJSON_GetObjectItemCaseSensitive(s_slots[i].binding,
-                                                          "profile");
-        if (cJSON_IsString(p) && strcmp(p->valuestring, id) == 0) refs++;
+        const char *p = sd_jsonu_str(s_slots[i].binding, "profile");
+        if (p && strcmp(p, id) == 0) refs++;
     }
     eng_unlock();
     return refs;
@@ -780,7 +831,7 @@ esp_err_t sd_mode_engine_init(bool recovery)
                            on_factory_reset, NULL, &sub);
     sd_profiles_set_ref_checker(profile_ref_count);
 
-    sk_capabilities_register_book("sd_mode_engine", "1.0.0");
+    sk_capabilities_register_book("sd_mode_engine", "1.1.0");
     ESP_LOGI(TAG, "init (recovery=%d)", recovery);
     return ESP_OK;
 }
@@ -792,7 +843,6 @@ esp_err_t sd_mode_engine_start(void)
     s_queue = xQueueCreate(SD_ENGINE_QUEUE_LEN, sizeof(eng_job_t *));
     if (!s_queue) return ESP_ERR_NO_MEM;
 
-    // Aktif slot + slotları yükle.
     nvs_handle_t h;
     uint8_t active = 1;
     if (nvs_open(SD_ENGINE_NVS_NS, NVS_READONLY, &h) == ESP_OK) {

@@ -55,6 +55,19 @@ static void test_behavior_field(void)
     BAD("{\"v\":2,\"behavior\":42}",        "behavior_not_string");
 }
 
+static void test_char_restrictions(void)
+{
+    // name JSON'a kaçışsız gömülür → tırnak/backslash/kontrol yasak
+    // (kod incelemesi: mode.list zarfı bozuluyordu).
+    BAD("{\"v\":2,\"behavior\":\"d\",\"name\":\"Ali\\\"s Lamp\"}", "name_chars");
+    BAD("{\"v\":2,\"behavior\":\"d\",\"name\":\"a\\\\b\"}",        "name_chars");
+    OK ("{\"v\":2,\"behavior\":\"d\",\"name\":\"Salon Isigi 3\"}");
+    // behavior/profile kimlik alfabesi
+    BAD("{\"v\":2,\"behavior\":\"dim mer\"}",                      "behavior_chars");
+    BAD("{\"v\":2,\"behavior\":\"d\",\"profile\":\"a b\"}",        "profile_chars");
+    OK ("{\"v\":2,\"behavior\":\"mqtt_remote\",\"profile\":\"shelly-2\"}");
+}
+
 static void test_profile_limits(void)
 {
     // 15 karakter sınırı (NVS key)
@@ -102,6 +115,7 @@ int main(void)
     test_valid();
     test_version();
     test_behavior_field();
+    test_char_restrictions();
     test_profile_limits();
     test_targets();
     test_params();

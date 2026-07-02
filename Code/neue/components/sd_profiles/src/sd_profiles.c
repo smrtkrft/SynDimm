@@ -15,6 +15,7 @@
 #include "sk_errors.h"
 #include "sk_event_bus.h"
 
+#include "sd_util.h"
 #include "sd_profiles.h"
 
 static const char *TAG = "sd_profiles";
@@ -92,9 +93,15 @@ static bool profile_validate(const cJSON *root, const char **reason)
 
     *reason = "bad_id";
     if (!str_field_ok(root, "id", 1, SD_PROFILE_ID_MAX, true)) return false;
+    // id NVS anahtarı olur + JSON'a kaçışsız gömülür → kimlik alfabesi şart.
+    const cJSON *idf = cJSON_GetObjectItemCaseSensitive(root, "id");
+    if (!sd_stru_ident_ok(idf->valuestring)) return false;
 
     *reason = "bad_name";
     if (!str_field_ok(root, "name", 0, 47, false)) return false;
+    const cJSON *namef = cJSON_GetObjectItemCaseSensitive(root, "name");
+    if (cJSON_IsString(namef) && namef->valuestring[0] &&
+        !sd_stru_json_safe(namef->valuestring)) return false;
 
     *reason = "bad_protocol";
     const cJSON *proto = cJSON_GetObjectItemCaseSensitive(root, "protocol");
@@ -195,31 +202,9 @@ static sk_err_t cmd_profile_get(sk_cli_ctx_t *ctx)
     return SK_OK;
 }
 
-// JSON'u al: makine modu {"json":"<string>"}; insan modunda tüm pozisyonel
-// argümanlar tek boşlukla birleştirilir (JSON boşluğa duyarsız; string
-// değerlerdeki çoklu boşluk tekile iner — tezgah kullanımında kabul).
-static char *arg_json_dup(sk_cli_ctx_t *ctx)
-{
-    const char *named = sk_cli_arg_named(ctx, "json");
-    if (named) return strdup(named);
-
-    int argc = sk_cli_argc(ctx);
-    if (argc <= 0) return NULL;
-    size_t total = 0;
-    for (int i = 0; i < argc; i++) total += strlen(sk_cli_arg(ctx, i)) + 1;
-    char *buf = malloc(total + 1);
-    if (!buf) return NULL;
-    size_t off = 0;
-    for (int i = 0; i < argc; i++) {
-        off += (size_t)snprintf(buf + off, total + 1 - off, "%s%s",
-                                i ? " " : "", sk_cli_arg(ctx, i));
-    }
-    return buf;
-}
-
 static sk_err_t cmd_profile_add(sk_cli_ctx_t *ctx)
 {
-    char *raw = arg_json_dup(ctx);
+    char *raw = sd_cliu_json_arg_dup(ctx, 0);
     if (!raw) { sk_cli_err(ctx, SK_ERR_MISSING_ARG, "{\"field\":\"json\"}"); return SK_OK; }
 
     cJSON *root = cJSON_Parse(raw);

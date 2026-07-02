@@ -33,12 +33,15 @@ static void test_auth_and_device(void)
     assert(strcmp(out, "/api/KEY123/lights/7/state") == 0);
 }
 
-static void test_null_token_passthrough(void)
+static void test_null_token_empty(void)
 {
     char out[128];
     sd_tmpl_vars_t v = { .value = 1 };   // auth_key NULL
     sd_template_expand("/api/{auth_key}/x", out, sizeof(out), &v);
-    assert(strcmp(out, "/api/{auth_key}/x") == 0);   // aynen kalır
+    assert(strcmp(out, "/api//x") == 0);   // bilinen+NULL → "" (eski davranış)
+    sd_template_expand("key={auth_key}&id={device_id}&v={value}",
+                       out, sizeof(out), &v);
+    assert(strcmp(out, "key=&id=&v=1") == 0);
 }
 
 static void test_unknown_token_passthrough(void)
@@ -101,7 +104,7 @@ int main(void)
 {
     test_value_and_toggle();
     test_auth_and_device();
-    test_null_token_passthrough();
+    test_null_token_empty();
     test_unknown_token_passthrough();
     test_mqtt_topic_tokens();
     test_truncation();

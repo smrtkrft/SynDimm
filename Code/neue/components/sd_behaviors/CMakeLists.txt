@@ -1,7 +1,7 @@
 idf_component_register(
     SRCS "src/sd_behaviors.c" "src/drv_dimmer.c"
     INCLUDE_DIRS "include"
-    REQUIRES sk_core json sd_buzzer
+    REQUIRES sk_core json sd_buzzer sd_util
 )
 # sd_ctx_* sembolleri sd_mode_engine'de implemente edilir — CMake REQUIRES
 # döngüsü olmasın diye burada bağımlılık YOKTUR; uygulama linkinde çözülür.

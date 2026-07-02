@@ -9,24 +9,12 @@
 #include "sk_cli.h"
 #include "sk_errors.h"
 
+#include "sd_util.h"
 #include "sd_template.h"
 #include "sd_proto.h"
 #include "sd_proto_internal.h"
 
 static const char *TAG = "sd_proto";
-
-// cmd_node'dan int alan (yoksa def).
-int sd_proto_node_int(const cJSON *node, const char *key, int def)
-{
-    const cJSON *it = cJSON_GetObjectItemCaseSensitive(node, key);
-    return (it && cJSON_IsNumber(it)) ? (int)it->valuedouble : def;
-}
-
-const char *sd_proto_node_str(const cJSON *node, const char *key)
-{
-    const cJSON *it = cJSON_GetObjectItemCaseSensitive(node, key);
-    return (it && cJSON_IsString(it)) ? it->valuestring : NULL;
-}
 
 // {value} için eşlenmiş değer: min/max kaynak aralığından map_min/map_max
 // hedef aralığına (yalnız ikisi de tanımlıysa).
@@ -35,8 +23,8 @@ int sd_proto_mapped_value(const cJSON *cmd_node, int value)
     const cJSON *mm = cJSON_GetObjectItemCaseSensitive(cmd_node, "map_min");
     const cJSON *mx = cJSON_GetObjectItemCaseSensitive(cmd_node, "map_max");
     if (!cJSON_IsNumber(mm) || !cJSON_IsNumber(mx)) return value;
-    int from_min = sd_proto_node_int(cmd_node, "min", 0);
-    int from_max = sd_proto_node_int(cmd_node, "max", 100);
+    int from_min = sd_jsonu_int(cmd_node, "min", 0);
+    int from_max = sd_jsonu_int(cmd_node, "max", 100);
     return sd_map_value(value, from_min, from_max,
                         (int)mm->valuedouble, (int)mx->valuedouble);
 }
@@ -50,7 +38,7 @@ esp_err_t sd_proto_execute(const cJSON *profile_root, const cJSON *cmd_node,
         return ESP_ERR_INVALID_ARG;
     }
 
-    const char *proto = sd_proto_node_str(profile_root, "protocol");
+    const char *proto = sd_jsonu_str(profile_root, "protocol");
     if (!proto) return ESP_ERR_INVALID_ARG;
 
     if (strcmp(proto, "http") == 0) {
@@ -107,6 +95,10 @@ esp_err_t sd_proto_mqtt_publish(const char *topic, const char *payload,
 
 // --- Gizli tezgah komutu -----------------------------------------------------
 // ⚠️ CLI task'ında bloklar (≤3 sn) — yalnız geliştirme/donanım doğrulama.
+// Kod incelemesi: keep-alive singleton'ı sd_cmd task'ına aittir; bu komut
+// kendi TEK SEFERLİK istemcisini kurar, paylaşılan duruma DOKUNMAZ.
+
+#include "esp_http_client.h"
 
 static sk_err_t cmd_proto_http_test(sk_cli_ctx_t *ctx)
 {
@@ -118,28 +110,29 @@ static sk_err_t cmd_proto_http_test(sk_cli_ctx_t *ctx)
         if (p) port = strtol(p, NULL, 10);
     }
     if (!host || !path) {
-        sk_cli_err(ctx, SK_ERR_MISSING_ARG, "{\"usage\":\"proto.http.test <host> <port> <path>\"}");
+        sk_cli_err(ctx, SK_ERR_MISSING_ARG,
+                   "{\"usage\":\"proto.http.test <host> <port> <path>\"}");
         return SK_OK;
     }
 
-    cJSON *profile = cJSON_Parse("{\"protocol\":\"http\"}");
-    cJSON *cmd     = cJSON_CreateObject();
-    cJSON_AddStringToObject(cmd, "method", "GET");
-    cJSON_AddStringToObject(cmd, "path", path);
+    char url[384];
+    snprintf(url, sizeof(url), "http://%s:%ld%s", host, port, path);
+    esp_http_client_config_t cfg = {
+        .url        = url,
+        .method     = HTTP_METHOD_GET,
+        .timeout_ms = 3000,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&cfg);
+    if (!client) { sk_cli_err(ctx, SK_ERR_INTERNAL, NULL); return SK_OK; }
 
-    sd_target_t tgt = { .port = (int)port };
-    strlcpy(tgt.host, host, sizeof(tgt.host));
-
-    int status = 0;
-    esp_err_t err = sd_proto_http_execute(profile, cmd, &tgt, 0, false, &status);
+    esp_err_t err = esp_http_client_perform(client);
+    int status = (err == ESP_OK) ? esp_http_client_get_status_code(client) : 0;
+    esp_http_client_cleanup(client);
 
     char buf[96];
     snprintf(buf, sizeof(buf), "{\"err\":\"%s\",\"status\":%d}",
              esp_err_to_name(err), status);
     sk_cli_ok(ctx, buf);
-
-    cJSON_Delete(profile);
-    cJSON_Delete(cmd);
     return SK_OK;
 }
 

@@ -40,6 +40,12 @@ void sd_mode_engine_slot_step(int dir);
 
 int  sd_mode_engine_active_slot(void);
 
+// Aktif slotun bağlama-bazlı jest bayrağı (params.gestures_enabled,
+// vars. true; motor başlamadıysa/slot boşsa true). sd_encoder bunu global
+// prefs ile AND'leyip TEK etkin bayrak üretir — jest kapılaması tek
+// katmanda yaşar (kod incelemesi: üç katmanlı kapılama tutarsızdı).
+bool sd_mode_engine_active_gestures(void);
+
 #ifdef __cplusplus
 }
 #endif

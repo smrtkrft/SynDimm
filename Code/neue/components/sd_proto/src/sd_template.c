@@ -58,12 +58,15 @@ size_t sd_template_expand(const char *tmpl, char *out, size_t cap,
                         break;
                     }
                 }
-                if (known && repl) {
-                    off = append(out, cap, off, repl, strlen(repl));
+                if (known) {
+                    // NULL değerli bilinen token "" olur (eski davranış —
+                    // kod incelemesi: auth'suz hedefte {auth_key} harfiyen
+                    // kalınca komutlar bozuluyordu, proto_http.c:103-116).
+                    if (repl) off = append(out, cap, off, repl, strlen(repl));
                     p += tok_len;
                     continue;
                 }
-                // bilinmeyen token VEYA NULL değer → aynen geçir
+                // Bilinmeyen token aynen geçer (teşhis edilebilir kalsın).
                 off = append(out, cap, off, p, tok_len);
                 p += tok_len;
                 continue;

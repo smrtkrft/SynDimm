@@ -7,6 +7,7 @@
 #include "esp_err.h"
 #include "cJSON.h"
 
+#include "sd_util.h"
 #include "sd_proto.h"
 
 // Hangi implementasyonlar derlemede var (CMake SRCS listesiyle senkron —
@@ -14,9 +15,8 @@
 #define SD_PROTO_HAS_UDP   0
 #define SD_PROTO_HAS_MQTT  0
 
-int         sd_proto_node_int(const cJSON *node, const char *key, int def);
-const char *sd_proto_node_str(const cJSON *node, const char *key);
-int         sd_proto_mapped_value(const cJSON *cmd_node, int value);
+// Tipli cJSON erişimcileri sd_util'de (sd_jsonu_*) — burada yalnız eşleme.
+int sd_proto_mapped_value(const cJSON *cmd_node, int value);
 
 esp_err_t sd_proto_http_execute(const cJSON *profile_root, const cJSON *cmd_node,
                                 const sd_target_t *tgt, int value, bool toggle,

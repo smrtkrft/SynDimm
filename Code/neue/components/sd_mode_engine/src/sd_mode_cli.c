@@ -16,6 +16,7 @@
 
 #include "sd_binding.h"
 #include "sd_profiles.h"
+#include "sd_util.h"
 #include "sd_mode_engine_internal.h"
 
 // --- Argüman yardımcıları -----------------------------------------------
@@ -31,28 +32,6 @@ static bool arg_slot(sk_cli_ctx_t *ctx, int *out)
     if (v < 1 || v > SD_MODE_SLOTS) return false;
     *out = (int)v;
     return true;
-}
-
-// JSON: makine modunda {"json":"..."}; insan modunda pozisyonel argümanlar
-// start_idx'ten itibaren tek boşlukla birleştirilir (sd_profiles ile aynı
-// tezgah-kullanımı yaklaşımı).
-static char *arg_json_dup(sk_cli_ctx_t *ctx, int start_idx)
-{
-    const char *named = sk_cli_arg_named(ctx, "json");
-    if (named) return strdup(named);
-
-    int argc = sk_cli_argc(ctx);
-    if (argc <= start_idx) return NULL;
-    size_t total = 0;
-    for (int i = start_idx; i < argc; i++) total += strlen(sk_cli_arg(ctx, i)) + 1;
-    char *buf = malloc(total + 1);
-    if (!buf) return NULL;
-    size_t off = 0;
-    for (int i = start_idx; i < argc; i++) {
-        off += (size_t)snprintf(buf + off, total + 1 - off, "%s%s",
-                                i > start_idx ? " " : "", sk_cli_arg(ctx, i));
-    }
-    return buf;
 }
 
 // --- Komutlar ----------------------------------------------------------------
@@ -133,7 +112,7 @@ static sk_err_t cmd_mode_set(sk_cli_ctx_t *ctx)
         sk_cli_err(ctx, SK_ERR_INVALID_ARG, "{\"field\":\"slot\"}");
         return SK_OK;
     }
-    char *raw = arg_json_dup(ctx, 1);
+    char *raw = sd_cliu_json_arg_dup(ctx, 1);
     if (!raw) { sk_cli_err(ctx, SK_ERR_MISSING_ARG, "{\"field\":\"json\"}"); return SK_OK; }
     if (strlen(raw) > SD_BINDING_JSON_MAX) {
         free(raw);

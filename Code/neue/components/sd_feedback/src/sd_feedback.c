@@ -21,31 +21,33 @@
 
 static const char *TAG = "sd_feedback";
 
-// Küçük JSON payload'lardan sayı çek (sk_control.c:59-64 deseni — tam
-// cJSON parse'a değmeyecek kadar ufak yükler).
-static long payload_long(const char *json, const char *key, long def)
+// Küçük JSON payload'da anahtarın değer başlangıcını bul (sk_control.c:59-64
+// deseni — tam cJSON parse'a değmeyecek kadar ufak yükler). Tek tarayıcı,
+// iki tip okuyucu (kod incelemesi: kopyalar ıraksamıştı).
+static const char *payload_value(const char *json, const char *key)
 {
-    if (!json || !key) return def;
+    if (!json || !key) return NULL;
     char pat[32];
     snprintf(pat, sizeof(pat), "\"%s\"", key);
     const char *p = strstr(json, pat);
-    if (!p) return def;
+    if (!p) return NULL;
     p = strchr(p + strlen(pat), ':');
-    if (!p) return def;
-    return strtol(p + 1, NULL, 10);
+    if (!p) return NULL;
+    p++;
+    while (*p == ' ') p++;
+    return p;
+}
+
+static long payload_long(const char *json, const char *key, long def)
+{
+    const char *v = payload_value(json, key);
+    return v ? strtol(v, NULL, 10) : def;
 }
 
 static bool payload_bool(const char *json, const char *key, bool def)
 {
-    if (!json || !key) return def;
-    char pat[32];
-    snprintf(pat, sizeof(pat), "\"%s\"", key);
-    const char *p = strstr(json, pat);
-    if (!p) return def;
-    p = strchr(p + strlen(pat), ':');
-    if (!p) return def;
-    while (*++p == ' ') {}
-    return strncmp(p, "true", 4) == 0;
+    const char *v = payload_value(json, key);
+    return v ? (strncmp(v, "true", 4) == 0) : def;
 }
 
 static void on_mode_changed(const sk_event_t *evt, void *user)

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "sd_util_str.h"   // pure — host testinde de derlenir
 #include "sd_binding.h"
 
 static bool fail(char *err, size_t cap, const char *reason)
@@ -111,6 +112,22 @@ bool sd_binding_validate(const cJSON *root, char *err, size_t err_cap)
     if (!check_bool(root, "enabled", err, err_cap)) return false;
     if (!check_str(root, "name", 0, 47, false, err, err_cap)) return false;
     if (!check_str(root, "profile", 1, 15, false, err, err_cap)) return false;
+
+    // JSON-güvenlik/karakter kısıtları (kod incelemesi: name içindeki '"'
+    // mode.list zarfını bozuyordu; behavior/profile kimlik alfabesinde).
+    const cJSON *name = cJSON_GetObjectItemCaseSensitive(root, "name");
+    if (cJSON_IsString(name) && name->valuestring[0] &&
+        !sd_stru_json_safe(name->valuestring)) {
+        return fail(err, err_cap, "name_chars");
+    }
+    const cJSON *beh = cJSON_GetObjectItemCaseSensitive(root, "behavior");
+    if (!sd_stru_ident_ok(beh->valuestring)) {
+        return fail(err, err_cap, "behavior_chars");
+    }
+    const cJSON *prof = cJSON_GetObjectItemCaseSensitive(root, "profile");
+    if (cJSON_IsString(prof) && !sd_stru_ident_ok(prof->valuestring)) {
+        return fail(err, err_cap, "profile_chars");
+    }
 
     const cJSON *targets = cJSON_GetObjectItemCaseSensitive(root, "targets");
     if (targets) {

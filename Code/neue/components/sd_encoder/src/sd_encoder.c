@@ -48,17 +48,17 @@ static volatile char    event_buffer[EVENT_BUFFER_SIZE];
 static volatile uint8_t buf_write;
 static volatile uint8_t buf_read;
 
-// Buton durumu (yalnız sd_input task erişir).
+// Buton durumu (yalnız sd_input task erişir). Basış durumunun TEK doğruluk
+// kaynağı sd_gesture'dır (kod incelemesi: kopya s_pressed/s_press_time
+// ıraksayabiliyordu) — burada yalnız debounce için ham seviye tutulur.
 static int     s_last_btn_level;
 static int64_t s_last_btn_time;
-static int64_t s_press_time;
-static bool    s_pressed;
 
 // Jest sınıflandırıcı + basılı-tutma kademe bipleri (yalnız sd_input task).
-static sd_gesture_t  s_gesture;
-static bool          s_warn_restart;    // 5 sn eşiği bildirildi
-static bool          s_warn_factory;    // 10 sn eşiği bildirildi
-static volatile bool s_gestures_dirty;  // prefs.changed → task'ta uygula
+static sd_gesture_t s_gesture;
+static bool         s_warn_restart;    // 5 sn eşiği bildirildi
+static bool         s_warn_factory;    // 10 sn eşiği bildirildi
+static bool         s_gestures_eff;    // etkin bayrak (global pref AND binding)
 
 static inline int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
 
@@ -142,10 +142,19 @@ static void gesture_emit(sd_gesture_type_t type, int32_t value, void *user)
     }
 }
 
-static void on_prefs_changed(const char *key, void *user)
+// TEK etkin jest bayrağı: global prefs AND aktif bağlamanın parametresi
+// (kod incelemesi: üç katmanlı kapılama tutarsızdı — binding kapalıyken
+// bile çift-tık gecikmesi ödeniyordu). Her döngüde ucuz kontrol; yalnız
+// değişince sınıflandırıcıya uygulanır.
+static void refresh_effective_gestures(int64_t now)
 {
-    (void)user;
-    if (!strcmp(key, "gestures")) s_gestures_dirty = true;
+    bool eff = sd_prefs_get_bool("gestures", true) &&
+               sd_mode_engine_active_gestures();
+    if (eff != s_gestures_eff) {
+        s_gestures_eff = eff;
+        sd_gesture_set_enabled(&s_gesture, eff, now);
+        ESP_LOGI(TAG, "jestler %s", eff ? "acik" : "kapali");
+    }
 }
 
 // --- Buton örnekleme (encoder.c:214-258 debounce yapısının portu, kontrol
@@ -157,14 +166,9 @@ static void poll_button(int64_t now)
 
     if (cur != s_last_btn_level) {
         if ((now - s_last_btn_time) > BUTTON_DEBOUNCE_MS) {
-            if (cur == 0) {
-                s_press_time = now;
-                s_pressed    = true;
-                sd_gesture_on_button(&s_gesture, true, now);
-            } else if (s_pressed) {
-                s_pressed = false;
-                sd_gesture_on_button(&s_gesture, false, now);
-            }
+            // Eşleşmeyen basış/bırakmayı sd_gesture kendisi yok sayar —
+            // burada ikinci durum makinesi tutulmaz.
+            sd_gesture_on_button(&s_gesture, cur == 0, now);
             s_last_btn_time = now;
         }
         s_last_btn_level = cur;
@@ -198,11 +202,7 @@ static void input_task(void *arg)
     while (1) {
         int64_t now = now_ms();
 
-        if (s_gestures_dirty) {   // prefs.changed → tek erişim noktası burası
-            s_gestures_dirty = false;
-            sd_gesture_set_enabled(&s_gesture,
-                                   sd_prefs_get_bool("gestures", true), now);
-        }
+        refresh_effective_gestures(now);
 
         while (buf_read != buf_write) {
             char evt = event_buffer[buf_read];
@@ -250,8 +250,6 @@ esp_err_t sd_encoder_init(void)
 
     s_last_btn_level = gpio_get_level(SD_PIN_ENC_SW);
     s_last_btn_time  = 0;
-    s_press_time     = 0;
-    s_pressed        = false;
 
     ret = gpio_install_isr_service(0);
     if (ret == ESP_ERR_INVALID_STATE) ret = ESP_OK;   // zaten kurulu
@@ -262,11 +260,9 @@ esp_err_t sd_encoder_init(void)
     ret = gpio_isr_handler_add(SD_PIN_ENC_DT, encoder_isr, NULL);
     if (ret != ESP_OK) return ret;
 
-    sd_gesture_init(&s_gesture, gesture_emit, NULL,
-                    sd_prefs_get_bool("gestures", true));
-    sd_prefs_on_change(on_prefs_changed, NULL);
+    s_gestures_eff = sd_prefs_get_bool("gestures", true);   // motor henüz yok
+    sd_gesture_init(&s_gesture, gesture_emit, NULL, s_gestures_eff);
     s_warn_restart = s_warn_factory = false;
-    s_gestures_dirty = false;
 
     BaseType_t r = xTaskCreate(input_task, "sd_input", 3072, NULL, 5, NULL);
     if (r != pdPASS) return ESP_FAIL;

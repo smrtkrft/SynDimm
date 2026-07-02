@@ -15,6 +15,7 @@
 #include "sk_errors.h"
 #include "sk_event_bus.h"
 
+#include "sd_quiet.h"
 #include "sd_prefs.h"
 
 static const char *TAG = "sd_prefs";
@@ -79,27 +80,20 @@ static bool parse_bool(const char *v, bool *out)
     return false;
 }
 
-// "HH:MM-HH:MM" biçim denetimi. Yetkili çözümleyici sd_buzzer'daki
-// sd_quiet_parse (T1.2, pure modül) — buradaki yalnız format bekçisi;
-// iki taraf aynı grameri kabul eder. (Bileşen bağımlılığı ters yöne
-// dönmesin diye sd_quiet.h buradan include edilmez.)
+// Değer doğrulama = yetkili çözümleyicinin kendisi (sd_quiet, artık bu
+// bileşende). Kod incelemesi bulgusu: eski sscanf bekçisi "9:00-17:00"
+// gibi değerleri kabul edip kaydediyordu ama sd_quiet_parse reddediyordu —
+// sessiz saatler sessizce hiç çalışmıyordu. Tek gramer, tek fonksiyon.
 static bool quiet_format_valid(const char *v)
 {
-    int h1, m1, h2, m2;
-    char extra;
-    if (sscanf(v, "%2d:%2d-%2d:%2d%c", &h1, &m1, &h2, &m2, &extra) != 4) return false;
-    return h1 >= 0 && h1 < 24 && m1 >= 0 && m1 < 60 &&
-           h2 >= 0 && h2 < 24 && m2 >= 0 && m2 < 60;
+    uint16_t f, t;
+    return sd_quiet_parse(v, &f, &t);
 }
 
-// "+HH:MM"/"-HH:MM" biçim denetimi (yetkili: sd_tz_parse, sd_quiet.c).
 static bool tz_format_valid(const char *v)
 {
-    int h, m;
-    char sign, extra;
-    if (sscanf(v, "%c%2d:%2d%c", &sign, &h, &m, &extra) != 3) return false;
-    if (sign != '+' && sign != '-') return false;
-    return h >= 0 && h <= 14 && m >= 0 && m < 60;
+    int16_t off;
+    return sd_tz_parse(v, &off);
 }
 
 static void notify_change(const char *key)

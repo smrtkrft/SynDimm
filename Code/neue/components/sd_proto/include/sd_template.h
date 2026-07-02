@@ -13,9 +13,9 @@
 //   {prefix}     → vars->prefix       (MQTT topic kökü)
 //   {state}      → vars->state_topic  (MQTT durum topic'i)
 //
-// NULL string değeri olan yer tutucu OLDUĞU GİBİ bırakılır (log'da görünür
-// kalsın — eksik konfigürasyonun teşhisi kolaylaşır). Bilinmeyen {token}
-// da olduğu gibi geçer.
+// NULL string değeri olan BİLİNEN yer tutucu "" ile değiştirilir (eski
+// firmware davranışı — auth'suz hedefler bozulmasın). BİLİNMEYEN {token}
+// olduğu gibi geçer (yazım hatası teşhis edilebilir kalsın).
 
 #include <stdbool.h>
 #include <stddef.h>
