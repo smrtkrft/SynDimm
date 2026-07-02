@@ -124,6 +124,24 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   box-shadow:0 0 6px var(--tertiary)}
 .conn-dot.off{background:var(--danger);box-shadow:0 0 6px var(--danger)}
 
+/* cihaz bağlantısı koptu — tam ekran katman */
+.link-lost{position:fixed;inset:0;z-index:90;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;background:var(--bg);
+  text-align:center;padding:24px}
+.link-lost.show{display:flex}
+.link-lost .spin{width:46px;height:46px;border-radius:50%;
+  border:3px solid var(--border);border-top-color:var(--tertiary);
+  animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.link-lost h2{font-size:16px;font-weight:600}
+.link-lost p{font-size:12px;color:var(--fg-3);max-width:260px;line-height:1.6}
+
+/* kurtarma modu bandı */
+.recovery-band{position:fixed;top:0;left:0;right:0;z-index:80;display:none;
+  background:rgba(211,47,47,.14);color:var(--danger);font-size:11.5px;
+  font-weight:600;letter-spacing:.6px;text-align:center;padding:9px 14px}
+.recovery-band.show{display:block}
+
 .snack{position:fixed;left:50%;transform:translateX(-50%) translateY(16px);
   bottom:110px;background:var(--bg-2);color:var(--fg);border-radius:12px;
   padding:11px 16px;font-size:12.5px;opacity:0;pointer-events:none;
@@ -288,6 +306,18 @@ textarea.inp{resize:vertical;min-height:120px;line-height:1.5}
 
 <div class="snack" id="snack"></div>
 
+<div class="recovery-band" id="recBand">⚠ KURTARMA MODU — slotlar yüklü değil ·
+  konfigürasyonu Ayarlar'dan düzeltin, sonra yeniden başlatın</div>
+
+<div class="link-lost" id="linkLost">
+  <div class="spin"></div>
+  <h2>SynDimm'e ulaşılamıyor</h2>
+  <p>BLE ve TCP üzerinden yeniden bağlanılıyor… Cihazın güç aldığından ve
+     aynı ağda olduğundan emin olun.</p>
+  <button class="btn ghost pel" onclick="devLink=true;render();snack('✓ bağlantı kuruldu · <em>BLE</em>')">
+    Yeniden dene (sim)</button>
+</div>
+
 <div class="sheet-bg" id="sheetBg" onclick="closeSheet()"></div>
 <div class="sheet" id="sheet">
   <div class="drag-handle"></div>
@@ -321,6 +351,8 @@ const slots = [
    step:1, accel:false, gestures:false, presets:{},
    topic:'', payloadValue:'', payloadGesture:'', broker:'', brokerPort:1883},
 ];
+/* slot.error: sürücü/broker hatasıyla devre dışı kalan slot (mode.error) */
+slots.forEach(s=>s.error=false);
 let active = 0;
 
 /* profil kataloğu: builtin = repo kataloğu, installed = cihazdaki */
@@ -347,7 +379,14 @@ const safeEntries = [
   null, null, null, null,
 ];
 
-let wifi = {ssid:'Atelier-2G', rssi:-48, ip:'192.168.1.77', backup:'', connected:true};
+let wifi = {ssid:'Atelier-2G', rssi:-48, ip:'192.168.1.77', backup:'',
+            staticIp:'', connected:true};
+/* cihaz-seviyesi durumlar (eksik-özellik taraması ile eklendi) */
+let devLink   = true;    /* SKAPP ↔ SynDimm bağlantısı (BLE/TCP) */
+let recovery  = false;   /* kurtarma modunda mı (3 ardışık çökme) */
+let clockSync = true;    /* time.set geldi mi (sessiz saat buna bağlı) */
+let passSet   = false;   /* bağlantı parolası tanımlı mı */
+let passMode  = 'once';  /* once = ilk bağlantıda, always = her bağlantıda */
 const scanResults = [
   {ssid:'Atelier-2G', rssi:-48},{ssid:'Atelier-5G', rssi:-56},
   {ssid:'Nachbar-WLAN', rssi:-71},{ssid:'FRITZ!Box 7590', rssi:-78},
@@ -392,6 +431,8 @@ const orbital = $('orbital');
 
 const ARC=622;
 function render(){
+  $('linkLost').classList.toggle('show', !devLink);
+  $('recBand').classList.toggle('show', recovery);
   const s=slots[active], isSafe=s.behavior==='safe';
   $('dimCenter').style.display=isSafe?'none':'block';
   $('safeCenter').style.display=isSafe?'block':'none';
@@ -410,7 +451,8 @@ function render(){
   $('connDot').className='conn-dot'+(s.offline?' off':'');
   $('connTxt').textContent=s.offline?'HEDEF ÇEVRİMDIŞI':'HEDEF ÇEVRİMİÇİ';
   $('modeTray').innerHTML=slots.map((x,i)=>
-    `<button class="mode-tab ${i===active?'pel':''} ${x.offline?'offline':''}"
+    `<button class="mode-tab ${i===active?'pel':''} ${(x.offline||x.error)?'offline':''}"
+       style="${recovery?'opacity:.4;pointer-events:none':''}"
        onclick="selectSlot(${i})">${x.name}<span class="dot"></span></button>`).join('')+
     `<button class="gear-btn pel" onclick="openSheet()" title="Ayarlar">
        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
@@ -613,14 +655,20 @@ modlar:{
           <span class="badge">${s.behavior}</span>
           ${s.profile?`<span class="badge">${s.profile}</span>`:''}
           ${s.offline?'<span class="badge" style="color:var(--danger)">offline</span>':''}
+          ${s.error?'<span class="badge" style="color:var(--danger)">HATA · devre dışı</span>':''}
         </div>
-        <button class="pel" title="Test ateşle" onclick="mockTest(${i})">⚡</button>
+        ${s.error
+          ?`<button class="pel" title="Yeniden yükle"
+              onclick="slots[${i}].error=false;pushEvt('mode.set','slot ${i+1} yeniden yüklendi','hl');snack('✓ slot ${i+1} yeniden yüklendi');showView('modlar');render()">↻</button>`
+          :`<button class="pel" title="Test ateşle" onclick="mockTest(${i})">⚡</button>`}
         <button class="pel" title="Düzenle" onclick="showView('modEdit',${i})">✎</button>
         <button class="pel del" title="Boşalt" onclick="clearSlot(${i})">🗑</button>
       </div>`).join('') +
-    `<div class="hint-txt">Slot düzenleme <span class="v">mode.set</span>, test
+    `${recovery?'<div class="err-box" style="display:block">Kurtarma modu: düzenlemeler kaydedilir ama cihaz yeniden başlayana dek slotlar YÜKLENMEZ.</div>':''}
+    <div class="hint-txt">Slot düzenleme <span class="v">mode.set</span>, test
      <span class="v">mode.test</span>, boşaltma <span class="v">mode.clear</span>
-     (confirm-token'lı) komutlarına karşılık gelir.</div>`;
+     (confirm-token'lı) komutlarına karşılık gelir. Sürücü/broker hatasında slot
+     <span class="v">mode.error</span> ile devre dışı kalır — ↻ yeniden yükler.</div>`;
   }},
 
 /* ─── MOD DÜZENLEME (davranışa duyarlı form) ─── */
@@ -874,8 +922,11 @@ webhooks:{
           <select class="inp" id="wAuth"><option>none</option><option>bearer</option>
             <option>basic</option><option>header</option></select>
         </div>
-        <div class="f-label">Token (opsiyonel)</div>
-        <input class="inp mono" id="wTok" placeholder="Bearer/Basic değeri">
+        <div class="f-label">Token (opsiyonel) · Zincir gecikmesi (sn)</div>
+        <div class="f-grid">
+          <input class="inp mono" id="wTok" placeholder="Bearer/Basic değeri">
+          <input class="inp mono" id="wDelay" placeholder="0 (maks 300)">
+        </div>
         <div class="btn-row"><button class="btn pel" onclick="addWebhook()">Ekle</button></div>
       </div>
       <div class="hint-txt">5 kullanıcı slotu (<span class="v">api.endpoint.add</span>).
@@ -916,6 +967,15 @@ ag:{
       </div>
       <div class="btn-row"><button class="btn pel sm"
         onclick="wifi.backup=$('bSsid').value;snack('yedek ağ kaydedildi · <em>slot 2</em>')">Kaydet</button></div>
+    </div>
+    <div class="s-card well">
+      <div class="s-title">Statik IP (opsiyonel)</div>
+      <input class="inp mono" id="sIp" value="${esc(wifi.staticIp)}"
+        placeholder="192.168.1.50/24,192.168.1.1  (boş = DHCP)">
+      <div class="btn-row"><button class="btn pel sm"
+        onclick="wifi.staticIp=$('sIp').value;snack(wifi.staticIp?'statik IP kaydedildi':'DHCP moduna dönüldü')">Kaydet</button></div>
+      <div class="hint-txt">Biçim: <span class="v">IP/maske,ağ geçidi</span> —
+        <span class="v">wifi.connect --static-ip</span> argümanına karşılık gelir.</div>
     </div>`;
   }},
 
@@ -934,6 +994,29 @@ cihaz:{
         <span class="v">${deviceInfo.heap} · ${deviceInfo.minHeap}</span></div>
       <div class="s-row"><span class="k">Çalışma süresi</span><span class="v">${deviceInfo.uptime}</span></div>
       <div class="s-row"><span class="k">Son reset</span><span class="v">${deviceInfo.reset}</span></div>
+      <div class="s-row"><span class="k">Cihaz saati</span>
+        ${clockSync
+          ? '<span class="v">eşitlendi ✓</span>'
+          : '<span class="v" style="color:var(--tertiary)">eşitlenmedi ⚠</span>'}</div>
+      <div class="s-row"><span class="k">Bileşen sürümleri</span>
+        <button class="btn ghost pel sm"
+          onclick="snack('sk_core 0.4.0 · sk_api 0.3.0 · sd_engine 1.1.0 · sd_behaviors 1.2.0')">Göster</button></div>
+      <div class="s-row"><span class="k">Cihazı tanıt</span>
+        <button class="btn ghost pel sm"
+          onclick="pushEvt('buzzer.play','dit3');snack('🔊 cihaz 3 bip çaldı — <em>hangisi olduğunu gör</em>')">Bip çaldır</button></div>
+    </div>
+    <div class="s-card well">
+      <div class="s-title">Güvenlik · Bağlantı Parolası</div>
+      <div class="s-row"><span class="k">Durum</span>
+        <span class="v">${passSet?'tanımlı ●●●●':'tanımlı değil'}</span></div>
+      <div class="s-row"><span class="k">${passSet?'Parolayı değiştir':'Parola belirle'}</span>
+        <button class="btn ghost pel sm" onclick="setPassphrase()">${passSet?'Değiştir':'Belirle'}</button></div>
+      <div class="s-row"><span class="k">Her bağlantıda sor</span>
+        <div class="tgl ${passMode==='always'?'on':''}"
+          onclick="passMode=passMode==='always'?'once':'always';this.classList.toggle('on');pushEvt('auth.passphrase.mode',passMode)"></div></div>
+      <div class="hint-txt">Parola, eşleşmiş telefonlardan gelen hassas
+        işlemler için ek kapıdır (<span class="v">auth.passphrase</span>).
+        Arka arkaya yanlış girişte cihaz kendini fabrika ayarına döndürür.</div>
     </div>
     <div class="s-card well">
       <div class="s-title">Güncelleme (OTA)</div>
@@ -977,6 +1060,18 @@ cihaz:{
           <button class="btn ghost pel sm" onclick="slots[active].offline=true;pushEvt('target.offline','slot '+(active+1),'err');closeSheet();render()">offline</button>
           <button class="btn ghost pel sm" onclick="slots[active].offline=false;pushEvt('target.online','uzlaştırıldı','hl');closeSheet();render()">online</button>
         </div></div>
+      <div class="s-row"><span class="k">Cihaz bağlantısını kes</span>
+        <button class="btn ghost pel sm"
+          onclick="devLink=false;closeSheet();render()">bağlantıyı kopar</button></div>
+      <div class="s-row"><span class="k">Kurtarma modu</span>
+        <div class="tgl ${recovery?'on':''}"
+          onclick="recovery=!recovery;this.classList.toggle('on');pushEvt('device.recovery','count=3',recovery?'err':'hl');render()"></div></div>
+      <div class="s-row"><span class="k">Slot 2'de sürücü hatası</span>
+        <button class="btn ghost pel sm"
+          onclick="slots[1].error=true;pushEvt('mode.error','slot 2 · driver ×5','err');snack('✗ <em>mode.error</em> · slot 2 devre dışı','err');render()">tetikle</button></div>
+      <div class="s-row"><span class="k">Cihaz saati</span>
+        <div class="tgl ${clockSync?'on':''}"
+          onclick="clockSync=!clockSync;this.classList.toggle('on');showView('cihaz')"></div></div>
     </div>`;
   }},
 
@@ -1002,9 +1097,23 @@ tercihler:{
       <div class="s-row"><span class="k">Saat dilimi</span>
         <input class="inp mono" style="width:84px;text-align:center" value="${prefs.tz}"
           onchange="prefs.tz=this.value;pushEvt('prefs.changed','tz='+this.value)"></div>
+      ${!clockSync?`<div class="err-box" style="display:block;color:var(--tertiary);background:rgba(var(--tertiary-rgb),.10)">
+        ⚠ Cihaz saati henüz eşitlenmedi — sessiz saatler eşitlenene dek
+        PASİF kalır (bipler çalar). SKAPP bağlanınca otomatik eşitler.</div>`:''}
       <div class="hint-txt">Sessiz saat biçimi <span class="v">SS:DD-SS:DD</span>
         (gece sarmalı desteklenir); saat dilimi <span class="v">±SS:DD</span> —
         cihaz saati UTC'dir, aralık yerelde değerlendirilir.</div>
+    </div>
+    <div class="s-card well">
+      <div class="s-title">Düğme Kılavuzu</div>
+      <div class="s-row"><span class="k">Çevir</span><span class="v">değer / kasa dizisi</span></div>
+      <div class="s-row"><span class="k">Tık</span><span class="v">aç-kapa · segment</span></div>
+      <div class="s-row"><span class="k">Çift tık · uzun bas</span><span class="v">preset'ler</span></div>
+      <div class="s-row"><span class="k">Basılı + çevir</span><span class="v">mod değiştir</span></div>
+      <div class="s-row"><span class="k">5 sn basılı</span><span class="v">yeniden başlat*</span></div>
+      <div class="s-row"><span class="k">10 sn basılı</span><span class="v">fabrika ayarı</span></div>
+      <div class="hint-txt">* Yeniden başlatınca ilk 60 sn yeni telefon
+        eşleşmesine açıktır. Buzzer 5 ve 10 sn eşiklerinde uyarı çalar.</div>
     </div>`;
   }},
 
@@ -1224,6 +1333,17 @@ function addWebhook(){
   pushEvt('api.endpoint.add',name,'hl');
   snack(`✓ <em>api.endpoint.add</em> · ${name}`);
   showView('webhooks');
+}
+
+/* parola (sk_passphrase) */
+function setPassphrase(){
+  const p=prompt(passSet?'Yeni parola:':'Bağlantı parolası belirle:');
+  if(p===null)return;
+  if(p.length<4){snack('✗ en az 4 karakter','err');return;}
+  passSet=true;
+  pushEvt('auth.passphrase.set','ok','hl');
+  snack('✓ <em>auth.passphrase</em> kaydedildi');
+  showView('cihaz');
 }
 
 /* wifi */
