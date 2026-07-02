@@ -88,29 +88,43 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 .status-line .offline-txt{color:var(--danger)}
 .center .hint{font-size:9.5px;color:var(--fg-3);margin-top:5px;letter-spacing:.4px}
 
-/* Safe merkezi — K4 "Vault Çarkı" (kullanıcı seçimi):
-   üç kollu çark enkoderle döner, kapanan her segment çevrede bir
-   çentiği altına çevirir (ilerleme görünür, İÇERİK gizli). */
+/* Safe merkezi — K4 "Vault Çarkı" · DURUM GÖSTERGESİ.
+   Dizi girişi YALNIZ cihazdaki fiziksel düğmedendir; bu ekran
+   etkileşimsizdir — sabit (ambient) animasyon + olay yansıması.
+   Tetiklenince çark açılış dönüşü yapar, kilitte kırmızıya döner. */
 .safe-center{display:none;position:relative;z-index:2;text-align:center;
   pointer-events:none;width:100%;height:100%;
   align-items:center;justify-content:center;flex-direction:column}
-.safe-center.on{display:flex}
 .vault-marks{position:absolute;inset:10px;pointer-events:none}
-.vault-marks line{stroke:var(--border);stroke-width:2;transition:stroke .3s}
-.vault-marks line.hit{stroke:var(--tertiary)}
+.vault-marks line{stroke:var(--border);stroke-width:2;transition:stroke .4s}
+.safe-center.fired .vault-marks line{stroke:var(--tertiary)}
+.safe-center.locked .vault-marks line{stroke:var(--danger)}
 .vault-wheel{width:132px;height:132px;border-radius:50%;position:relative;
   display:flex;align-items:center;justify-content:center;
-  transition:transform .12s ease-out}
+  animation:vaultIdle 14s ease-in-out infinite}
+@keyframes vaultIdle{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}
+.safe-center.fired .vault-wheel{animation:vaultOpen 1.6s cubic-bezier(.2,.8,.3,1) forwards}
+@keyframes vaultOpen{to{transform:rotate(400deg)}}
+.safe-center.locked .vault-wheel{animation:none;transform:rotate(0)}
 .vault-spoke{position:absolute;width:11px;height:60px;border-radius:6px;
   background:var(--bg);left:50%;top:50%;
   box-shadow:3px 3px 6px var(--pel-dark),-2px -2px 5px var(--pel-light)}
 .vault-hub{width:50px;height:50px;border-radius:50%;display:flex;
   align-items:center;justify-content:center;z-index:2}
-.vault-hub svg{color:var(--tertiary)}
-.safe-msg{font-size:10.5px;margin-top:10px;letter-spacing:.6px;
-  color:var(--fg-3);min-height:14px;max-width:190px}
-.safe-msg.ok{color:var(--tertiary)}
-.safe-msg.err{color:var(--danger)}
+.vault-hub svg{color:var(--tertiary);animation:hubPulse 3.2s ease-in-out infinite}
+@keyframes hubPulse{0%,100%{opacity:.55}50%{opacity:1}}
+.safe-center.locked .vault-hub svg{color:var(--danger);animation:none}
+.safe-status{font-size:10.5px;margin-top:10px;letter-spacing:2px;
+  text-transform:uppercase;color:var(--fg-3);min-height:14px}
+.safe-status.ok{color:var(--tertiary)}
+.safe-status.err{color:var(--danger)}
+.safe-note{font-size:9.5px;color:var(--fg-3);margin-top:6px;max-width:185px;
+  line-height:1.5}
+/* kayıt-modu segment peletleri (Kasa düzenlemede kullanılır) */
+.safe-seg{min-width:26px;height:22px;border-radius:7px;display:inline-flex;
+  align-items:center;justify-content:center;font-size:11px;
+  font-family:ui-monospace,monospace;color:var(--fg-2);padding:0 6px;background:var(--bg)}
+.safe-seg.cur{color:var(--tertiary);outline:1px solid rgba(var(--tertiary-rgb),.55)}
 /* kayıt-modu segment peletleri (Kasa düzenlemede hâlâ kullanılır) */
 .safe-seg{min-width:26px;height:22px;border-radius:7px;display:inline-flex;
   align-items:center;justify-content:center;font-size:11px;
@@ -320,7 +334,9 @@ textarea.inp{resize:vertical;min-height:120px;line-height:1.5}
             <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
         </div>
       </div>
-      <div class="safe-msg" id="safeMsg">← → çevir · boşluk = buton</div>
+      <div class="safe-status" id="safeStatus">Beklemede</div>
+      <div class="safe-note">Dizi girişi yalnızca cihazdaki düğmeyle yapılır —
+        bu ekran durumu gösterir.</div>
     </div>
   </div>
 </div>
@@ -535,13 +551,16 @@ window.addEventListener('pointerup',()=>{
 orbital.addEventListener('wheel',e=>{e.preventDefault();bump(e.deltaY<0?+2:-2);},{passive:false});
 function bump(d){
   const s=slots[active];
-  if(s.behavior==='safe'){safeRotate(d>0?+1:-1);return;}
+  if(s.behavior==='safe')return;   /* safe: uygulama girişi YOK (bilinçli) */
   s.value=Math.max(0,Math.min(100,s.value+d));
   s.on=s.value>0;render();
 }
 function clickAction(){
   const s=slots[active];
-  if(s.behavior==='safe'){safeButton();return;}
+  if(s.behavior==='safe'){
+    snack('Dizi girişi yalnız <em>cihazdaki düğmeden</em> yapılır');
+    return;
+  }
   s.on=!s.on;
   pushEvt('mode.value',`${s.value} · ${s.on?'açık':'kapalı'}`);
   snack(s.on?`<em>${s.name}</em> açıldı`:`${s.name} kapandı`);
@@ -561,76 +580,53 @@ window.addEventListener('keydown',e=>{
   if(e.key===' '){e.preventDefault();clickAction();}
 });
 
-/* ── ana ekran safe mock — K4 Vault Çarkı görünümü ─────── */
-let sSegs=[],sTicks=0,sDir=0,sTimer=null,sFails=0,sLock=0,sWheelDeg=0;
-(function(){ /* 16 çentik */
+/* ── ana ekran safe — DURUM GÖSTERGESİ (etkileşimsiz) ────
+   Giriş yalnız cihazın fiziksel düğmesinden yapılır; uygulama
+   safe.triggered / safe.lockout olaylarını yansıtır. Aşağıdaki
+   fonksiyonlar cihazdan gelen olayların işleyicisidir —
+   Cihaz→Simülasyon'dan tetiklenebilirler. */
+(function(){ /* 16 çentik (ambient dekor + olay rengi) */
   let m='';
   for(let i=0;i<16;i++){
     const a=i*22.5*Math.PI/180;
-    m+=`<line data-i="${i}" x1="${99+82*Math.cos(a)}" y1="${99+82*Math.sin(a)}"
+    m+=`<line x1="${99+82*Math.cos(a)}" y1="${99+82*Math.sin(a)}"
          x2="${99+91*Math.cos(a)}" y2="${99+91*Math.sin(a)}"/>`;
   }
   $('vaultMarks').innerHTML=m;
 })();
-function renderSafeCenter(){
-  /* çark, çevirmeyle döner (segment içeriği GİZLİ — K4 kararı);
-     kapanan her segment bir çentiği altına çevirir */
-  $('vaultWheel').style.transform=`rotate(${sWheelDeg}deg)`;
-  const done=sSegs.length;
-  $('vaultMarks').querySelectorAll('line').forEach((l,i)=>
-    l.classList.toggle('hit', i<done));
-}
-function sLocked(){
-  if(Date.now()>=sLock)return false;
-  const m=$('safeMsg');
-  m.textContent=`Kilitli — ${Math.ceil((sLock-Date.now())/1000)} sn`;
-  m.className='safe-msg err';
-  return true;
-}
-function safeRotate(d){
-  if(sLocked())return;
-  if(sDir!==0&&d!==sDir){sSegs.push(sDir*sTicks);sTicks=0;}
-  sDir=d;sTicks++;
-  sWheelDeg+=d*15;                       /* çark fiziksel olarak döner */
-  clearTimeout(sTimer);sTimer=setTimeout(sCommit,2000);
-  renderSafeCenter();
-}
-function safeButton(){
-  if(sLocked())return;
-  if(sDir!==0){sSegs.push(sDir*sTicks);sDir=0;sTicks=0;}
-  clearTimeout(sTimer);sTimer=setTimeout(sCommit,2000);
-  renderSafeCenter();
-}
-function sCommit(){
-  if(sDir!==0){sSegs.push(sDir*sTicks);sDir=0;sTicks=0;}
-  if(!sSegs.length)return;
-  const hit=safeEntries.find(e=>e&&e.enabled&&
-    e.seq.length===sSegs.length&&e.seq.every((v,i)=>v===sSegs[i]));
-  const m=$('safeMsg');
-  if(hit){
-    sFails=0;
-    m.textContent=`✓ Eşleşme e${hit.n} — ${hit.endpoint} tetiklendi`;
-    m.className='safe-msg ok';
-    pushEvt('safe.triggered',`n=${hit.n} → api.sent`,'hl');
-    snack(`✓ <em>safe.triggered</em> · ${hit.endpoint}`);
+function renderSafeCenter(){ setSafeStatus('idle'); }
+function setSafeStatus(state, detail){
+  const sc=$('safeCenter'), st=$('safeStatus');
+  sc.classList.remove('fired','locked');
+  if(state==='fired'){
+    sc.classList.add('fired');
+    st.textContent=detail||'Tetiklendi';
+    st.className='safe-status ok';
+    setTimeout(()=>setSafeStatus('idle'),3200);
+  }else if(state==='locked'){
+    sc.classList.add('locked');
+    st.textContent=detail||'Kilitli';
+    st.className='safe-status err';
+    setTimeout(()=>setSafeStatus('idle'),4200);
   }else{
-    sFails++;
-    const pol=safeEntries.find(e=>e&&e.enabled&&e.lockout);
-    if(pol&&sFails>=pol.lockAfter){
-      sLock=Date.now()+pol.lockSecs*1000;sFails=0;
-      m.textContent=`✗ ${pol.lockAfter} yanlış — ${pol.lockSecs} sn kilit`;
-      m.className='safe-msg err';
-      pushEvt('safe.lockout',`${pol.lockSecs} sn`,'err');
-    }else{
-      m.textContent=`✗ Yanlış dizi`;
-      m.className='safe-msg err';
-      pushEvt('safe.triggered','ok=false','err');
-    }
+    st.textContent='Beklemede';
+    st.className='safe-status';
   }
-  sSegs=[];renderSafeCenter();
-  setTimeout(()=>{m.textContent='← → çevir · boşluk = buton';m.className='safe-msg';},2800);
 }
-function resetSafe(){sSegs=[];sTicks=0;sDir=0;clearTimeout(sTimer);}
+/* cihazdan gelen olay simülasyonları */
+function simSafeTriggered(){
+  const e=safeEntries.find(x=>x&&x.enabled);
+  pushEvt('safe.triggered',`n=${e?e.n:1} → api.sent`,'hl');
+  snack(`✓ <em>safe.triggered</em> · ${e?e.endpoint:'webhook'}`);
+  if(slots[active].behavior==='safe') setSafeStatus('fired',
+    `Tetiklendi · ${e?e.endpoint:''}`);
+}
+function simSafeLockout(){
+  pushEvt('safe.lockout','30 sn','err');
+  snack('<em>safe.lockout</em> · 30 sn','err');
+  if(slots[active].behavior==='safe') setSafeStatus('locked','Kilitli · 30 sn');
+}
+function resetSafe(){ if(slots[active]?.behavior==='safe') setSafeStatus('idle'); }
 
 /* ════════════════════════════════════════════════════════
    BOTTOM SHEET — görünüm yığını (home → detay → alt-detay)
@@ -1137,6 +1133,11 @@ cihaz:{
       <div class="s-row"><span class="k">Slot 2'de sürücü hatası</span>
         <button class="btn ghost pel sm"
           onclick="slots[1].error=true;pushEvt('mode.error','slot 2 · driver ×5','err');snack('✗ <em>mode.error</em> · slot 2 devre dışı','err');render()">tetikle</button></div>
+      <div class="s-row"><span class="k">Cihazda dizi girildi (safe)</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn ghost pel sm" onclick="closeSheet();simSafeTriggered()">doğru</button>
+          <button class="btn ghost pel sm" onclick="closeSheet();simSafeLockout()">kilit</button>
+        </div></div>
       <div class="s-row"><span class="k">Cihaz saati</span>
         <div class="tgl ${clockSync?'on':''}"
           onclick="clockSync=!clockSync;this.classList.toggle('on');showView('cihaz')"></div></div>
