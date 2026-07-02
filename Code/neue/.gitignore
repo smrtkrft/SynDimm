@@ -1,0 +1,6 @@
+# ESP-IDF üretilen dosyalar — repoya girmez.
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
+# dependencies.lock TRACKED kalır (sürüm sabitleme), .gitignore'a EKLEME.
