@@ -21,6 +21,7 @@
 #include "sd_prefs.h"
 #include "sd_buzzer.h"
 #include "sd_gesture.h"
+#include "sd_mode_engine.h"
 #include "sd_encoder.h"
 
 static const char *TAG = "sd_encoder";
@@ -99,25 +100,40 @@ static void IRAM_ATTR encoder_isr(void *arg)
 // CONTROL_RELEASE → "button.released" — sk_control 5-10 sn'yi restart,
 // ≥10 sn'yi factory reset olarak sınıflandırır (sk_control.c:44-50).
 
+static void engine_forward(sd_input_type_t type, int32_t delta)
+{
+    sd_input_event_t evt = {
+        .type  = type,
+        .delta = delta,
+        .ts_ms = now_ms(),
+    };
+    sd_mode_engine_input(&evt);
+}
+
 static void gesture_emit(sd_gesture_type_t type, int32_t value, void *user)
 {
     (void)user;
     switch (type) {
         case SD_GESTURE_ROTATE:
-            ESP_LOGD(TAG, "rotate %+d", (int)value);   // T2.5: engine'e gidecek
+            // Event-bus'a BASILMAZ (detent seli) — doğrudan motora.
+            engine_forward(SD_INPUT_ROTATE, value);
             break;
         case SD_GESTURE_CLICK:
             sk_event_bus_publish("input.gesture", "{\"type\":\"click\"}");
+            engine_forward(SD_INPUT_CLICK, 0);
             break;
         case SD_GESTURE_DOUBLE_CLICK:
             sk_event_bus_publish("input.gesture", "{\"type\":\"double_click\"}");
+            engine_forward(SD_INPUT_DOUBLE_CLICK, 0);
             break;
         case SD_GESTURE_LONG_PRESS:
             sk_event_bus_publish("input.gesture", "{\"type\":\"long_press\"}");
+            engine_forward(SD_INPUT_LONG_PRESS, 0);
             break;
         case SD_GESTURE_MODE_STEP:
             sk_event_bus_publishf("input.gesture",
                                   "{\"type\":\"mode_step\",\"delta\":%d}", (int)value);
+            sd_mode_engine_slot_step((int)value);
             break;
         case SD_GESTURE_CONTROL_RELEASE:
             sk_event_bus_publishf("button.released",

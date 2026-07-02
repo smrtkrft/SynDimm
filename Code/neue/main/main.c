@@ -41,6 +41,8 @@
 #include "sd_feedback.h"
 #include "sd_profiles.h"
 #include "sd_proto.h"
+#include "sd_behaviors.h"
+#include "sd_mode_engine.h"
 
 // === EDIT [Identity] =================================================
 //
@@ -127,10 +129,14 @@ static void sd_app_init(bool recovery)
     // Profil deposu recovery'de de açık: bozuk konfigürasyon CLI'dan
     // düzeltilebilsin (recovery'nin atladığı şey slot/davranış YÜKLEMEsi).
     ESP_ERROR_CHECK(sd_profiles_init());
+    // Motor CLI'sı her boot'ta kayıtlı (mode.set recovery'de kalıcılaştırır).
+    ESP_ERROR_CHECK(sd_mode_engine_init(recovery));
 
     if (recovery) return;   // ↓ recovery'de yüklenmeyenler (plan T6.1)
 
     ESP_ERROR_CHECK(sd_proto_init());
+    ESP_ERROR_CHECK(sd_behaviors_init());
+    ESP_ERROR_CHECK(sd_mode_engine_start());   // slotlar + sd_cmd task
 }
 
 void app_main(void)
