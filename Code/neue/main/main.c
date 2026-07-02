@@ -37,6 +37,7 @@
 #include "sd_pins.h"
 #include "sd_prefs.h"
 #include "sd_buzzer.h"
+#include "sd_encoder.h"
 
 // === EDIT [Identity] =================================================
 //
@@ -116,6 +117,9 @@ static void sd_app_init(bool recovery)
     // slot/davranış/proto (T6.1). Sıra önemli: buzzer, prefs'i okur.
     ESP_ERROR_CHECK(sd_prefs_init());
     ESP_ERROR_CHECK(sd_buzzer_init());
+    // Enkoder recovery'de de canlı: kontrol bantları (restart/factory reset)
+    // her koşulda çalışmalı — cihaz tuğlalaşmaz ilkesinin parçası.
+    ESP_ERROR_CHECK(sd_encoder_init());
 
     (void)recovery;
 }
