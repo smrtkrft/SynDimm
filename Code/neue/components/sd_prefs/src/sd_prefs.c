@@ -28,6 +28,7 @@ static const char *TAG = "sd_prefs";
 static bool  s_gestures = true;
 static bool  s_buzzer   = true;
 static char  s_quiet[QUIET_MAX] = "";
+static char  s_tz[8] = "+00:00";
 static SemaphoreHandle_t s_lock;
 
 static struct { sd_prefs_change_cb_t cb; void *user; } s_change_cb[CHANGE_CB_MAX];
@@ -63,6 +64,8 @@ static void load_from_nvs(void)
     if (nvs_get_u8(h, "buzzer", &u) == ESP_OK)   s_buzzer   = (u != 0);
     size_t len = sizeof(s_quiet);
     if (nvs_get_str(h, "quiet", s_quiet, &len) != ESP_OK) s_quiet[0] = '\0';
+    len = sizeof(s_tz);
+    if (nvs_get_str(h, "tz", s_tz, &len) != ESP_OK) strcpy(s_tz, "+00:00");
     nvs_close(h);
 }
 
@@ -78,7 +81,8 @@ static bool parse_bool(const char *v, bool *out)
 
 // "HH:MM-HH:MM" biçim denetimi. Yetkili çözümleyici sd_buzzer'daki
 // sd_quiet_parse (T1.2, pure modül) — buradaki yalnız format bekçisi;
-// iki taraf aynı grameri kabul eder.
+// iki taraf aynı grameri kabul eder. (Bileşen bağımlılığı ters yöne
+// dönmesin diye sd_quiet.h buradan include edilmez.)
 static bool quiet_format_valid(const char *v)
 {
     int h1, m1, h2, m2;
@@ -86,6 +90,16 @@ static bool quiet_format_valid(const char *v)
     if (sscanf(v, "%2d:%2d-%2d:%2d%c", &h1, &m1, &h2, &m2, &extra) != 4) return false;
     return h1 >= 0 && h1 < 24 && m1 >= 0 && m1 < 60 &&
            h2 >= 0 && h2 < 24 && m2 >= 0 && m2 < 60;
+}
+
+// "+HH:MM"/"-HH:MM" biçim denetimi (yetkili: sd_tz_parse, sd_quiet.c).
+static bool tz_format_valid(const char *v)
+{
+    int h, m;
+    char sign, extra;
+    if (sscanf(v, "%c%2d:%2d%c", &sign, &h, &m, &extra) != 3) return false;
+    if (sign != '+' && sign != '-') return false;
+    return h >= 0 && h <= 14 && m >= 0 && m < 60;
 }
 
 static void notify_change(const char *key)
@@ -106,9 +120,13 @@ bool sd_prefs_get_bool(const char *key, bool def)
 
 esp_err_t sd_prefs_get_str(const char *key, char *out, size_t cap)
 {
-    if (strcmp(key, "quiet") != 0 || !out || cap == 0) return ESP_ERR_NOT_FOUND;
+    if (!out || cap == 0) return ESP_ERR_NOT_FOUND;
+    const char *src;
+    if      (!strcmp(key, "quiet")) src = s_quiet;
+    else if (!strcmp(key, "tz"))    src = s_tz;
+    else return ESP_ERR_NOT_FOUND;
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    size_t n = strlcpy(out, s_quiet, cap);
+    size_t n = strlcpy(out, src, cap);
     xSemaphoreGive(s_lock);
     return (n >= cap) ? ESP_ERR_INVALID_SIZE : ESP_OK;
 }
@@ -129,10 +147,11 @@ static void render_list(char *buf, size_t cap)
 {
     xSemaphoreTake(s_lock, portMAX_DELAY);
     snprintf(buf, cap,
-             "{\"gestures\":%s,\"buzzer\":%s,\"quiet\":\"%s\"}",
+             "{\"gestures\":%s,\"buzzer\":%s,\"quiet\":\"%s\",\"tz\":\"%s\"}",
              s_gestures ? "true" : "false",
              s_buzzer   ? "true" : "false",
-             s_quiet[0] ? s_quiet : "off");
+             s_quiet[0] ? s_quiet : "off",
+             s_tz);
     xSemaphoreGive(s_lock);
 }
 
@@ -185,9 +204,21 @@ static sk_err_t cmd_prefs_set(sk_cli_ctx_t *ctx)
         sk_event_bus_publishf("prefs.changed",
                               "{\"key\":\"quiet\",\"value\":\"%s\"}",
                               norm[0] ? norm : "off");
+    } else if (!strcmp(key, "tz")) {
+        if (!tz_format_valid(val) || strlen(val) >= sizeof(s_tz)) {
+            sk_cli_err(ctx, SK_ERR_INVALID_ARG,
+                       "{\"expected\":\"+HH:MM|-HH:MM\"}");
+            return SK_OK;
+        }
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        strlcpy(s_tz, val, sizeof(s_tz));
+        xSemaphoreGive(s_lock);
+        nvs_save_str("tz", val);
+        sk_event_bus_publishf("prefs.changed",
+                              "{\"key\":\"tz\",\"value\":\"%s\"}", val);
     } else {
         sk_cli_err(ctx, SK_ERR_INVALID_ARG,
-                   "{\"known\":[\"gestures\",\"buzzer\",\"quiet\"]}");
+                   "{\"known\":[\"gestures\",\"buzzer\",\"quiet\",\"tz\"]}");
         return SK_OK;
     }
 
@@ -207,12 +238,13 @@ static const sk_cli_command_t s_cmd_prefs_list = {
 static const sk_cli_command_t s_cmd_prefs_set = {
     .name    = "prefs.set",
     .summary = "Set a feature switch",
-    .usage   = "prefs set <gestures|buzzer|quiet> <on|off|HH:MM-HH:MM>",
+    .usage   = "prefs set <gestures|buzzer|quiet|tz> <value>",
     .help_block =
         "prefs set gestures off     cift tik/uzun basis jestlerini kapat\n"
         "prefs set buzzer off       tum sesleri kapat\n"
         "prefs set quiet 23:00-07:00  sessiz saat araligi (gece sarmali ok)\n"
-        "prefs set quiet off        sessiz saatleri kapat",
+        "prefs set quiet off        sessiz saatleri kapat\n"
+        "prefs set tz +02:00        yerel saat dilimi (quiet icin; cihaz UTC)",
     .handler = cmd_prefs_set,
 };
 
@@ -230,6 +262,7 @@ static void on_factory_reset(const sk_event_t *evt, void *user)
     s_gestures = true;
     s_buzzer   = true;
     s_quiet[0] = '\0';
+    strcpy(s_tz, "+00:00");
     ESP_LOGW(TAG, "factory reset: prefs varsayilanlara dondu");
 }
 

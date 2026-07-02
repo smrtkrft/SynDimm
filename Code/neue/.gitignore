@@ -3,4 +3,7 @@ build/
 sdkconfig
 sdkconfig.old
 managed_components/
+# Host test binary'leri (kaynaklar .c olarak izlenir).
+test/host/test_*
+!test/host/test_*.c
 # dependencies.lock TRACKED kalır (sürüm sabitleme), .gitignore'a EKLEME.

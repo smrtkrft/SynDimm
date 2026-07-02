@@ -8,6 +8,9 @@
 //   gestures  bool   varsayılan 1 — çift tık / uzun basış jestleri
 //   buzzer    bool   varsayılan 1 — tüm sesler
 //   quiet     str    varsayılan "" (kapalı) — "23:00-07:00" biçimi
+//   tz        str    varsayılan "+00:00" — yerel saat dilimi ofseti
+//                    (cihaz saati UTC'dir; quiet yereldeğerlendirilsin diye.
+//                    İleride SKAPP bağlanınca otomatik basabilir.)
 //
 // CLI: prefs.list / prefs.set <key> <value>
 // Olay: prefs.changed {"key":"...","value":"..."}

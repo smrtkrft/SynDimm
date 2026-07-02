@@ -36,6 +36,7 @@
 
 #include "sd_pins.h"
 #include "sd_prefs.h"
+#include "sd_buzzer.h"
 
 // === EDIT [Identity] =================================================
 //
@@ -110,9 +111,11 @@ static size_t sd_status_line(char *out, size_t cap)
 // Faz 1-4 görevleri init çağrılarını buraya ekleyecek.
 static void sd_app_init(bool recovery)
 {
-    // Prefs recovery modunda da yüklenir — zararsız ve CLI'dan erişilebilir
-    // kalması istenir. Recovery'nin atladıkları: slot/davranış/proto (T6.1).
+    // Prefs ve buzzer recovery modunda da yüklenir — zararsız ve cihazın
+    // geri bildirim verebilmesi istenir. Recovery'nin atladıkları:
+    // slot/davranış/proto (T6.1). Sıra önemli: buzzer, prefs'i okur.
     ESP_ERROR_CHECK(sd_prefs_init());
+    ESP_ERROR_CHECK(sd_buzzer_init());
 
     (void)recovery;
 }
