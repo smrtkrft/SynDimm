@@ -35,6 +35,7 @@
 #include "sk_log.h"    // yapılandırılmış olay logu (boot reason vb.)
 
 #include "sd_pins.h"
+#include "sd_prefs.h"
 
 // === EDIT [Identity] =================================================
 //
@@ -109,8 +110,11 @@ static size_t sd_status_line(char *out, size_t cap)
 // Faz 1-4 görevleri init çağrılarını buraya ekleyecek.
 static void sd_app_init(bool recovery)
 {
+    // Prefs recovery modunda da yüklenir — zararsız ve CLI'dan erişilebilir
+    // kalması istenir. Recovery'nin atladıkları: slot/davranış/proto (T6.1).
+    ESP_ERROR_CHECK(sd_prefs_init());
+
     (void)recovery;
-    ESP_LOGI(TAG, "sd_app_init: henuz bilesen yok (T0.1 iskeleti)");
 }
 
 void app_main(void)
