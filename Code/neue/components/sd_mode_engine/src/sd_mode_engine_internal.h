@@ -29,6 +29,7 @@ struct sd_behavior_ctx {
     bool                 error;       // ardışık hata eşiği aşıldı
     int                  err_count;
     bool                 nvs_dirty;   // değer debounce bekliyor
+    bool                 mqtt_held;   // bu slot MQTT oturumunu refcount'ladı
 };
 
 typedef struct sd_behavior_ctx slot_ctx_t;

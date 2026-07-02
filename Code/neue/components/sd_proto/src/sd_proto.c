@@ -55,44 +55,6 @@ esp_err_t sd_proto_execute(const cJSON *profile_root, const cJSON *cmd_node,
     return ESP_ERR_NOT_SUPPORTED;
 }
 
-// --- T3.1/T3.2'ye kadar stub'lar ------------------------------------------
-
-#if !SD_PROTO_HAS_UDP
-esp_err_t sd_proto_udp_execute(const cJSON *profile_root, const cJSON *cmd_node,
-                               const sd_target_t *tgt, int value, bool toggle)
-{
-    (void)profile_root; (void)cmd_node; (void)tgt; (void)value; (void)toggle;
-    return ESP_ERR_NOT_SUPPORTED;   // T3.1
-}
-#endif
-
-#if !SD_PROTO_HAS_MQTT
-esp_err_t sd_proto_mqtt_execute(const cJSON *profile_root, const cJSON *cmd_node,
-                                const sd_target_t *tgt, int value, bool toggle)
-{
-    (void)profile_root; (void)cmd_node; (void)tgt; (void)value; (void)toggle;
-    return ESP_ERR_NOT_SUPPORTED;   // T3.2
-}
-esp_err_t sd_proto_mqtt_acquire(const char *broker_uri, const char *client_id)
-{
-    (void)broker_uri; (void)client_id;
-    return ESP_ERR_NOT_SUPPORTED;
-}
-void sd_proto_mqtt_release(void) {}
-bool sd_proto_mqtt_is_connected(void) { return false; }
-esp_err_t sd_proto_mqtt_subscribe(const char *topic, sd_proto_mqtt_rx_t cb, void *user)
-{
-    (void)topic; (void)cb; (void)user;
-    return ESP_ERR_NOT_SUPPORTED;
-}
-esp_err_t sd_proto_mqtt_publish(const char *topic, const char *payload,
-                                int qos, bool retain)
-{
-    (void)topic; (void)payload; (void)qos; (void)retain;
-    return ESP_ERR_NOT_SUPPORTED;
-}
-#endif
-
 // --- Gizli tezgah komutu -----------------------------------------------------
 // ⚠️ CLI task'ında bloklar (≤3 sn) — yalnız geliştirme/donanım doğrulama.
 // Kod incelemesi: keep-alive singleton'ı sd_cmd task'ına aittir; bu komut
@@ -146,9 +108,10 @@ static const sk_cli_command_t s_cmd_http_test = {
 
 esp_err_t sd_proto_init(void)
 {
+    esp_err_t err = sd_proto_mqtt_module_init();
+    if (err != ESP_OK) return err;
     sk_cli_register(&s_cmd_http_test);
-    sk_capabilities_register_book("sd_proto", "1.0.0");
-    ESP_LOGI(TAG, "ready (http%s%s)",
-             SD_PROTO_HAS_UDP ? "+udp" : "", SD_PROTO_HAS_MQTT ? "+mqtt" : "");
+    sk_capabilities_register_book("sd_proto", "1.1.0");
+    ESP_LOGI(TAG, "ready (http+udp+mqtt)");
     return ESP_OK;
 }

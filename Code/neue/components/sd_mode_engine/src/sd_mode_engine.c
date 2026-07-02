@@ -29,6 +29,7 @@
 
 #include "sk_capabilities.h"
 #include "sk_event_bus.h"
+#include "sk_identity.h"
 #include "sk_api.h"
 
 #include "sd_buzzer.h"
@@ -272,10 +273,42 @@ static void unload_slot(int idx)   // 0-based
 {
     slot_ctx_t *ctx = &s_slots[idx];
     if (ctx->drv && ctx->drv->deinit) ctx->drv->deinit(ctx);
+    if (ctx->mqtt_held) sd_proto_mqtt_release();
     cJSON_Delete(ctx->binding);
     cJSON_Delete(ctx->profile);
     memset(ctx, 0, sizeof(*ctx));
     ctx->slot = idx + 1;
+}
+
+// Slot MQTT istiyorsa oturumu refcount'la. Broker KURULUMA özgüdür (cihaz
+// tipine değil): önce binding params.broker, yoksa profilin broker alanı.
+// (a) profil protocol=="mqtt", (b) profilsiz mqtt_remote tarzı bağlama
+// (params.topic). V1 tek broker — çakışmada slot error.
+static esp_err_t acquire_mqtt_if_needed(slot_ctx_t *ctx)
+{
+    const cJSON *params = cJSON_GetObjectItemCaseSensitive(ctx->binding,
+                                                           "params");
+    const char *proto = sd_jsonu_str(ctx->profile, "protocol");
+    bool wants_mqtt = (proto && strcmp(proto, "mqtt") == 0) ||
+                      (!ctx->profile && sd_jsonu_str(params, "topic"));
+    if (!wants_mqtt) return ESP_OK;
+
+    const char *broker = sd_jsonu_str(params, "broker");
+    int bport          = sd_jsonu_int(params, "broker_port", 0);
+    if (!broker) {
+        broker = sd_jsonu_str(ctx->profile, "broker");
+        if (bport <= 0) bport = sd_jsonu_int(ctx->profile, "broker_port", 1883);
+    }
+    if (bport <= 0) bport = 1883;
+    if (!broker || !broker[0]) {
+        return ESP_ERR_INVALID_ARG;   // mqtt slotu broker'sız olamaz
+    }
+
+    char uri[128];
+    snprintf(uri, sizeof(uri), "mqtt://%s:%d", broker, bport);
+    esp_err_t err = sd_proto_mqtt_acquire(uri, sk_identity_get());
+    if (err == ESP_OK) ctx->mqtt_held = true;
+    return err;
 }
 
 static void slot_error(int slot, const char *reason)
@@ -359,6 +392,16 @@ static esp_err_t load_slot(int idx)   // 0-based
 
     const cJSON *params = cJSON_GetObjectItemCaseSensitive(binding, "params");
     ctx->gestures_enabled = sd_jsonu_bool(params, "gestures_enabled", true);
+
+    // MQTT yaşam döngüsü: slot yüklenirken acquire, boşalırken release.
+    esp_err_t merr = acquire_mqtt_if_needed(ctx);
+    if (merr != ESP_OK) {
+        slot_error(idx + 1, merr == ESP_ERR_NOT_SUPPORTED
+                            ? "mqtt_broker_conflict" : "mqtt_broker");
+        ctx->drv = NULL;
+        ctx->enabled = false;
+        return merr;
+    }
 
     // Kalıcı değer + profil aralığına kırpma (eski cur_value bug fix'i).
     nvs_handle_t h;
@@ -538,6 +581,8 @@ esp_err_t eng_clear_slot(int slot)
 
 // İşi kilit altında somutlaştır: profil komut düğümü kopyası + mini profil +
 // hedef. Slot bu arada değiştiyse en GÜNCEL bağlama kullanılır (istenen).
+// Profilsiz mqtt_remote tarzı bağlamalar için komut params'tan SENTEZLENİR:
+// VALUE → params.payload_value, TOGGLE → params.payload_gesture.
 static bool materialize(const eng_job_t *job, cJSON **out_mini,
                         cJSON **out_cmd, sd_target_t *out_tgt)
 {
@@ -558,10 +603,29 @@ static bool materialize(const eng_job_t *job, cJSON **out_mini,
             *out_mini = cJSON_CreateObject();
             const char *proto  = sd_jsonu_str(ctx->profile, "protocol");
             const char *prefix = sd_jsonu_str(ctx->profile, "prefix");
+            const char *stpfx  = sd_jsonu_str(ctx->profile, "state_prefix");
             if (*out_mini && proto)  cJSON_AddStringToObject(*out_mini, "protocol", proto);
             if (*out_mini && prefix) cJSON_AddStringToObject(*out_mini, "prefix", prefix);
+            if (*out_mini && stpfx)  cJSON_AddStringToObject(*out_mini, "state_prefix", stpfx);
             *out_tgt = ctx->target;
             ok = (*out_cmd && *out_mini);
+        }
+    } else if (ctx->drv && ctx->enabled && !ctx->profile) {
+        const cJSON *params = cJSON_GetObjectItemCaseSensitive(ctx->binding,
+                                                               "params");
+        const char *topic   = sd_jsonu_str(params, "topic");
+        const char *payload = sd_jsonu_str(params,
+            job->kind == SD_SEND_VALUE ? "payload_value" : "payload_gesture");
+        if (topic && payload) {
+            *out_cmd  = cJSON_CreateObject();
+            *out_mini = cJSON_CreateObject();
+            if (*out_cmd && *out_mini) {
+                cJSON_AddStringToObject(*out_cmd, "topic", topic);
+                cJSON_AddStringToObject(*out_cmd, "payload", payload);
+                cJSON_AddStringToObject(*out_mini, "protocol", "mqtt");
+                *out_tgt = ctx->target;
+                ok = true;
+            }
         }
     }
     eng_unlock();
