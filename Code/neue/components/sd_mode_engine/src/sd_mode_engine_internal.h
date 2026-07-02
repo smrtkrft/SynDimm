@@ -42,7 +42,8 @@ typedef struct sd_behavior_ctx slot_ctx_t;
 
 // Kuyruk işi — HAFİF (kod incelemesi: cJSON kopyası detent başına heap
 // fırtınasıydı; ağaçlar artık yürütme anında, kilit altında üretilir).
-typedef enum { ENG_JOB_SEND, ENG_JOB_TEST, ENG_JOB_NVS_SAVE } eng_job_type_t;
+typedef enum { ENG_JOB_SEND, ENG_JOB_TEST, ENG_JOB_NVS_SAVE,
+               ENG_JOB_TIMEOUT } eng_job_type_t;
 
 typedef struct {
     eng_job_type_t     type;

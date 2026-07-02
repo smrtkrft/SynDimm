@@ -7,7 +7,7 @@ CFLAGS  := -std=c11 -Wall -Wextra -Werror -g
 
 COMP    := ../../components
 
-TESTS   := test_quiet test_gesture test_template test_binding test_offline
+TESTS   := test_quiet test_gesture test_template test_binding test_offline test_sequence
 
 all: $(TESTS)
 
@@ -29,6 +29,9 @@ test_binding: test_binding.c $(COMP)/sd_mode_engine/src/sd_binding.c \
 
 test_offline: test_offline.c $(COMP)/sd_mode_engine/src/sd_offline.c
 	$(CC) $(CFLAGS) -I$(COMP)/sd_mode_engine/include -o $@ $^
+
+test_sequence: test_sequence.c $(COMP)/sd_behaviors/src/sd_sequence.c
+	$(CC) $(CFLAGS) -I$(COMP)/sd_behaviors/include -o $@ $^
 
 run: all
 	@set -e; for t in $(TESTS); do ./$$t; done; \

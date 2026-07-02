@@ -17,7 +17,7 @@ esp_err_t sd_behaviors_init(void);
 const sd_behavior_t *sd_behavior_dimmer(void);
 const sd_behavior_t *sd_behavior_shutter(void);
 const sd_behavior_t *sd_behavior_mqtt_remote(void);
-// T4.2: sd_behavior_safe()
+const sd_behavior_t *sd_behavior_safe(void);
 
 #ifdef __cplusplus
 }

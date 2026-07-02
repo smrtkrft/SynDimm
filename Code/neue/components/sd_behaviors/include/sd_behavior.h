@@ -51,6 +51,9 @@ typedef struct {
     esp_err_t (*get_state)(sd_behavior_ctx_t *ctx, char *json, size_t cap);
     esp_err_t (*test)     (sd_behavior_ctx_t *ctx);   // NULL olabilir;
                                                       // cmd task'ta, ≤5 sn
+    // sd_ctx_arm_timeout süresi dolunca cmd task'ta, kilit altında çağrılır
+    // (safe'in 2 sn hareketsizlik commit'i). NULL olabilir. BLOKLAMAZ.
+    esp_err_t (*on_timeout)(sd_behavior_ctx_t *ctx);
 } sd_behavior_t;
 
 // Statik kayıt (boot'ta, drv tabloları statik ömürlü olmalı).
@@ -81,6 +84,13 @@ esp_err_t    sd_ctx_api_send  (sd_behavior_ctx_t *ctx, const char *endpoint_name
                                const char *payload);
 // prefs+quiet kapılı bip.
 void         sd_ctx_beep      (sd_behavior_ctx_t *ctx, sd_beep_t pattern);
+// Slot'un tek-atımlık zaman aşımını (yeniden) kur — dolunca drv->on_timeout
+// cmd task'ta çağrılır. ms=0 iptal eder.
+void         sd_ctx_arm_timeout(sd_behavior_ctx_t *ctx, uint32_t ms);
+// Olay yayınla (motor, kilit bırakıldıktan sonra event-bus'a iletir —
+// aboneler motoru kilitleyemez). Yalnız sürücü geri çağrılarından kullan.
+void         sd_ctx_publish   (sd_behavior_ctx_t *ctx, const char *event,
+                               const char *payload_json);
 
 #ifdef __cplusplus
 }

@@ -60,6 +60,31 @@ static struct {
     eng_job_t   *captured;
 } s_capture;
 
+// Slot başına tek-atımlık davranış zaman aşımı (safe'in 2 sn commit'i).
+static esp_timer_handle_t s_slot_timer[SD_MODE_SLOTS];
+
+// Sürücü geri çağrılarının yayın istekleri — kilit altında biriktirilir,
+// kilit bırakılınca event-bus'a basılır (aboneler motoru kilitleyemez).
+// Yalnız kilidi tutan task dokunur.
+#define PENDING_EVT_MAX 4
+static struct { char name[28]; char json[96]; } s_pending_evt[PENDING_EVT_MAX];
+static int s_pending_evt_n;
+
+static void flush_pending_events(void)
+{
+    // Kopyala-yayınla: publish sırasında yeni birikime izin ver.
+    struct { char name[28]; char json[96]; } local[PENDING_EVT_MAX];
+    int n;
+    eng_lock();
+    n = s_pending_evt_n;
+    memcpy(local, s_pending_evt, sizeof(local[0]) * (size_t)n);
+    s_pending_evt_n = 0;
+    eng_unlock();
+    for (int i = 0; i < n; i++) {
+        sk_event_bus_publish(local[i].name, local[i].json);
+    }
+}
+
 void eng_lock(void)   { xSemaphoreTakeRecursive(s_lock, portMAX_DELAY); }
 void eng_unlock(void) { xSemaphoreGiveRecursive(s_lock); }
 int  eng_active_slot(void) { return s_active; }
@@ -267,11 +292,42 @@ void sd_ctx_beep(sd_behavior_ctx_t *ctx, sd_beep_t pattern)
     sd_buzzer_play(pattern);   // prefs+quiet kapıları sd_buzzer'da
 }
 
+// Timer cb: yalnız kuyruğa iş atar (timer-daemon'da sürücü çağrısı yok).
+static void slot_timeout_cb(void *arg)
+{
+    int slot = (int)(intptr_t)arg;
+    eng_job_t *job = make_job(ENG_JOB_TIMEOUT, slot, 0, 0, false);
+    if (job) enqueue_job(job);
+}
+
+void sd_ctx_arm_timeout(sd_behavior_ctx_t *ctx, uint32_t ms)
+{
+    esp_timer_handle_t t = s_slot_timer[ctx->slot - 1];
+    if (!t) return;
+    esp_timer_stop(t);
+    if (ms > 0) esp_timer_start_once(t, (uint64_t)ms * 1000);
+}
+
+void sd_ctx_publish(sd_behavior_ctx_t *ctx, const char *event,
+                    const char *payload_json)
+{
+    (void)ctx;
+    // Çağıran sürücü geri çağrısıdır → kilit bizde; tampona yaz.
+    if (s_pending_evt_n >= PENDING_EVT_MAX || !event) return;
+    strlcpy(s_pending_evt[s_pending_evt_n].name, event,
+            sizeof(s_pending_evt[0].name));
+    strlcpy(s_pending_evt[s_pending_evt_n].json,
+            payload_json ? payload_json : "",
+            sizeof(s_pending_evt[0].json));
+    s_pending_evt_n++;
+}
+
 // --- Slot yükleme / boşaltma ---------------------------------------------------
 
 static void unload_slot(int idx)   // 0-based
 {
     slot_ctx_t *ctx = &s_slots[idx];
+    if (s_slot_timer[idx]) esp_timer_stop(s_slot_timer[idx]);
     if (ctx->drv && ctx->drv->deinit) ctx->drv->deinit(ctx);
     if (ctx->mqtt_held) sd_proto_mqtt_release();
     cJSON_Delete(ctx->binding);
@@ -489,6 +545,7 @@ void sd_mode_engine_input(const sd_input_event_t *evt)
         ctx->err_count = 0;
     }
     eng_unlock();
+    flush_pending_events();   // sürücünün sd_ctx_publish istekleri
     if (tripped) {
         sk_event_bus_publishf("mode.error",
                               "{\"slot\":%d,\"err\":\"driver\",\"count\":%d}",
@@ -733,6 +790,7 @@ static void execute_test(eng_job_t *job)
     }
     eng_unlock();
 
+    flush_pending_events();   // drv->test'in yayın istekleri
     if (err == ESP_OK && captured) {
         err = execute_send(captured, &job->status);   // kilitsiz ağ çağrısı
         free(captured);
@@ -770,6 +828,17 @@ esp_err_t eng_run_test(int slot, int *out_status, int timeout_ms)
 
 // --- sd_cmd task: tek dispatch noktası + VALUE coalescing ---------------------
 
+static void execute_timeout(const eng_job_t *job)
+{
+    eng_lock();
+    slot_ctx_t *ctx = &s_slots[job->slot - 1];
+    if (ctx->drv && ctx->enabled && ctx->drv->on_timeout) {
+        ctx->drv->on_timeout(ctx);
+    }
+    eng_unlock();
+    flush_pending_events();
+}
+
 static void dispatch_job(eng_job_t *job)
 {
     switch (job->type) {
@@ -779,6 +848,10 @@ static void dispatch_job(eng_job_t *job)
             break;
         case ENG_JOB_TEST:
             execute_test(job);   // free CLI tarafında (sema sahipliği)
+            break;
+        case ENG_JOB_TIMEOUT:
+            execute_timeout(job);
+            free(job);
             break;
         case ENG_JOB_SEND:
         default:
@@ -919,6 +992,18 @@ esp_err_t sd_mode_engine_start(void)
     sd_offline_init(&s_offline, SD_MODE_SLOTS);
     int sub;
     sk_event_bus_subscribe("wifi.state", on_wifi_state, NULL, &sub);
+
+    // Slot başına davranış zaman-aşımı timer'ları (sd_ctx_arm_timeout).
+    for (int i = 0; i < SD_MODE_SLOTS; i++) {
+        const esp_timer_create_args_t targs = {
+            .callback = slot_timeout_cb,
+            .arg      = (void *)(intptr_t)(i + 1),
+            .name     = "sd_slot_to",
+        };
+        if (esp_timer_create(&targs, &s_slot_timer[i]) != ESP_OK) {
+            return ESP_FAIL;
+        }
+    }
 
     eng_lock();
     for (int i = 0; i < SD_MODE_SLOTS; i++) load_slot(i);
