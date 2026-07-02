@@ -25,9 +25,14 @@
 
 #include <string.h>
 
+#include "esp_attr.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_pm.h"
 #include "esp_system.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "nvs_flash.h"
 
 #include "sk_core.h"   // umbrella — tüm public sk_core API'si (sk_ota dahil)
@@ -101,15 +106,70 @@ _Static_assert(SD_PIN_ENC_CLK != SD_PIN_BOOT_RESERVED &&
 
 static const char *TAG = "main";
 
+// === Recovery boot (plan T6.1) =======================================
+// RTC_NOINIT: yeniden başlatmada korunur, güç kesintisinde çöp kalır —
+// magic ile ayırt edilir. 3 ardışık kirli reset (PANIC/WDT/...) →
+// sd_app_init(recovery=true): slot/davranış/proto yüklenmez, cihaz
+// transportlar + CLI + OTA ile erişilebilir kalır ("tuğlalaşmaz" ilkesi).
+// 120 sn stabil çalışma sayacı sıfırlar.
+#define SD_CRASH_MAGIC        0x53444E45u   // "SDNE"
+#define SD_CRASH_LIMIT        3
+#define SD_STABLE_UPTIME_MS   120000
+
+static RTC_NOINIT_ATTR uint32_t s_crash_magic;
+static RTC_NOINIT_ATTR uint32_t s_crash_count;
+static bool s_recovery_boot;
+
+static void stable_uptime_cb(void *arg)
+{
+    (void)arg;
+    if (s_crash_count) {
+        ESP_LOGI(TAG, "120 sn stabil — crash sayaci sifirlandi (%u idi)",
+                 (unsigned)s_crash_count);
+    }
+    s_crash_count = 0;
+}
+
 // CLI banner durum satırı: SD-XXXX - SmartKraft SynDimm v2.0.0 (wifi: ...)
-// Batarya yok (sabit güç); ileride aktif mod/slot bilgisi eklenebilir.
+// Batarya yok (sabit güç); recovery durumunda başa bayrak düşer.
 static size_t sd_status_line(char *out, size_t cap)
 {
     sk_wifi_status_t w;
     sk_wifi_status(&w);
-    return (size_t)snprintf(out, cap, "wifi: %s",
+    return (size_t)snprintf(out, cap, "%swifi: %s",
+                            s_recovery_boot ? "RECOVERY, " : "",
                             w.connected ? "connected" : "off");
 }
+
+// --- Gizli tanılama komutları (recovery testi + soak izleme) -----------
+static sk_err_t cmd_debug_panic(sk_cli_ctx_t *ctx)
+{
+    sk_cli_ok(ctx, "{\"panic\":\"now\"}");
+    vTaskDelay(pdMS_TO_TICKS(100));   // cevap gitsin
+    abort();                          // kasıtlı panik — recovery sayacı test
+}
+
+static sk_err_t cmd_debug_heap(sk_cli_ctx_t *ctx)
+{
+    char buf[96];
+    snprintf(buf, sizeof(buf),
+             "{\"free\":%u,\"min_free\":%u,\"largest\":%u}",
+             (unsigned)esp_get_free_heap_size(),
+             (unsigned)esp_get_minimum_free_heap_size(),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    sk_cli_ok(ctx, buf);
+    return SK_OK;
+}
+
+static const sk_cli_command_t s_cmd_debug_panic = {
+    .name = "debug.panic", .summary = "Force a panic (recovery-boot test)",
+    .usage = "debug panic", .hidden = true, .critical = true,
+    .handler = cmd_debug_panic,
+};
+static const sk_cli_command_t s_cmd_debug_heap = {
+    .name = "debug.heap", .summary = "Heap watermark",
+    .usage = "debug heap", .hidden = true, .handler = cmd_debug_heap,
+};
 
 // Cihaza özgü sd_* bileşen init sınırı. T6.1 recovery boot bu fonksiyonu
 // sarar: recovery=true iken CLI komutları kayıtlı kalır ama slot/davranış/
@@ -213,6 +273,25 @@ void app_main(void)
         } else {
             SK_LOG_I("boot", "up", "reset=%s fw=%s", rr_name, SK_FW_VERSION);
         }
+
+        // Recovery boot sayacı (T6.1). Güç kesintisi RTC alanını bozar —
+        // magic tutmuyorsa sıfırdan başla.
+        if (s_crash_magic != SD_CRASH_MAGIC) {
+            s_crash_magic = SD_CRASH_MAGIC;
+            s_crash_count = 0;
+        }
+        if (unclean) {
+            s_crash_count++;
+            ESP_LOGW(TAG, "kirli reset #%u", (unsigned)s_crash_count);
+        } else {
+            s_crash_count = 0;
+        }
+        s_recovery_boot = (s_crash_count >= SD_CRASH_LIMIT);
+        if (s_recovery_boot) {
+            ESP_LOGE(TAG, "RECOVERY BOOT: %u ardisik crash — slotlar/proto "
+                          "yuklenmeyecek, transportlar acik",
+                     (unsigned)s_crash_count);
+        }
     }
 
     // Topic kataloğu — `help` görünüm sırası. Üç kova:
@@ -270,13 +349,36 @@ void app_main(void)
     ESP_ERROR_CHECK(sk_api_init());
 #endif
 
+    // Gizli tanılama komutları (recovery testi + soak izleme).
+    sk_cli_register(&s_cmd_debug_panic);
+    sk_cli_register(&s_cmd_debug_heap);
+
     // Cihaza özgü bileşenler (recovery-boot sınırı — T6.1).
-    sd_app_init(false);
+    sd_app_init(s_recovery_boot);
+
+    if (s_recovery_boot) {
+        sk_event_bus_publishf("device.recovery", "{\"count\":%u}",
+                              (unsigned)s_crash_count);
+    }
+
+    // 120 sn stabil çalışma → crash sayacı sıfır (tek atımlık).
+    {
+        const esp_timer_create_args_t targs = {
+            .callback = stable_uptime_cb,
+            .name     = "sd_stable",
+        };
+        esp_timer_handle_t t;
+        if (esp_timer_create(&targs, &t) == ESP_OK) {
+            esp_timer_start_once(t, (uint64_t)SD_STABLE_UPTIME_MS * 1000);
+        }
+    }
 
     // Kilitli karar [Pairing]: her açılışta 60 sn eşleşme penceresi.
     // BLE transport init'ten SONRA çağrılır ki 'par' reklamı hemen başlasın.
     // Pencere dolunca kurulu bağlantılar kopmaz; bond'lular her an bağlanır.
     ESP_ERROR_CHECK(sk_auth_open_pairing_mode(SD_PAIRING_BOOT_WINDOW_SEC));
 
-    ESP_LOGI(TAG, "SynDimm neue up — id=%s fw=%s", sk_identity_get(), SK_FW_VERSION);
+    ESP_LOGI(TAG, "SynDimm neue up — id=%s fw=%s%s",
+             sk_identity_get(), SK_FW_VERSION,
+             s_recovery_boot ? " [RECOVERY]" : "");
 }

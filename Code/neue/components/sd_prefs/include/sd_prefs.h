@@ -39,6 +39,11 @@ esp_err_t sd_prefs_get_str(const char *key, char *out, size_t cap);
 typedef void (*sd_prefs_change_cb_t)(const char *key, void *user);
 esp_err_t sd_prefs_on_change(sd_prefs_change_cb_t cb, void *user);
 
+// Programatik set (config.import kullanır; prefs.set de bunu sarar).
+// dry_run=true yalnız doğrular, yazmaz. Hatalar: ESP_ERR_NOT_FOUND
+// (bilinmeyen anahtar) / ESP_ERR_INVALID_ARG (değer biçimi).
+esp_err_t sd_prefs_set(const char *key, const char *value, bool dry_run);
+
 #ifdef __cplusplus
 }
 #endif

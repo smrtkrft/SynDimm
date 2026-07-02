@@ -35,6 +35,11 @@ bool sd_safe_store_lockout_policy(int *out_after, int *out_seconds);
 // İlk etkin kaydın endpoint'i (mode.test için). Yoksa false.
 bool sd_safe_store_first_endpoint(char *endpoint_out, size_t endpoint_cap);
 
+// config.import için programatik yol. validate endpoint VARLIĞINI denetlemez
+// (import sırasında sk_api envanteri farklı olabilir) — biçim denetler.
+bool      sd_safe_store_validate_json(const cJSON *root, const char **reason);
+esp_err_t sd_safe_store_set_json(int n, const cJSON *root);
+
 #ifdef __cplusplus
 }
 #endif

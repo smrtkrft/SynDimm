@@ -71,3 +71,4 @@ esp_err_t eng_set_value_direct(int slot, int value);
 esp_err_t eng_toggle_direct(int slot);
 esp_err_t eng_run_test(int slot, int *out_status, int timeout_ms);
 void      eng_cli_register(void);
+void      eng_config_register(void);   // config.export/import (sd_config_io.c)

@@ -157,6 +157,52 @@ static sk_err_t cmd_prefs_list(sk_cli_ctx_t *ctx)
     return SK_OK;
 }
 
+esp_err_t sd_prefs_set(const char *key, const char *value, bool dry_run)
+{
+    if (!key || !value) return ESP_ERR_INVALID_ARG;
+
+    if (!strcmp(key, "gestures") || !strcmp(key, "buzzer")) {
+        bool on;
+        if (!parse_bool(value, &on)) return ESP_ERR_INVALID_ARG;
+        if (dry_run) return ESP_OK;
+        if (!strcmp(key, "gestures")) s_gestures = on; else s_buzzer = on;
+        nvs_save_u8(key, on ? 1 : 0);
+        sk_event_bus_publishf("prefs.changed", "{\"key\":\"%s\",\"value\":%s}",
+                              key, on ? "true" : "false");
+    } else if (!strcmp(key, "quiet")) {
+        char norm[QUIET_MAX] = "";
+        if (strcasecmp(value, "off") != 0) {   // "off" → boş string (kapalı)
+            if (!quiet_format_valid(value) || strlen(value) >= QUIET_MAX) {
+                return ESP_ERR_INVALID_ARG;
+            }
+            strlcpy(norm, value, sizeof(norm));
+        }
+        if (dry_run) return ESP_OK;
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        strlcpy(s_quiet, norm, sizeof(s_quiet));
+        xSemaphoreGive(s_lock);
+        nvs_save_str("quiet", norm);
+        sk_event_bus_publishf("prefs.changed", "{\"key\":\"quiet\",\"value\":\"%s\"}",
+                              norm[0] ? norm : "off");
+    } else if (!strcmp(key, "tz")) {
+        if (!tz_format_valid(value) || strlen(value) >= sizeof(s_tz)) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        if (dry_run) return ESP_OK;
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        strlcpy(s_tz, value, sizeof(s_tz));
+        xSemaphoreGive(s_lock);
+        nvs_save_str("tz", value);
+        sk_event_bus_publishf("prefs.changed", "{\"key\":\"tz\",\"value\":\"%s\"}",
+                              value);
+    } else {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    notify_change(key);
+    return ESP_OK;
+}
+
 static sk_err_t cmd_prefs_set(sk_cli_ctx_t *ctx)
 {
     // Makine modu: {"key":"gestures","value":"off"}; insan modu:
@@ -170,53 +216,17 @@ static sk_err_t cmd_prefs_set(sk_cli_ctx_t *ctx)
         return SK_OK;
     }
 
-    if (!strcmp(key, "gestures") || !strcmp(key, "buzzer")) {
-        bool on;
-        if (!parse_bool(val, &on)) {
-            sk_cli_err(ctx, SK_ERR_INVALID_ARG, "{\"expected\":\"on|off\"}");
-            return SK_OK;
-        }
-        if (!strcmp(key, "gestures")) s_gestures = on; else s_buzzer = on;
-        nvs_save_u8(key, on ? 1 : 0);
-        sk_event_bus_publishf("prefs.changed",
-                              "{\"key\":\"%s\",\"value\":%s}",
-                              key, on ? "true" : "false");
-    } else if (!strcmp(key, "quiet")) {
-        char norm[QUIET_MAX] = "";
-        if (strcasecmp(val, "off") != 0) {   // "off" → boş string (kapalı)
-            if (!quiet_format_valid(val) || strlen(val) >= QUIET_MAX) {
-                sk_cli_err(ctx, SK_ERR_INVALID_ARG,
-                           "{\"expected\":\"off|HH:MM-HH:MM\"}");
-                return SK_OK;
-            }
-            strlcpy(norm, val, sizeof(norm));
-        }
-        xSemaphoreTake(s_lock, portMAX_DELAY);
-        strlcpy(s_quiet, norm, sizeof(s_quiet));
-        xSemaphoreGive(s_lock);
-        nvs_save_str("quiet", norm);
-        sk_event_bus_publishf("prefs.changed",
-                              "{\"key\":\"quiet\",\"value\":\"%s\"}",
-                              norm[0] ? norm : "off");
-    } else if (!strcmp(key, "tz")) {
-        if (!tz_format_valid(val) || strlen(val) >= sizeof(s_tz)) {
-            sk_cli_err(ctx, SK_ERR_INVALID_ARG,
-                       "{\"expected\":\"+HH:MM|-HH:MM\"}");
-            return SK_OK;
-        }
-        xSemaphoreTake(s_lock, portMAX_DELAY);
-        strlcpy(s_tz, val, sizeof(s_tz));
-        xSemaphoreGive(s_lock);
-        nvs_save_str("tz", val);
-        sk_event_bus_publishf("prefs.changed",
-                              "{\"key\":\"tz\",\"value\":\"%s\"}", val);
-    } else {
+    esp_err_t err = sd_prefs_set(key, val, false);
+    if (err == ESP_ERR_NOT_FOUND) {
         sk_cli_err(ctx, SK_ERR_INVALID_ARG,
                    "{\"known\":[\"gestures\",\"buzzer\",\"quiet\",\"tz\"]}");
         return SK_OK;
     }
-
-    notify_change(key);
+    if (err != ESP_OK) {
+        sk_cli_err(ctx, SK_ERR_INVALID_ARG,
+                   "{\"expected\":\"on|off | HH:MM-HH:MM | +HH:MM\"}");
+        return SK_OK;
+    }
     char buf[96];
     render_list(buf, sizeof(buf));
     sk_cli_ok(ctx, buf);

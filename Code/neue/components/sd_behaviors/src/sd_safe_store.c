@@ -107,6 +107,39 @@ static void load_from_nvs(void)
 
 // --- Public API ---------------------------------------------------------------
 
+bool sd_safe_store_validate_json(const cJSON *root, const char **reason)
+{
+    safe_entry_t tmp = {0};
+    return entry_from_json(root, &tmp, reason);
+}
+
+esp_err_t sd_safe_store_set_json(int n, const cJSON *root)
+{
+    if (n < 1 || n > SD_SAFE_ENTRIES) return ESP_ERR_INVALID_ARG;
+    safe_entry_t e = {0};
+    const char *reason;
+    if (!entry_from_json(root, &e, &reason)) return ESP_ERR_INVALID_ARG;
+
+    char *compact = cJSON_PrintUnformatted(root);
+    if (!compact) return ESP_ERR_NO_MEM;
+    nvs_handle_t h;
+    char key[8];
+    snprintf(key, sizeof(key), "e%d", n);
+    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
+    if (err == ESP_OK) {
+        err = nvs_set_str(h, key, compact);
+        if (err == ESP_OK) err = nvs_commit(h);
+        nvs_close(h);
+    }
+    free(compact);
+    if (err != ESP_OK) return err;
+
+    lock();
+    s_entries[n - 1] = e;
+    unlock();
+    return ESP_OK;
+}
+
 int sd_safe_store_match(const sd_seq_t *seq,
                         char *endpoint_out, size_t endpoint_cap)
 {

@@ -962,6 +962,7 @@ esp_err_t sd_mode_engine_init(bool recovery)
     if (err != ESP_OK) return err;
 
     eng_cli_register();
+    eng_config_register();
 
     int sub;
     sk_event_bus_subscribe("device.factory-reset.requested",

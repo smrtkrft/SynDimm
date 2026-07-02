@@ -122,7 +122,8 @@ static bool profile_validate(const cJSON *root, const char **reason)
         const cJSON *b;
         cJSON_ArrayForEach(b, behaviors) {
             if (!cJSON_IsString(b) || !b->valuestring ||
-                strlen(b->valuestring) > 31) return false;
+                strlen(b->valuestring) > 31 ||
+                !sd_stru_ident_ok(b->valuestring)) return false;   // list JSON'u bozulmasın
         }
     }
 
@@ -139,6 +140,31 @@ static bool profile_validate(const cJSON *root, const char **reason)
 
     *reason = NULL;
     return true;
+}
+
+bool sd_profiles_validate_json(const cJSON *root, const char **reason)
+{
+    return profile_validate(root, reason);
+}
+
+esp_err_t sd_profiles_store_json(const cJSON *root)
+{
+    const char *id = sd_jsonu_str(root, "id");
+    if (!id) return ESP_ERR_INVALID_ARG;
+    char *compact = cJSON_PrintUnformatted(root);
+    if (!compact) return ESP_ERR_NO_MEM;
+    esp_err_t err = ESP_ERR_INVALID_SIZE;
+    if (strlen(compact) <= SD_PROFILE_JSON_MAX) {
+        nvs_handle_t h;
+        err = nvs_open(NVS_NS, NVS_READWRITE, &h);
+        if (err == ESP_OK) {
+            err = nvs_set_str(h, id, compact);
+            if (err == ESP_OK) err = nvs_commit(h);
+            nvs_close(h);
+        }
+    }
+    free(compact);
+    return err;
 }
 
 // --- CLI -------------------------------------------------------------------
@@ -221,21 +247,9 @@ static sk_err_t cmd_profile_add(sk_cli_ctx_t *ctx)
     }
 
     const char *id = cJSON_GetObjectItemCaseSensitive(root, "id")->valuestring;
-    char *compact = cJSON_PrintUnformatted(root);   // normalize edilmiş saklama
-    bool too_big = !compact || strlen(compact) > SD_PROFILE_JSON_MAX;
+    esp_err_t err = sd_profiles_store_json(root);
 
-    esp_err_t err = ESP_FAIL;
-    if (!too_big) {
-        nvs_handle_t h;
-        err = nvs_open(NVS_NS, NVS_READWRITE, &h);
-        if (err == ESP_OK) {
-            err = nvs_set_str(h, id, compact);
-            if (err == ESP_OK) err = nvs_commit(h);
-            nvs_close(h);
-        }
-    }
-
-    if (too_big) {
+    if (err == ESP_ERR_INVALID_SIZE) {
         sk_cli_err(ctx, SK_ERR_INVALID_ARG, "{\"reason\":\"too_large\"}");
     } else if (err != ESP_OK) {
         sk_cli_err(ctx, SK_ERR_NVS_WRITE, NULL);
@@ -245,7 +259,6 @@ static sk_err_t cmd_profile_add(sk_cli_ctx_t *ctx)
         sk_event_bus_publishf("profile.added", "{\"id\":\"%s\"}", id);
         sk_cli_ok(ctx, buf);
     }
-    free(compact);
     cJSON_Delete(root);
     return SK_OK;
 }

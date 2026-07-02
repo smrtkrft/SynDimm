@@ -35,6 +35,10 @@ bool sd_profiles_exists(const char *id);
 typedef int (*sd_profiles_ref_checker_t)(const char *id);
 void sd_profiles_set_ref_checker(sd_profiles_ref_checker_t fn);
 
+// Programatik doğrulama + kayıt (profile.add ve config.import kullanır).
+bool      sd_profiles_validate_json(const cJSON *root, const char **reason);
+esp_err_t sd_profiles_store_json(const cJSON *root);   // doğrulanmış kök
+
 #ifdef __cplusplus
 }
 #endif
