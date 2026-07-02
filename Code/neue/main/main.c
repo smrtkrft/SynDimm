@@ -40,6 +40,7 @@
 #include "sd_encoder.h"
 #include "sd_feedback.h"
 #include "sd_profiles.h"
+#include "sd_proto.h"
 
 // === EDIT [Identity] =================================================
 //
@@ -127,7 +128,9 @@ static void sd_app_init(bool recovery)
     // düzeltilebilsin (recovery'nin atladığı şey slot/davranış YÜKLEMEsi).
     ESP_ERROR_CHECK(sd_profiles_init());
 
-    (void)recovery;
+    if (recovery) return;   // ↓ recovery'de yüklenmeyenler (plan T6.1)
+
+    ESP_ERROR_CHECK(sd_proto_init());
 }
 
 void app_main(void)
