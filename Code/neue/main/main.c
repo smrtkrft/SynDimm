@@ -38,6 +38,7 @@
 #include "sd_prefs.h"
 #include "sd_buzzer.h"
 #include "sd_encoder.h"
+#include "sd_feedback.h"
 
 // === EDIT [Identity] =================================================
 //
@@ -120,6 +121,7 @@ static void sd_app_init(bool recovery)
     // Enkoder recovery'de de canlı: kontrol bantları (restart/factory reset)
     // her koşulda çalışmalı — cihaz tuğlalaşmaz ilkesinin parçası.
     ESP_ERROR_CHECK(sd_encoder_init());
+    ESP_ERROR_CHECK(sd_feedback_init());
 
     (void)recovery;
 }
