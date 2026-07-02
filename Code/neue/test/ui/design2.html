@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SynDimm · Tasarım 2 — Panel</title>
+<style>
+/* ============================================================
+   SynDimm UI Prototip · Tasarım 2 "Panel"
+   Bağımsız yerleşim — SKAPP'in kart dilinde (BF pano deseni):
+   kimlik başlığı + hap rozetler, neumorfik "çukur" kartlar
+   (sk_neu_card: inset gölge, radius 18), tek kolon telefon akışı.
+   Renkler: SkColors tokenları. Font: Inter.
+   Yerleşim kararları bana ait: slot seçici üstte segmented,
+   kadran hero kartında, hedef/tercihler/sistem/olaylar ayrı
+   kartlar — Flutter'a ekran-ekran birebir taşınır.
+   ============================================================ */
+*{margin:0;padding:0;box-sizing:border-box}
+
+:root{
+  --bg:#0E0D0A; --bg-raised:#1F1D18;
+  --fg:#F5EFDE; --fg-2:rgba(245,239,222,.62); --fg-3:rgba(245,239,222,.34);
+  --border:rgba(245,239,222,.08);
+  --accent:#D4A017; --accent-rgb:212,160,23; --danger:#D32F2F;
+  --well-dark:rgba(0,0,0,.28); --well-light:rgba(255,255,255,.04);
+  --pel-light:#2A2620; --pel-dark:rgba(0,0,0,.8);
+}
+[data-theme="light"]{
+  --bg:#F5F2EC; --bg-raised:#EBE6D8;
+  --fg:#0A0A0A; --fg-2:rgba(10,10,10,.62); --fg-3:rgba(10,10,10,.38);
+  --border:rgba(10,10,10,.10);
+  --well-dark:rgba(0,0,0,.09); --well-light:rgba(255,255,255,.48);
+  --pel-light:#FFFBED; --pel-dark:rgba(120,108,86,.30);
+}
+
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--fg);min-height:100vh;
+  display:flex;justify-content:center;-webkit-font-smoothing:antialiased;
+  transition:background .4s,color .4s}
+.phone{width:100%;max-width:430px;padding:20px 18px 40px}
+
+/* ── sk_neu_card karşılığı: ÇUKUR kart ─────────────────── */
+.well{background:var(--bg);border-radius:18px;padding:16px;
+  box-shadow:inset 4px 4px 3px var(--well-dark),
+             inset -4px -4px 3px var(--well-light);
+  margin-bottom:18px}
+/* raised pelet (çukur tabanından yükselen öğe) */
+.pel{background:var(--bg);border-radius:12px;
+  box-shadow:4px 4px 8px var(--pel-dark), -3px -3px 7px var(--pel-light)}
+.pel:active{box-shadow:inset 3px 3px 5px var(--well-dark),
+                        inset -2px -2px 4px var(--well-light)}
+
+/* ── Kimlik başlığı (BF _IdentityHeader deseni) ────────── */
+.head{text-align:center;padding:14px 0 22px}
+.head .id{font-family:ui-monospace,'SF Mono',monospace;font-size:12px;
+  letter-spacing:2px;color:var(--fg-2)}
+.pills{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;
+  border-radius:20px;font-size:11.5px;font-weight:500;
+  background:var(--bg-raised);color:var(--fg-2)}
+.pill.ok{background:rgba(var(--accent-rgb),.12);color:var(--accent)}
+.pill.err{background:rgba(211,47,47,.14);color:var(--danger)}
+.pill svg{width:13px;height:13px}
+
+/* ── Slot segmented seçici ─────────────────────────────── */
+.slots{display:flex;gap:10px;padding:10px}
+.slot{flex:1;border:none;border-radius:12px;padding:10px 6px 9px;cursor:pointer;
+  font-family:inherit;color:var(--fg-3);background:transparent;
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  transition:color .25s;position:relative}
+.slot.pel{color:var(--fg)}
+.slot .nm{font-size:12px;font-weight:600;letter-spacing:.4px}
+.slot .mini{width:70%;height:3px;border-radius:2px;background:var(--border);overflow:hidden}
+.slot .mini i{display:block;height:100%;background:var(--accent);transition:width .2s}
+.slot .st{position:absolute;top:7px;right:9px;width:6px;height:6px;border-radius:50%;display:none}
+.slot.offline .st{display:block;background:var(--danger);box-shadow:0 0 5px var(--danger)}
+.slot .beh{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--fg-3)}
+
+/* ── Hero: kadran kartı ────────────────────────────────── */
+.hero{display:flex;flex-direction:column;align-items:center;padding:22px 16px 18px}
+.hero .title-row{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.hero .title{font-size:15px;font-weight:600}
+.badge{font-size:9.5px;letter-spacing:1px;text-transform:uppercase;
+  padding:3px 9px;border-radius:6px;background:rgba(var(--accent-rgb),.12);color:var(--accent)}
+.gauge-wrap{position:relative;width:230px;height:230px;cursor:grab;touch-action:none;user-select:none}
+.gauge-wrap:active{cursor:grabbing}
+.gauge{width:100%;height:100%;transform:rotate(135deg)}
+.gauge circle{fill:none;stroke-linecap:round}
+.gauge .trk{stroke:var(--border);stroke-width:14}
+.gauge .fil{stroke:var(--accent);stroke-width:14;transition:stroke-dashoffset .12s,stroke .3s}
+.gauge-wrap.off .fil{stroke:var(--fg-3)}
+.gauge-wrap.offline .fil{stroke:var(--danger)}
+.gauge-center{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;pointer-events:none}
+.gv{font-size:52px;font-weight:200;letter-spacing:-2px;line-height:1}
+.gv small{font-size:18px;font-weight:300;color:var(--fg-3)}
+.gstate{font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;color:var(--fg-3)}
+.gstate.on{color:var(--accent)}
+.gstate.offline{color:var(--danger)}
+.power{margin-top:14px;width:52px;height:52px;border-radius:50%;border:none;
+  cursor:pointer;color:var(--fg-2);display:flex;align-items:center;justify-content:center;
+  background:var(--bg)}
+.power.on{color:var(--accent)}
+.chips{display:flex;gap:10px;margin-top:16px}
+.chip{border:none;border-radius:10px;padding:8px 14px;cursor:pointer;
+  font-family:inherit;font-size:11.5px;color:var(--fg-2);background:var(--bg)}
+.chip b{color:var(--fg)}
+.hero .hint{font-size:10px;color:var(--fg-3);margin-top:12px;letter-spacing:.4px}
+
+/* safe hero varyantı */
+.safe-pane{display:none;flex-direction:column;align-items:center;padding:8px 0 2px}
+.safe-pane svg{color:var(--accent)}
+.safe-entry{display:flex;gap:6px;justify-content:center;margin:16px 0 4px;min-height:24px;flex-wrap:wrap}
+.sseg{min-width:30px;height:24px;border-radius:7px;display:flex;align-items:center;
+  justify-content:center;font-size:12px;font-family:ui-monospace,monospace;
+  color:var(--fg-2);padding:0 8px;background:var(--bg)}
+.sseg.cur{color:var(--accent);outline:1px solid rgba(var(--accent-rgb),.5)}
+.safe-msg{font-size:11.5px;margin-top:8px;min-height:15px;color:var(--fg-3)}
+.safe-msg.ok{color:var(--accent)} .safe-msg.err{color:var(--danger)}
+.safe-keys{display:flex;gap:12px;margin-top:14px}
+.skey{width:56px;height:44px;border:none;border-radius:12px;cursor:pointer;
+  font-family:inherit;font-size:15px;font-weight:600;color:var(--fg-2);background:var(--bg)}
+
+/* ── Genel kart satırları ──────────────────────────────── */
+.card-title{font-size:11px;font-weight:600;letter-spacing:1.4px;
+  text-transform:uppercase;color:var(--fg-3);margin-bottom:10px}
+.row{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 2px;gap:10px;border-bottom:1px solid var(--border)}
+.row:last-child{border-bottom:none}
+.row .k{font-size:13px;color:var(--fg-2)}
+.row .v{font-size:12px;color:var(--fg);font-family:ui-monospace,monospace}
+.row .sub{font-size:10.5px;color:var(--fg-3);margin-top:2px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);
+  box-shadow:0 0 7px var(--accent);flex-shrink:0}
+.dot.off{background:var(--danger);box-shadow:0 0 7px var(--danger)}
+.btn{border:none;border-radius:10px;padding:8px 16px;cursor:pointer;
+  font-family:inherit;font-size:12px;font-weight:600;
+  background:var(--accent);color:#0E0D0A}
+.btn.ghost{background:var(--bg-raised);color:var(--fg)}
+.tgl{width:40px;height:22px;border-radius:11px;background:var(--bg-raised);
+  position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
+.tgl.on{background:var(--accent)}
+.tgl::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;
+  border-radius:50%;background:var(--bg);transition:transform .2s}
+.tgl.on::after{transform:translateX(18px)}
+.inp{background:var(--bg-raised);border:none;border-radius:8px;color:var(--fg);
+  font-family:ui-monospace,monospace;font-size:12px;padding:6px 10px;width:110px;
+  text-align:center;outline:none}
+.inp:focus{outline:1px solid var(--accent)}
+
+/* olay akışı */
+.evt{display:flex;gap:10px;align-items:baseline;padding:7px 2px;
+  border-bottom:1px solid var(--border);font-size:12px}
+.evt:last-child{border-bottom:none}
+.evt .t{font-family:ui-monospace,monospace;font-size:10px;color:var(--fg-3);flex-shrink:0}
+.evt .n{color:var(--accent);font-family:ui-monospace,monospace;font-size:11px}
+.evt.err .n{color:var(--danger)}
+.evt .d{color:var(--fg-3);font-size:11px}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <!-- kimlik + hap rozetler (BF _IdentityHeader) -->
+  <div class="head">
+    <div class="id">SD-K7M2X9P4HB</div>
+    <div class="pills">
+      <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.5a11 11 0 0 1 14 0M8.5 15.5a6.5 6.5 0 0 1 7 0M12 19h.01"/></svg>Atelier-2G</span>
+      <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></svg>BLE</span>
+      <span class="pill" id="connPill">hedef çevrimiçi</span>
+    </div>
+  </div>
+
+  <!-- slot seçici (çukur içinde raised segmentler) -->
+  <div class="well slots" id="slotBar"></div>
+
+  <!-- hero: kadran / safe paneli -->
+  <div class="well hero">
+    <div class="title-row">
+      <span class="title" id="heroName">Salon</span>
+      <span class="badge" id="heroBadge">dimmer</span>
+    </div>
+
+    <div id="dimPane" style="display:flex;flex-direction:column;align-items:center">
+      <div class="gauge-wrap" id="gauge">
+        <svg class="gauge" viewBox="0 0 230 230">
+          <circle class="trk" cx="115" cy="115" r="100" stroke-dasharray="471 629"/>
+          <circle class="fil" id="gFill" cx="115" cy="115" r="100" stroke-dasharray="0 629"/>
+        </svg>
+        <div class="gauge-center">
+          <div class="gv"><span id="gVal">72</span><small>%</small></div>
+          <div class="gstate on" id="gState">AÇIK</div>
+        </div>
+      </div>
+      <button class="power pel on" id="powerBtn" title="Aç / kapa">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0"/>
+        </svg>
+      </button>
+      <div class="chips">
+        <button class="chip pel" onclick="preset(100)">Çift tık · <b>%100</b></button>
+        <button class="chip pel" onclick="preset(10)">Uzun bas · <b>%10</b></button>
+      </div>
+      <div class="hint">kadranı sürükle · tekerlek de çalışır</div>
+    </div>
+
+    <div class="safe-pane" id="safePane">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+        <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+      </svg>
+      <div class="safe-entry" id="safeEntry"></div>
+      <div class="safe-msg" id="safeMsg">Dizi girin — 2 sn hareketsizlik denemeyi kapatır</div>
+      <div class="safe-keys">
+        <button class="skey pel" onclick="safeRotate(-1)">◀ L</button>
+        <button class="skey pel" onclick="safeButton()" style="width:70px">●</button>
+        <button class="skey pel" onclick="safeRotate(1)">R ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- hedef kartı -->
+  <div class="well" id="targetCard">
+    <div class="card-title">Hedef</div>
+    <div class="row">
+      <div><div class="k" id="tgtProfile">Shelly Dimmer 2</div>
+           <div class="sub" id="tgtHost">192.168.1.40 · http</div></div>
+      <span class="dot" id="tgtDot"></span>
+    </div>
+    <div class="row">
+      <span class="k">Kurulum testi</span>
+      <button class="btn ghost pel" onclick="fireTest()">⚡ Test ateşle</button>
+    </div>
+  </div>
+
+  <!-- tercihler -->
+  <div class="well">
+    <div class="card-title">Tercihler</div>
+    <div class="row"><span class="k">Jestler</span><div class="tgl on" onclick="tglPref(this,'gestures')"></div></div>
+    <div class="row"><span class="k">Buzzer</span><div class="tgl on" onclick="tglPref(this,'buzzer')"></div></div>
+    <div class="row"><span class="k">Sessiz saatler</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="inp" value="23:00-07:00">
+        <div class="tgl" onclick="tglPref(this,'quiet')"></div>
+      </div></div>
+    <div class="row"><span class="k">Saat dilimi</span><input class="inp" value="+02:00" style="width:80px"></div>
+  </div>
+
+  <!-- sistem -->
+  <div class="well">
+    <div class="card-title">Sistem</div>
+    <div class="row"><span class="k">Firmware</span><span class="v">2.0.0</span></div>
+    <div class="row"><span class="k">Güncelleme</span>
+      <button class="btn ghost pel" onclick="pushEvt('ota.check','güncel — 2.0.0')">Denetle</button></div>
+    <div class="row"><span class="k">Koyu tema</span>
+      <div class="tgl on" id="themeTgl" onclick="toggleTheme()"></div></div>
+    <div class="row"><span class="k">Simülasyon</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn ghost pel" onclick="simOffline()">offline</button>
+        <button class="btn ghost pel" onclick="simOnline()">online</button>
+      </div></div>
+  </div>
+
+  <!-- olay akışı -->
+  <div class="well">
+    <div class="card-title">Olaylar</div>
+    <div id="evts"></div>
+  </div>
+
+</div>
+
+<script>
+/* ── Mock durum ────────────────────────────────────────── */
+const slots = [
+  {name:'Salon',  behavior:'dimmer', value:72, on:true,  offline:false,
+   profile:'Shelly Dimmer 2', host:'192.168.1.40 · http'},
+  {name:'Mutfak', behavior:'dimmer', value:35, on:true,  offline:false,
+   profile:'Philips Hue',     host:'192.168.1.12 · http'},
+  {name:'Kasa',   behavior:'safe',   value:0,  on:false, offline:false,
+   profile:'—',               host:'webhook: kapi_kilidi'},
+];
+let active = 0;
+const $ = id => document.getElementById(id);
+
+/* ── Olay akışı ────────────────────────────────────────── */
+const events = [];
+function pushEvt(name, detail, err){
+  const t = new Date().toTimeString().slice(0,8);
+  events.unshift({t, name, detail, err});
+  if (events.length > 6) events.pop();
+  $('evts').innerHTML = events.map(e=>
+    `<div class="evt ${e.err?'err':''}"><span class="t">${e.t}</span>
+     <span class="n">${e.name}</span><span class="d">${e.detail||''}</span></div>`).join('');
+}
+
+/* ── Render ────────────────────────────────────────────── */
+const ARC = 471;                          /* 270° yay (r=100) */
+function render(){
+  const s = slots[active];
+  const isSafe = s.behavior === 'safe';
+
+  $('slotBar').innerHTML = slots.map((x,i)=>`
+    <button class="slot ${i===active?'pel':''} ${x.offline?'offline':''}" onclick="selectSlot(${i})">
+      <span class="nm">${x.name}</span>
+      <span class="mini"><i style="width:${x.behavior==='safe'?0:x.value}%"></i></span>
+      <span class="beh">${x.behavior}</span><span class="st"></span>
+    </button>`).join('');
+
+  $('heroName').textContent = s.name;
+  $('heroBadge').textContent = s.behavior;
+  $('dimPane').style.display  = isSafe ? 'none' : 'flex';
+  $('safePane').style.display = isSafe ? 'flex' : 'none';
+
+  if (!isSafe){
+    $('gVal').textContent = s.value;
+    $('gFill').setAttribute('stroke-dasharray', `${ARC*s.value/100} 629`);
+    const g = $('gauge');
+    g.classList.toggle('off', !s.on);
+    g.classList.toggle('offline', s.offline);
+    const st = $('gState');
+    if (s.offline){ st.textContent='HEDEF ÇEVRİMDIŞI'; st.className='gstate offline'; }
+    else if (s.on){ st.textContent='AÇIK'; st.className='gstate on'; }
+    else          { st.textContent='KAPALI'; st.className='gstate'; }
+    $('powerBtn').classList.toggle('on', s.on);
+  }
+
+  $('tgtProfile').textContent = s.profile;
+  $('tgtHost').textContent = s.host;
+  $('tgtDot').className = 'dot' + (s.offline ? ' off' : '');
+  $('connPill').textContent = s.offline ? 'hedef çevrimdışı' : 'hedef çevrimiçi';
+  $('connPill').className = 'pill' + (s.offline ? ' err' : ' ok');
+}
+function selectSlot(i){
+  active = i; resetSafe();
+  pushEvt('mode.changed', `slot ${i+1} · ${slots[i].name}`);
+  render();
+}
+
+/* ── Kadran etkileşimi ─────────────────────────────────── */
+const gauge = $('gauge');
+let dragging=false, lastA=null;
+function ang(e){
+  const r = gauge.getBoundingClientRect();
+  const x=(e.touches?e.touches[0].clientX:e.clientX)-(r.left+r.width/2);
+  const y=(e.touches?e.touches[0].clientY:e.clientY)-(r.top+r.height/2);
+  return Math.atan2(y,x);
+}
+gauge.addEventListener('pointerdown', e=>{dragging=true;lastA=ang(e);});
+window.addEventListener('pointermove', e=>{
+  if(!dragging) return;
+  const a=ang(e); let d=a-lastA;
+  if(d>Math.PI)d-=2*Math.PI; if(d<-Math.PI)d+=2*Math.PI;
+  if(Math.abs(d)>0.045){ lastA=a; bump(d>0?+1:-1); }
+});
+window.addEventListener('pointerup', ()=>dragging=false);
+gauge.addEventListener('wheel', e=>{e.preventDefault(); bump(e.deltaY<0?+2:-2);},{passive:false});
+$('powerBtn').addEventListener('click', ()=>{
+  const s=slots[active]; s.on=!s.on;
+  pushEvt('mode.value', `değer ${s.value} · ${s.on?'açık':'kapalı'}`);
+  render();
+});
+function bump(d){
+  const s=slots[active];
+  if(s.behavior==='safe') return;
+  s.value=Math.max(0,Math.min(100,s.value+d));
+  s.on=s.value>0;
+  render();
+}
+function preset(v){
+  const s=slots[active];
+  if(s.behavior==='safe') return;
+  s.value=v; s.on=v>0;
+  pushEvt('input.gesture', v===100?'çift tık → %100':'uzun bas → %10');
+  render();
+}
+
+/* ── Safe mock ─────────────────────────────────────────── */
+const CODE=[4,-2,3]; /* R4-L2-R3 */
+let segs=[],ticks=0,dir=0,timer=null,fails=0,lockUntil=0;
+function renderSafe(){
+  const p=segs.map(v=>`<span class="sseg pel">${v>0?'R':'L'}${Math.abs(v)}</span>`);
+  if(dir!==0)p.push(`<span class="sseg pel cur">${dir>0?'R':'L'}${ticks}</span>`);
+  $('safeEntry').innerHTML=p.join('');
+}
+function locked(){
+  if(Date.now()>=lockUntil) return false;
+  const m=$('safeMsg');
+  m.textContent=`Kilitli — ${Math.ceil((lockUntil-Date.now())/1000)} sn`;
+  m.className='safe-msg err';
+  return true;
+}
+function safeRotate(d){
+  if(locked())return;
+  if(dir!==0&&d!==dir){segs.push(dir*ticks);ticks=0;}
+  dir=d;ticks++;arm();renderSafe();
+}
+function safeButton(){
+  if(locked())return;
+  if(dir!==0){segs.push(dir*ticks);dir=0;ticks=0;}
+  arm();renderSafe();
+}
+function arm(){clearTimeout(timer);timer=setTimeout(commit,2000);}
+function commit(){
+  if(dir!==0){segs.push(dir*ticks);dir=0;ticks=0;}
+  if(!segs.length)return;
+  const ok=segs.length===CODE.length&&segs.every((v,i)=>v===CODE[i]);
+  const m=$('safeMsg');
+  if(ok){
+    fails=0;
+    m.textContent='✓ Eşleşme — webhook tetiklendi';
+    m.className='safe-msg ok';
+    pushEvt('safe.triggered','n=1 ok=true → api.sent');
+  }else{
+    fails++;
+    if(fails>=3){
+      lockUntil=Date.now()+30000;fails=0;
+      m.textContent='✗ 3 yanlış — 30 sn kilit';
+      m.className='safe-msg err';
+      pushEvt('safe.lockout','30 sn',true);
+    }else{
+      m.textContent=`✗ Yanlış dizi (${fails}/3)`;
+      m.className='safe-msg err';
+      pushEvt('safe.triggered','ok=false',true);
+    }
+  }
+  segs=[];renderSafe();
+  setTimeout(()=>{m.textContent='Dizi girin — 2 sn hareketsizlik denemeyi kapatır';
+                  m.className='safe-msg';},2800);
+}
+function resetSafe(){segs=[];ticks=0;dir=0;clearTimeout(timer);renderSafe();}
+
+/* ── Kart aksiyonları ──────────────────────────────────── */
+function fireTest(){
+  const s=slots[active];
+  pushEvt('mode.test', s.offline?'HATA · hedef yanıt vermiyor':'200 OK · 41 ms', s.offline);
+}
+function tglPref(el,key){
+  el.classList.toggle('on');
+  pushEvt('prefs.changed', `${key} = ${el.classList.contains('on')?'on':'off'}`);
+}
+function toggleTheme(){
+  const h=document.documentElement;
+  const dark=h.dataset.theme!=='light';
+  h.dataset.theme=dark?'light':'dark';
+  $('themeTgl').classList.toggle('on',!dark);
+}
+function simOffline(){slots[active].offline=true; pushEvt('target.offline',`slot ${active+1}`,true); render();}
+function simOnline(){slots[active].offline=false; pushEvt('target.online',`slot ${active+1} · değer uzlaştırıldı`); render();}
+
+/* klavye: ← → değer, boşluk aç/kapa (safe'te segment) */
+window.addEventListener('keydown', e=>{
+  const s=slots[active];
+  if(e.key==='ArrowRight') s.behavior==='safe'?safeRotate(1):bump(1);
+  else if(e.key==='ArrowLeft') s.behavior==='safe'?safeRotate(-1):bump(-1);
+  else if(e.key===' '){e.preventDefault();
+    s.behavior==='safe'?safeButton():$('powerBtn').click();}
+  else return;
+});
+
+pushEvt('mode.changed','slot 1 · Salon');
+render();
+</script>
+</body>
+</html>

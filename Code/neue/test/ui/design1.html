@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SynDimm · Tasarım 1 — Orbital</title>
+<style>
+/* ============================================================
+   SynDimm UI Prototip · Tasarım 1 "Orbital"
+   Eski GUI'nin yerleşimi (orbital kadran + alt hap sekmeler +
+   modal ayarlar) → SmartKraft marka paletine çekildi.
+   Renk kaynağı: SKAPP core/theme/colors.dart (SkColors) —
+   yalnız bu tokenlar: krem/warm-black nötrler, hardal aksan,
+   uyarı kırmızısı. Font: Inter (SKAPP app_theme ile aynı).
+   ============================================================ */
+*{margin:0;padding:0;box-sizing:border-box}
+
+:root{                                   /* dark (warm-black) — SkColors */
+  --bg:#0E0D0A; --bg-2:#1F1D18; --bg-3:#1A1814;
+  --fg:#F5EFDE; --fg-2:rgba(245,239,222,.60); --fg-3:rgba(245,239,222,.32);
+  --border:rgba(245,239,222,.09);
+  --accent:#D4A017; --accent-rgb:212,160,23;
+  --danger:#D32F2F;
+}
+[data-theme="light"]{
+  --bg:#F5F2EC; --bg-2:#FFFFFF; --bg-3:#EBE6D8;
+  --fg:#0A0A0A; --fg-2:rgba(10,10,10,.60); --fg-3:rgba(10,10,10,.35);
+  --border:rgba(10,10,10,.10);
+}
+
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--fg);height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  -webkit-font-smoothing:antialiased;transition:background .4s,color .4s}
+
+.brand{position:fixed;top:36px;text-align:center;z-index:10}
+.brand-title{font-size:26px;font-weight:700;letter-spacing:1px}
+.brand-sub{font-size:12px;color:var(--fg-3);letter-spacing:4px;text-transform:uppercase;margin-top:3px}
+.brand-id{font-family:ui-monospace,'SF Mono',monospace;font-size:11px;
+  color:var(--fg-3);letter-spacing:1.5px;margin-top:10px}
+
+/* ── Orbital kadran ─────────────────────────────────────── */
+.orbital{position:relative;width:300px;height:300px;display:flex;
+  align-items:center;justify-content:center;margin-top:-4vh;cursor:grab;
+  touch-action:none;user-select:none}
+.orbital:active{cursor:grabbing}
+.orbital-ring{position:absolute;inset:0;border-radius:50%;border:2px solid var(--border)}
+.orbital-ring::before{content:'';position:absolute;inset:-2px;border-radius:50%;
+  border:2px solid transparent;border-top-color:var(--accent);
+  animation:orbit 4s linear infinite;transition:border-color .5s}
+@keyframes orbit{to{transform:rotate(360deg)}}
+.orbital.offline .orbital-ring::before{border-top-color:var(--danger);animation-duration:1.2s}
+.orbital-glow{position:absolute;width:180px;height:180px;border-radius:50%;
+  background:var(--accent);filter:blur(80px);opacity:.14;transition:all .8s}
+.orbital.offline .orbital-glow{background:var(--danger)}
+.orbital.off .orbital-glow{opacity:.05}
+
+/* değer yayı: SVG progress ring (eski GUI'de yoktu — değer artık görünür) */
+.arc{position:absolute;inset:10px;transform:rotate(135deg)}
+.arc circle{fill:none;stroke-width:4;stroke-linecap:round}
+.arc .track{stroke:var(--border)}
+.arc .fill{stroke:var(--accent);transition:stroke-dashoffset .15s,stroke .4s}
+.orbital.off .arc .fill{stroke:var(--fg-3)}
+
+.center{position:relative;z-index:2;text-align:center;pointer-events:none}
+.big-value{font-size:86px;font-weight:100;letter-spacing:-5px;line-height:1}
+.big-unit{font-size:22px;font-weight:300;color:var(--fg-3);margin-left:2px}
+.status-line{font-size:12px;margin-top:8px;letter-spacing:2px;text-transform:uppercase;color:var(--fg-3)}
+.status-line .on{color:var(--accent)}
+.status-line .offline-txt{color:var(--danger)}
+.center .hint{font-size:10px;color:var(--fg-3);margin-top:6px;letter-spacing:.5px}
+
+/* safe modu merkezi */
+.safe-center{display:none;position:relative;z-index:2;text-align:center;pointer-events:none}
+.safe-center svg{color:var(--accent);opacity:.85}
+.safe-label{font-size:13px;color:var(--fg-3);margin-top:12px;letter-spacing:3px;text-transform:uppercase}
+.safe-entry{display:flex;gap:6px;justify-content:center;margin-top:14px;min-height:12px}
+.safe-seg{min-width:26px;height:22px;border-radius:6px;border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;font-size:11px;
+  font-family:ui-monospace,monospace;color:var(--fg-2);padding:0 6px}
+.safe-seg.cur{border-color:var(--accent);color:var(--accent)}
+.safe-msg{font-size:11px;margin-top:10px;letter-spacing:1px;color:var(--fg-3);min-height:14px}
+.safe-msg.ok{color:var(--accent)}
+.safe-msg.err{color:var(--danger)}
+
+/* ── Alt mod sekmeleri ──────────────────────────────────── */
+.mode-nav{position:fixed;bottom:calc(30px + 3vh);display:flex;gap:8px;align-items:center}
+.mode-tab{padding:10px 26px;border:1px solid var(--border);border-radius:40px;
+  background:transparent;color:var(--fg-3);font-size:12px;font-weight:600;
+  letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;font-family:inherit;
+  transition:all .35s cubic-bezier(.4,0,.2,1);position:relative}
+.mode-tab:hover{color:var(--fg-2);border-color:rgba(var(--accent-rgb),.25)}
+.mode-tab.active{color:var(--fg);background:rgba(var(--accent-rgb),.08);
+  border-color:var(--accent);box-shadow:0 0 20px rgba(var(--accent-rgb),.18)}
+.mode-tab .dot{position:absolute;top:6px;right:10px;width:6px;height:6px;border-radius:50%;display:none}
+.mode-tab.offline .dot{display:block;background:var(--danger);box-shadow:0 0 6px var(--danger)}
+.gear-btn{width:44px;height:44px;border-radius:50%;border:1px solid var(--border);
+  background:rgba(var(--accent-rgb),.04);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .3s;color:var(--fg-3)}
+.gear-btn:hover{background:rgba(var(--accent-rgb),.10);border-color:rgba(var(--accent-rgb),.3);
+  transform:rotate(45deg);color:var(--fg-2)}
+
+.footline{position:fixed;bottom:14px;font-size:10px;color:var(--fg-3);
+  letter-spacing:1px;display:flex;gap:14px;align-items:center}
+.footline .conn{display:flex;align-items:center;gap:5px}
+.conn-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent)}
+.conn-dot.off{background:var(--danger);box-shadow:0 0 6px var(--danger)}
+
+/* ── Olay bildirimi (toast) ─────────────────────────────── */
+.toasts{position:fixed;top:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:200}
+.toast{background:var(--bg-2);border:1px solid var(--border);border-left:3px solid var(--accent);
+  border-radius:10px;padding:10px 14px;font-size:12px;color:var(--fg-2);
+  animation:slideIn .25s ease;max-width:260px}
+.toast.err{border-left-color:var(--danger)}
+@keyframes slideIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+
+/* ── Modal (eski GUI deseni) ────────────────────────────── */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);
+  backdrop-filter:blur(18px);z-index:100;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal-box{background:var(--bg-2);border:1px solid var(--border);border-radius:20px;
+  width:92%;max-width:420px;height:74vh;display:flex;flex-direction:column;padding:22px 0}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:0 24px;margin-bottom:14px}
+.modal-head h3{font-size:16px;font-weight:600}
+.modal-close{background:none;border:none;color:var(--fg-3);font-size:24px;cursor:pointer}
+.modal-close:hover{color:var(--fg)}
+.modal-tabs{display:flex;border-bottom:1px solid var(--border);margin:0 24px}
+.modal-tab{flex:1;padding:10px 0;background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--fg-3);font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
+  cursor:pointer;font-family:inherit;transition:all .2s}
+.modal-tab.active{color:var(--fg);border-bottom-color:var(--accent)}
+.tab-content{flex:1;overflow-y:auto;padding:16px 24px;scrollbar-width:thin}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+.s-label{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--fg-3);
+  margin:18px 0 8px;font-weight:600}
+.s-label:first-child{margin-top:0}
+.s-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;
+  border-bottom:1px solid var(--border);gap:8px}
+.s-row span{font-size:13px;color:var(--fg-2)}
+.s-row .s-val{color:var(--fg);font-family:ui-monospace,monospace;font-size:12px}
+.s-toggle{width:40px;height:22px;border-radius:11px;background:rgba(var(--accent-rgb),.12);
+  position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
+.s-toggle.on{background:var(--accent)}
+.s-toggle::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;
+  border-radius:50%;background:var(--bg);transition:transform .2s}
+.s-toggle.on::after{transform:translateX(18px)}
+.s-input{width:100%;padding:9px 12px;background:rgba(var(--accent-rgb),.05);
+  border:1px solid var(--border);border-radius:10px;color:var(--fg);font-size:13px;
+  font-family:inherit;outline:none}
+.s-input:focus{border-color:var(--accent)}
+.s-btn{padding:9px 18px;border:none;border-radius:10px;background:var(--accent);
+  color:#0E0D0A;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.s-btn:hover{opacity:.88}
+.s-btn.ghost{background:rgba(var(--accent-rgb),.10);color:var(--fg)}
+.s-btn.danger{background:var(--danger);color:#fff}
+
+.mode-card{display:flex;align-items:center;gap:12px;padding:12px 14px;
+  background:rgba(var(--accent-rgb),.04);border:1px solid var(--border);
+  border-radius:12px;margin-bottom:8px}
+.mode-card .num{width:26px;height:26px;border-radius:8px;border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;font-size:12px;
+  color:var(--fg-3);font-family:ui-monospace,monospace;flex-shrink:0}
+.mode-card.active-slot .num{border-color:var(--accent);color:var(--accent)}
+.mode-card .inf{flex:1;min-width:0}
+.mode-card .inf strong{font-size:13px;display:block}
+.mode-badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:6px;
+  background:rgba(var(--accent-rgb),.08);color:var(--fg-3);text-transform:uppercase;
+  letter-spacing:.5px;margin-top:4px}
+.mode-card button{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);
+  background:transparent;color:var(--fg-3);cursor:pointer;font-size:13px}
+.mode-card button:hover{color:var(--fg);background:rgba(var(--accent-rgb),.08)}
+.sim-note{font-size:11px;color:var(--fg-3);line-height:1.6;padding:10px 12px;
+  background:rgba(var(--accent-rgb),.04);border:1px dashed var(--border);border-radius:10px;margin-top:14px}
+</style>
+</head>
+<body>
+
+<div class="brand">
+  <div class="brand-title">SynDimm</div>
+  <div class="brand-sub">SmartKraft</div>
+  <div class="brand-id">SD-K7M2X9P4HB</div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<div class="orbital" id="orbital">
+  <div class="orbital-glow"></div>
+  <div class="orbital-ring"></div>
+  <svg class="arc" viewBox="0 0 300 300">
+    <circle class="track" cx="150" cy="150" r="138"
+            stroke-dasharray="650 867" />
+    <circle class="fill" id="arcFill" cx="150" cy="150" r="138"
+            stroke-dasharray="0 867" />
+  </svg>
+
+  <div class="center" id="dimCenter">
+    <span class="big-value" id="bigValue">72</span><span class="big-unit">%</span>
+    <div class="status-line" id="statusLine"><span class="on">AÇIK</span></div>
+    <div class="hint">sürükle / kaydır · tıkla = aç-kapa</div>
+  </div>
+
+  <div class="safe-center" id="safeCenter">
+    <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+      <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+    </svg>
+    <div class="safe-label">Güvenli Mod</div>
+    <div class="safe-entry" id="safeEntry"></div>
+    <div class="safe-msg" id="safeMsg">← → çevir · boşluk = buton · 2 sn bekle</div>
+  </div>
+</div>
+
+<div class="mode-nav" id="modeNav"></div>
+
+<div class="footline">
+  <span class="conn"><span class="conn-dot" id="connDot"></span><span id="connTxt">HEDEF ÇEVRİMİÇİ</span></span>
+  <span>fw 2.0.0</span>
+</div>
+
+<!-- ── Ayarlar modalı ── -->
+<div class="modal-bg" id="modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Ayarlar</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-tabs">
+      <button class="modal-tab active" data-tab="modlar" onclick="switchTab(this)">Modlar</button>
+      <button class="modal-tab" data-tab="tercihler" onclick="switchTab(this)">Tercihler</button>
+      <button class="modal-tab" data-tab="sistem" onclick="switchTab(this)">Sistem</button>
+    </div>
+    <div class="tab-content">
+      <div class="tab-panel active" id="tab-modlar">
+        <div class="s-label">Mod Slotları</div>
+        <div id="modeCards"></div>
+        <div class="sim-note">Prototip notu: kalem = bağlama düzenleme formu
+          (Flutter'da ayrı ekran). Slot ataması <b>mode.set</b>, seçim
+          <b>mode.select</b> komutuna karşılık gelir.</div>
+      </div>
+      <div class="tab-panel" id="tab-tercihler">
+        <div class="s-label">Özellik Anahtarları</div>
+        <div class="s-row"><span>Jestler (çift tık / uzun basış)</span>
+          <div class="s-toggle on" onclick="this.classList.toggle('on')"></div></div>
+        <div class="s-row"><span>Buzzer</span>
+          <div class="s-toggle on" onclick="this.classList.toggle('on')"></div></div>
+        <div class="s-row"><span>Sessiz saatler</span>
+          <div class="s-toggle" onclick="this.classList.toggle('on')"></div></div>
+        <div class="s-label">Sessiz Aralık</div>
+        <input class="s-input" value="23:00-07:00">
+        <div class="s-label">Saat Dilimi</div>
+        <input class="s-input" value="+02:00">
+      </div>
+      <div class="tab-panel" id="tab-sistem">
+        <div class="s-label">Görünüm</div>
+        <div class="s-row"><span>Koyu tema</span>
+          <div class="s-toggle on" id="themeToggle" onclick="toggleTheme()"></div></div>
+        <div class="s-label">Bağlantı</div>
+        <div class="s-row"><span>WiFi</span><span class="s-val">Atelier-2G · -48 dBm</span></div>
+        <div class="s-row"><span>Cihaz</span><span class="s-val">SD-K7M2X9P4HB</span></div>
+        <div class="s-row"><span>Firmware</span><span class="s-val">2.0.0</span></div>
+        <div class="s-label">Simülasyon (yalnız prototip)</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+          <button class="s-btn ghost" onclick="simOffline()">Hedef çevrimdışı</button>
+          <button class="s-btn ghost" onclick="simOnline()">Hedef çevrimiçi</button>
+          <button class="s-btn danger" onclick="toast('Factory reset istendi (confirm-token gerekir)','err')">Factory reset</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── Mock cihaz durumu ─────────────────────────────────── */
+const slots = [
+  {name:'Salon',  behavior:'dimmer',  value:72, on:true,  offline:false},
+  {name:'Mutfak', behavior:'dimmer',  value:35, on:true,  offline:false},
+  {name:'Kasa',   behavior:'safe',    value:0,  on:false, offline:false},
+];
+let active = 0;
+
+const $ = id => document.getElementById(id);
+const orbital = $('orbital');
+
+/* ── Görünüm güncelle ──────────────────────────────────── */
+const ARC_LEN = 650;                     /* 270° yay uzunluğu (r=138) */
+function render(){
+  const s = slots[active];
+  const isSafe = s.behavior === 'safe';
+  $('dimCenter').style.display  = isSafe ? 'none' : 'block';
+  $('safeCenter').style.display = isSafe ? 'block' : 'none';
+  orbital.classList.toggle('offline', s.offline);
+  orbital.classList.toggle('off', !isSafe && !s.on);
+
+  if (!isSafe){
+    $('bigValue').textContent = s.value;
+    $('arcFill').setAttribute('stroke-dasharray',
+      `${ARC_LEN * s.value / 100} 867`);
+    $('statusLine').innerHTML = s.offline
+      ? '<span class="offline-txt">HEDEF ÇEVRİMDIŞI</span>'
+      : (s.on ? '<span class="on">AÇIK</span>' : 'KAPALI');
+  } else {
+    $('arcFill').setAttribute('stroke-dasharray','0 867');
+    renderSafe();
+  }
+  $('connDot').className = 'conn-dot' + (s.offline ? ' off' : '');
+  $('connTxt').textContent = s.offline ? 'HEDEF ÇEVRİMDIŞI' : 'HEDEF ÇEVRİMİÇİ';
+  renderNav();
+}
+
+function renderNav(){
+  $('modeNav').innerHTML = slots.map((s,i)=>
+    `<button class="mode-tab ${i===active?'active':''} ${s.offline?'offline':''}"
+       onclick="selectSlot(${i})">${s.name}<span class="dot"></span></button>`
+  ).join('') +
+  `<button class="gear-btn" onclick="openModal()" title="Ayarlar">
+     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+       <circle cx="12" cy="12" r="3"/>
+       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+     </svg></button>`;
+}
+
+function selectSlot(i){
+  active = i;
+  toast(`Mod ${i+1}: ${slots[i].name}`);
+  resetSafe();
+  render();
+}
+
+/* ── Kadran etkileşimi (çevirme simülasyonu) ───────────── */
+let dragging=false, lastAngle=null, moved=false;
+function angleOf(e){
+  const r = orbital.getBoundingClientRect();
+  const x = (e.touches?e.touches[0].clientX:e.clientX) - (r.left+r.width/2);
+  const y = (e.touches?e.touches[0].clientY:e.clientY) - (r.top+r.height/2);
+  return Math.atan2(y,x);
+}
+orbital.addEventListener('pointerdown', e=>{dragging=true;moved=false;lastAngle=angleOf(e);});
+window.addEventListener('pointermove', e=>{
+  if(!dragging) return;
+  const a = angleOf(e);
+  let d = a - lastAngle;
+  if (d >  Math.PI) d -= 2*Math.PI;
+  if (d < -Math.PI) d += 2*Math.PI;
+  if (Math.abs(d) > 0.05){
+    lastAngle = a; moved = true;
+    bump(d > 0 ? +1 : -1);
+  }
+});
+window.addEventListener('pointerup', ()=>{
+  if(dragging && !moved) clickAction();
+  dragging=false;
+});
+orbital.addEventListener('wheel', e=>{
+  e.preventDefault();
+  bump(e.deltaY < 0 ? +2 : -2);
+},{passive:false});
+
+function bump(d){
+  const s = slots[active];
+  if (s.behavior === 'safe'){ safeRotate(d>0?+1:-1); return; }
+  s.value = Math.max(0, Math.min(100, s.value + d));
+  s.on = s.value > 0;
+  render();
+}
+function clickAction(){
+  const s = slots[active];
+  if (s.behavior === 'safe'){ safeButton(); return; }
+  s.on = !s.on;
+  toast(s.on ? `${s.name}: açıldı` : `${s.name}: kapandı`);
+  render();
+}
+window.addEventListener('keydown', e=>{
+  if ($('modal').classList.contains('open')) return;
+  if (e.key==='ArrowRight') bump(+1);
+  if (e.key==='ArrowLeft')  bump(-1);
+  if (e.key===' ') { e.preventDefault(); clickAction(); }
+});
+
+/* ── Safe modu mock (dizi girişi + lockout) ────────────── */
+const SAFE_CODE = [4,-2,3];              /* R4-L2-R3 */
+let safeSegs=[], safeTicks=0, safeDir=0, safeTimer=null, lockUntil=0;
+
+function renderSafe(){
+  const parts = safeSegs.map(v=>`<span class="safe-seg">${v>0?'R':'L'}${Math.abs(v)}</span>`);
+  if (safeDir!==0) parts.push(`<span class="safe-seg cur">${safeDir>0?'R':'L'}${safeTicks}</span>`);
+  $('safeEntry').innerHTML = parts.join('');
+}
+function safeRotate(dir){
+  if (Date.now() < lockUntil){ safeLockMsg(); return; }
+  if (safeDir!==0 && dir!==safeDir){ safeSegs.push(safeDir*safeTicks); safeTicks=0; }
+  safeDir = dir; safeTicks++;
+  armSafeTimer(); renderSafe();
+}
+function safeButton(){
+  if (Date.now() < lockUntil){ safeLockMsg(); return; }
+  if (safeDir!==0){ safeSegs.push(safeDir*safeTicks); safeDir=0; safeTicks=0; }
+  armSafeTimer(); renderSafe();
+}
+function armSafeTimer(){
+  clearTimeout(safeTimer);
+  safeTimer = setTimeout(safeCommit, 2000);   /* cihazdaki 2 sn commit */
+}
+let safeFails = 0;
+function safeCommit(){
+  if (safeDir!==0){ safeSegs.push(safeDir*safeTicks); safeDir=0; safeTicks=0; }
+  if (!safeSegs.length) return;
+  const ok = safeSegs.length===SAFE_CODE.length &&
+             safeSegs.every((v,i)=>v===SAFE_CODE[i]);
+  const m = $('safeMsg');
+  if (ok){
+    safeFails = 0;
+    m.textContent = '✓ Eşleşme — webhook tetiklendi (kapi_kilidi)';
+    m.className = 'safe-msg ok';
+    toast('safe.triggered → api.sent ✓');
+  } else {
+    safeFails++;
+    if (safeFails >= 3){
+      lockUntil = Date.now() + 30000; safeFails = 0;
+      m.textContent = '✗ 3 yanlış — 30 sn kilitlendi';
+      m.className = 'safe-msg err';
+      toast('safe.lockout (30 sn)','err');
+    } else {
+      m.textContent = `✗ Yanlış dizi (${safeFails}/3)`;
+      m.className = 'safe-msg err';
+    }
+  }
+  safeSegs=[]; renderSafe();
+  setTimeout(()=>{ m.textContent='← → çevir · boşluk = buton · 2 sn bekle';
+                   m.className='safe-msg'; }, 2600);
+}
+function safeLockMsg(){
+  const kalan = Math.ceil((lockUntil-Date.now())/1000);
+  const m = $('safeMsg');
+  m.textContent = `Kilitli — ${kalan} sn`;
+  m.className = 'safe-msg err';
+}
+function resetSafe(){ safeSegs=[]; safeTicks=0; safeDir=0; clearTimeout(safeTimer); }
+
+/* ── Modal / tema / toast / sim ────────────────────────── */
+function openModal(){ renderModeCards(); $('modal').classList.add('open'); }
+function closeModal(){ $('modal').classList.remove('open'); }
+$('modal').addEventListener('click', e=>{ if(e.target===$('modal')) closeModal(); });
+function switchTab(btn){
+  document.querySelectorAll('.modal-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  $('tab-'+btn.dataset.tab).classList.add('active');
+}
+function renderModeCards(){
+  $('modeCards').innerHTML = slots.map((s,i)=>`
+    <div class="mode-card ${i===active?'active-slot':''}">
+      <span class="num">${i+1}</span>
+      <div class="inf"><strong>${s.name}</strong>
+        <span class="mode-badge">${s.behavior}</span></div>
+      <button title="Test ateşle" onclick="toast('mode.test ${i+1} → 200 OK')">⚡</button>
+      <button title="Düzenle" onclick="toast('Bağlama düzenleme formu (prototip dışı)')">✎</button>
+    </div>`).join('');
+}
+function toggleTheme(){
+  const html = document.documentElement;
+  const dark = html.dataset.theme !== 'light';
+  html.dataset.theme = dark ? 'light' : 'dark';
+  $('themeToggle').classList.toggle('on', !dark);
+}
+function toast(msg, kind){
+  const t = document.createElement('div');
+  t.className = 'toast' + (kind==='err'?' err':'');
+  t.textContent = msg;
+  $('toasts').appendChild(t);
+  setTimeout(()=>t.remove(), 3200);
+}
+function simOffline(){ slots[active].offline = true;  toast('target.offline','err'); closeModal(); render(); }
+function simOnline() { slots[active].offline = false; toast('target.online ✓');      closeModal(); render(); }
+
+render();
+</script>
+</body>
+</html>
