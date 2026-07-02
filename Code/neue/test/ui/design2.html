@@ -99,21 +99,19 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 .vault-marks line{stroke:var(--border);stroke-width:2;transition:stroke .4s}
 .safe-center.fired .vault-marks line{stroke:var(--tertiary)}
 .safe-center.locked .vault-marks line{stroke:var(--danger)}
+/* V5 karakteri: durağan taban (nöbette), olay-güdümlü tepki. */
 .vault-wheel{width:132px;height:132px;border-radius:50%;position:relative;
   display:flex;align-items:center;justify-content:center;
-  animation:vaultIdle 14s ease-in-out infinite}
-@keyframes vaultIdle{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}
-.safe-center.fired .vault-wheel{animation:vaultOpen 1.6s cubic-bezier(.2,.8,.3,1) forwards}
-@keyframes vaultOpen{to{transform:rotate(400deg)}}
-.safe-center.locked .vault-wheel{animation:none;transform:rotate(0)}
+  transition:transform 1.6s cubic-bezier(.2,.8,.3,1)}
+.safe-center.fired .vault-wheel{transform:rotate(400deg)}   /* açılış dönüşü */
+.safe-center.locked .vault-wheel{transform:rotate(0)}
 .vault-spoke{position:absolute;width:11px;height:60px;border-radius:6px;
   background:var(--bg);left:50%;top:50%;
   box-shadow:3px 3px 6px var(--pel-dark),-2px -2px 5px var(--pel-light)}
 .vault-hub{width:50px;height:50px;border-radius:50%;display:flex;
   align-items:center;justify-content:center;z-index:2}
-.vault-hub svg{color:var(--tertiary);animation:hubPulse 3.2s ease-in-out infinite}
-@keyframes hubPulse{0%,100%{opacity:.55}50%{opacity:1}}
-.safe-center.locked .vault-hub svg{color:var(--danger);animation:none}
+.vault-hub svg{color:var(--tertiary)}                       /* armed = altın */
+.safe-center.locked .vault-hub svg{color:var(--danger)}
 .safe-status{font-size:10.5px;margin-top:10px;letter-spacing:2px;
   text-transform:uppercase;color:var(--fg-3);min-height:14px}
 .safe-status.ok{color:var(--tertiary)}
@@ -334,7 +332,7 @@ textarea.inp{resize:vertical;min-height:120px;line-height:1.5}
             <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
         </div>
       </div>
-      <div class="safe-status" id="safeStatus">Beklemede</div>
+      <div class="safe-status" id="safeStatus">Güvenli Mod · Nöbette</div>
       <div class="safe-note">Dizi girişi yalnızca cihazdaki düğmeyle yapılır —
         bu ekran durumu gösterir.</div>
     </div>
@@ -609,7 +607,7 @@ function setSafeStatus(state, detail){
     st.className='safe-status err';
     setTimeout(()=>setSafeStatus('idle'),4200);
   }else{
-    st.textContent='Beklemede';
+    st.textContent='Güvenli Mod · Nöbette';
     st.className='safe-status';
   }
 }
