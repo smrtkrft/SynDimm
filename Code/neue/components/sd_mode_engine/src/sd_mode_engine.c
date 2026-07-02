@@ -84,7 +84,7 @@ static void nvs_save_values(void)
     eng_lock();
     for (int i = 0; i < SD_MODE_SLOTS; i++) {
         if (!s_slots[i].nvs_dirty) continue;
-        char key[12];
+        char key[16];
         snprintf(key, sizeof(key), "v%d", i + 1);
         nvs_set_i32(h, key, s_slots[i].value);
         snprintf(key, sizeof(key), "s%d", i + 1);
@@ -333,7 +333,7 @@ static esp_err_t load_slot(int idx)   // 0-based
     // bug'ının düzeltmesi — device_driver.c:660 kırpmıyordu).
     nvs_handle_t h;
     if (nvs_open(SD_ENGINE_NVS_NS, NVS_READONLY, &h) == ESP_OK) {
-        char vkey[12];
+        char vkey[16];
         int32_t v = 0;
         uint8_t st = 0;
         snprintf(vkey, sizeof(vkey), "v%d", idx + 1);
