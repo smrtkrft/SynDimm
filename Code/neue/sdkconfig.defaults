@@ -18,6 +18,16 @@ CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 # sk_ota rollback koruması.
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
+# === Task Watchdog (uzun-çalışma stabilitesi P0) =====================
+# 7/24 çalışma için: bir task hang/deadlock olursa TWDT reset ATSIN (uyarı
+# değil) → ESP_RST_TASK_WDT → recovery-boot sayacı artar → self-heal.
+# sd_cmd ve sd_input task'ları esp_task_wdt_add ile abone + her turda besler.
+# INIT/EN/TIMEOUT IDF varsayılanı (5 sn); yalnız PANIC'i açıyoruz.
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
+CONFIG_ESP_TASK_WDT_PANIC=y
+
 # Bluetooth — NimBLE host (sk_transport_ble).
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y

@@ -10,6 +10,7 @@
 
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_task_wdt.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -199,7 +200,12 @@ static void input_task(void *arg)
 {
     (void)arg;
     ESP_LOGI(TAG, "sd_input task basladi");
+    // Task WDT aboneliği: bir sürücü on_input geri çağrısı (kilit altında
+    // koşar) bu task'ta bloke olursa TWDT 5 sn'de reset atar. 10 ms poll
+    // döngüsü her turda besler. Add başarısızsa (TWDT kapalı) besleme atlanır.
+    bool wdt = (esp_task_wdt_add(NULL) == ESP_OK);
     while (1) {
+        if (wdt) esp_task_wdt_reset();
         int64_t now = now_ms();
 
         refresh_effective_gestures(now);

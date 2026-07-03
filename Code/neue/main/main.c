@@ -114,7 +114,11 @@ static const char *TAG = "main";
 // 120 sn stabil çalışma sayacı sıfırlar.
 #define SD_CRASH_MAGIC        0x53444E45u   // "SDNE"
 #define SD_CRASH_LIMIT        3
-#define SD_STABLE_UPTIME_MS   120000
+// Stabil-uptime eşiği: bu kadar kesintisiz çalışınca crash sayacı sıfırlanır.
+// 120 sn → 10 dk yükseltildi (uzun-çalışma P1/B3): eşikten HIZLI (periyodu <10
+// dk) crash-loop'lar da sayacı biriktirip recovery'ye girer; eski 120 sn'de
+// periyodu 2-10 dk arası yavaş loop'lar sayacı her boot sıfırlayıp kaçıyordu.
+#define SD_STABLE_UPTIME_MS   600000
 
 static RTC_NOINIT_ATTR uint32_t s_crash_magic;
 static RTC_NOINIT_ATTR uint32_t s_crash_count;
@@ -124,10 +128,50 @@ static void stable_uptime_cb(void *arg)
 {
     (void)arg;
     if (s_crash_count) {
-        ESP_LOGI(TAG, "120 sn stabil — crash sayaci sifirlandi (%u idi)",
+        ESP_LOGI(TAG, "stabil uptime — crash sayaci sifirlandi (%u idi)",
                  (unsigned)s_crash_count);
     }
     s_crash_count = 0;
+}
+
+// === Sağlık izleme (uzun-çalışma P1/B4) ==============================
+// Periyodik heap + task yığın high-water örneklemesi. Yavaş bir leak veya
+// fragmantasyon "yalnız OOM crash'inde fark et" yerine önceden görünür olur.
+// Eşik altına düşünce `heap.low` olayı yayınlanır (SKAPP loglar); soak için
+// periyodik INFO satırı da basılır. Timer callback'i bloklamaz.
+#define SD_HEALTH_PERIOD_MS      60000    // 60 sn'de bir örnek
+#define SD_HEALTH_INFO_EVERY     10       // her 10 örnekte (~10 dk) INFO satırı
+#define SD_HEALTH_HEAP_LOW       20000    // boş heap bunun altına düşerse uyar
+#define SD_HEALTH_BLOCK_LOW      12000    // en büyük blok bunun altına düşerse uyar
+
+static void health_cb(void *arg)
+{
+    (void)arg;
+    static uint32_t tick;
+    uint32_t freeb   = (uint32_t)esp_get_free_heap_size();
+    uint32_t minfree = (uint32_t)esp_get_minimum_free_heap_size();
+    uint32_t largest = (uint32_t)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+
+    // Task yığın high-water (kelime cinsinden min boş) — sd_input 3 KB marjı
+    // (C5) ve sd_cmd 6 KB gözlemi. Handle'ları ada göre çöz (INCLUDE_xTaskGetHandle).
+    TaskHandle_t tin  = xTaskGetHandle("sd_input");
+    TaskHandle_t tcmd = xTaskGetHandle("sd_cmd");
+    unsigned hw_in  = tin  ? (unsigned)uxTaskGetStackHighWaterMark(tin)  : 0;
+    unsigned hw_cmd = tcmd ? (unsigned)uxTaskGetStackHighWaterMark(tcmd) : 0;
+
+    if (freeb < SD_HEALTH_HEAP_LOW || largest < SD_HEALTH_BLOCK_LOW) {
+        ESP_LOGW(TAG, "DUSUK HEAP: free=%u largest=%u min=%u",
+                 (unsigned)freeb, (unsigned)largest, (unsigned)minfree);
+        sk_event_bus_publishf("heap.low",
+            "{\"free\":%u,\"largest\":%u,\"min_free\":%u}",
+            (unsigned)freeb, (unsigned)largest, (unsigned)minfree);
+    }
+    if ((tick % SD_HEALTH_INFO_EVERY) == 0) {
+        ESP_LOGI(TAG, "health: free=%u largest=%u min=%u stack(in=%u cmd=%u)",
+                 (unsigned)freeb, (unsigned)largest, (unsigned)minfree,
+                 hw_in, hw_cmd);
+    }
+    tick++;
 }
 
 // CLI banner durum satırı: SD-XXXX - SmartKraft SynDimm v2.0.0 (wifi: ...)
@@ -239,7 +283,8 @@ void app_main(void)
     {
         esp_reset_reason_t rr = esp_reset_reason();
         const char *rr_name = "UNKNOWN";
-        bool       unclean  = false;
+        bool       unclean  = false;   // log için (beklenmedik ölüm)
+        bool       power_ev = false;   // güç kaynağı olayı — firmware crash'i DEĞİL
         switch (rr) {
             case ESP_RST_POWERON:    rr_name = "POWERON";    break;
             case ESP_RST_EXT:        rr_name = "EXT";        break;
@@ -249,7 +294,7 @@ void app_main(void)
             case ESP_RST_INT_WDT:    rr_name = "INT_WDT";    unclean = true; break;
             case ESP_RST_TASK_WDT:   rr_name = "TASK_WDT";   unclean = true; break;
             case ESP_RST_WDT:        rr_name = "WDT";        unclean = true; break;
-            case ESP_RST_BROWNOUT:   rr_name = "BROWNOUT";   unclean = true; break;
+            case ESP_RST_BROWNOUT:   rr_name = "BROWNOUT";   unclean = true; power_ev = true; break;
             case ESP_RST_SDIO:       rr_name = "SDIO";       break;
 #ifdef ESP_RST_USB
             case ESP_RST_USB:        rr_name = "USB";        break;
@@ -261,7 +306,7 @@ void app_main(void)
             case ESP_RST_EFUSE:      rr_name = "EFUSE";      unclean = true; break;
 #endif
 #ifdef ESP_RST_PWR_GLITCH
-            case ESP_RST_PWR_GLITCH: rr_name = "PWR_GLITCH"; unclean = true; break;
+            case ESP_RST_PWR_GLITCH: rr_name = "PWR_GLITCH"; unclean = true; power_ev = true; break;
 #endif
 #ifdef ESP_RST_CPU_LOCKUP
             case ESP_RST_CPU_LOCKUP: rr_name = "CPU_LOCKUP"; unclean = true; break;
@@ -280,12 +325,16 @@ void app_main(void)
             s_crash_magic = SD_CRASH_MAGIC;
             s_crash_count = 0;
         }
-        if (unclean) {
+        if (unclean && !power_ev) {
+            // Gerçek firmware faultu (PANIC/WDT/CPU_LOCKUP/...) → say.
             s_crash_count++;
             ESP_LOGW(TAG, "kirli reset #%u", (unsigned)s_crash_count);
-        } else {
+        } else if (!unclean) {
+            // Temiz reset → sıfırla.
             s_crash_count = 0;
         }
+        // power_ev (BROWNOUT/PWR_GLITCH): güç sorunu, firmware crash'i değil —
+        // sayaç değişmez (marjinal güçte yanlış recovery'yi önler).
         s_recovery_boot = (s_crash_count >= SD_CRASH_LIMIT);
         if (s_recovery_boot) {
             ESP_LOGE(TAG, "RECOVERY BOOT: %u ardisik crash — slotlar/proto "
@@ -361,7 +410,7 @@ void app_main(void)
                               (unsigned)s_crash_count);
     }
 
-    // 120 sn stabil çalışma → crash sayacı sıfır (tek atımlık).
+    // Stabil çalışma → crash sayacı sıfır (tek atımlık, SD_STABLE_UPTIME_MS).
     {
         const esp_timer_create_args_t targs = {
             .callback = stable_uptime_cb,
@@ -370,6 +419,18 @@ void app_main(void)
         esp_timer_handle_t t;
         if (esp_timer_create(&targs, &t) == ESP_OK) {
             esp_timer_start_once(t, (uint64_t)SD_STABLE_UPTIME_MS * 1000);
+        }
+    }
+
+    // Periyodik sağlık izleme (heap + task yığın high-water) — soak/erken uyarı.
+    {
+        const esp_timer_create_args_t hargs = {
+            .callback = health_cb,
+            .name     = "sd_health",
+        };
+        esp_timer_handle_t h;
+        if (esp_timer_create(&hargs, &h) == ESP_OK) {
+            esp_timer_start_periodic(h, (uint64_t)SD_HEALTH_PERIOD_MS * 1000);
         }
     }
 

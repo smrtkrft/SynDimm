@@ -39,6 +39,10 @@ typedef struct sd_behavior_ctx slot_ctx_t;
 #define SD_ENGINE_QUEUE_LEN   16
 #define SD_ENGINE_COALESCE_MS 100     // drain-keep-latest penceresi (≤10 Hz)
 #define SD_ENGINE_NVS_DEBOUNCE_MS 2000
+// sd_cmd boştayken kuyruğu bu sürede en fazla bekler, sonra TWDT'yi besleyip
+// döngüye döner. TWDT timeout'undan (5 sn) ve en uzun dispatch'ten (HTTP 3 sn)
+// güvenli marjla küçük.
+#define SD_ENGINE_WDT_FEED_MS 2000
 
 // Kuyruk işi — HAFİF (kod incelemesi: cJSON kopyası detent başına heap
 // fırtınasıydı; ağaçlar artık yürütme anında, kilit altında üretilir).
@@ -52,9 +56,13 @@ typedef struct {
     int                value;
     bool               toggle;
     // ENG_JOB_TEST sonuç alanları (iş bloğuyla taşınır — tek tahsis):
-    SemaphoreHandle_t  done;      // cmd task verir; CLI bekler+temizler
+    SemaphoreHandle_t  done;      // cmd task verir; CLI bekler
     esp_err_t          result;
     int                status;
+    // ENG_JOB_TEST paylaşımlı sahiplik: CLI ve cmd/discard tarafları birer
+    // referans tutar; son bırakan free eder (timeout'ta sızıntı YOK). Diğer
+    // iş türlerinde kullanılmaz (calloc ile 0 → tekil sahiplik).
+    int                refs;
 } eng_job_t;
 
 // Çekirdek (sd_mode_engine.c) — CLI dosyasının kullandıkları:

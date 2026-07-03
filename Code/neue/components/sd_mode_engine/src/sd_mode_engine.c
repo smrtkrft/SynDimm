@@ -21,6 +21,7 @@
 
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_task_wdt.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -167,6 +168,22 @@ static eng_job_t *make_job(eng_job_type_t type, int slot, sd_send_kind_t kind,
 
 static void schedule_nvs_save(void);
 
+// TEST işinin paylaşımlı-sahiplik referansını bırakır; sıfıra düşende
+// semaforu ve bloğu serbest bırakır. CLI (eng_run_test) ile cmd/discard
+// tarafı birer referans tutar → timeout'ta sızıntı YOK, use-after-free YOK.
+static portMUX_TYPE s_test_mux = portMUX_INITIALIZER_UNLOCKED;
+static void test_release(eng_job_t *job)
+{
+    if (!job) return;
+    portENTER_CRITICAL(&s_test_mux);
+    int r = --job->refs;
+    portEXIT_CRITICAL(&s_test_mux);
+    if (r == 0) {                        // free/delete kritik bölge DIŞINDA
+        if (job->done) vSemaphoreDelete(job->done);
+        free(job);
+    }
+}
+
 // Düşürülen iş asla sessizce kaybolmaz: TEST hatayla tamamlanır (bekleyen
 // CLI 5 sn timeout yemez), NVS_SAVE debounce'u yeniden kurar.
 static void job_discard(eng_job_t *job)
@@ -174,7 +191,8 @@ static void job_discard(eng_job_t *job)
     if (!job) return;
     if (job->type == ENG_JOB_TEST && job->done) {
         job->result = ESP_ERR_NO_MEM;
-        xSemaphoreGive(job->done);   // sahiplik CLI'ya geçti — free YOK
+        xSemaphoreGive(job->done);   // CLI'yi uyandır
+        test_release(job);           // cmd-tarafı referansını bırak
         return;
     }
     if (job->type == ENG_JOB_NVS_SAVE) {
@@ -791,12 +809,17 @@ static void execute_test(eng_job_t *job)
     eng_unlock();
 
     flush_pending_events();   // drv->test'in yayın istekleri
-    if (err == ESP_OK && captured) {
-        err = execute_send(captured, &job->status);   // kilitsiz ağ çağrısı
+    if (captured) {
+        // Sürücü hata dönse bile yakalanan iş serbest bırakılır (aksi halde
+        // ileride hata döndüren bir sürücü yolunda leak olurdu).
+        if (err == ESP_OK) {
+            err = execute_send(captured, &job->status);   // kilitsiz ağ çağrısı
+        }
         free(captured);
     }
     job->result = err;
-    xSemaphoreGive(job->done);   // sahiplik CLI'ya geçti — job'a DOKUNMA
+    xSemaphoreGive(job->done);   // CLI'yi uyandır (sonuç zaten yazıldı)
+    test_release(job);           // cmd-tarafı referansını bırak — son bırakan free eder
 }
 
 esp_err_t eng_run_test(int slot, int *out_status, int timeout_ms)
@@ -805,24 +828,28 @@ esp_err_t eng_run_test(int slot, int *out_status, int timeout_ms)
     if (!job) return ESP_ERR_NO_MEM;
     job->done = xSemaphoreCreateBinary();
     if (!job->done) { free(job); return ESP_ERR_NO_MEM; }
+    // Paylaşımlı sahiplik: 1 referans CLI (bu fonksiyon), 1 referans
+    // cmd/discard tarafı. Son bırakan free eder.
+    job->refs = 2;
 
     SemaphoreHandle_t done = job->done;
-    esp_err_t enq = enqueue_job(job);   // başarısızsa job_discard sema verdi
-    if (enq != ESP_OK && xSemaphoreTake(done, 0) != pdTRUE) {
-        // enqueue_job içeride discard etti; sema verilmiş olmalı — değilse
-        // güvenli tarafta kal, sızıntıyı kabul et.
-        return enq;
-    }
-    if (enq == ESP_OK && xSemaphoreTake(done, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
-        // Zaman aşımı: cmd task hâlâ yazabilir — job KASITLI sızdırılır
-        // (tek blok; use-after-free'den iyidir). Nadir yol, log'lanır.
-        ESP_LOGW(TAG, "mode.test %d zaman asimi (is blogu birakildi)", slot);
-        return ESP_ERR_TIMEOUT;
+    esp_err_t enq = enqueue_job(job);   // başarısızsa job_discard sema+release yaptı
+    if (enq == ESP_OK) {
+        if (xSemaphoreTake(done, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
+            // Zaman aşımı: cmd task işi hâlâ koşuyor olabilir; CLI
+            // referansını bırakıp çık — cmd tamamlanınca son referansı
+            // bırakır ve bloğu güvenle free eder (sızıntı YOK).
+            ESP_LOGW(TAG, "mode.test %d zaman asimi", slot);
+            test_release(job);
+            return ESP_ERR_TIMEOUT;
+        }
+    } else {
+        // discard yolu semaforu senkron verdi (aynı task); tüket.
+        xSemaphoreTake(done, 0);
     }
     esp_err_t err = job->result;
     if (out_status) *out_status = job->status;
-    vSemaphoreDelete(done);
-    free(job);
+    test_release(job);              // CLI referansını bırak — son bırakan free eder
     return err;
 }
 
@@ -865,10 +892,17 @@ static void cmd_task(void *arg)
 {
     (void)arg;
     ESP_LOGI(TAG, "sd_cmd task basladi");
+    // Task WDT aboneliği: bu task'ta bir hang/deadlock oluşursa (ör. bloke
+    // eden bir sürücü geri çağrısı) TWDT 5 sn'de reset atar → recovery boot.
+    // Beslemek için kuyruk beklemesi portMAX_DELAY yerine sınırlı; iş yokken
+    // periyodik besleme yapılır. Add başarısızsa (TWDT kapalı) besleme atlanır.
+    bool wdt = (esp_task_wdt_add(NULL) == ESP_OK);
     eng_job_t *job = NULL;
     for (;;) {
-        if (!job && xQueueReceive(s_queue, &job, portMAX_DELAY) != pdTRUE) {
-            continue;
+        if (wdt) esp_task_wdt_reset();
+        if (!job && xQueueReceive(s_queue, &job,
+                                  pdMS_TO_TICKS(SD_ENGINE_WDT_FEED_MS)) != pdTRUE) {
+            continue;   // iş yok — WDT'yi beslemek için döngüye dön
         }
         eng_job_t *carry = NULL;
         if (job->type == ENG_JOB_SEND && job->kind == SD_SEND_VALUE) {
