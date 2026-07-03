@@ -504,38 +504,36 @@ static void sort_scan_by_rssi_desc(sk_wifi_scan_entry_t *list, int n)
     }
 }
 
-int sk_wifi_scan(sk_wifi_scan_entry_t *out, int max)
+// One scan sweep. Returns AP count, or -1 on driver error. Factored out of
+// sk_wifi_scan so the retry below can re-run it with a longer dwell.
+static int scan_sweep(sk_wifi_scan_entry_t *out, int max, uint32_t dwell_ms)
 {
-    if (!out || max <= 0) return 0;
     // Coex-friendly scan. WIFI_PS_MAX_MODEM (set on connect) lets the radio
     // sleep between DTIMs; during a scan that starves per-channel dwell so
     // few or zero APs are heard, and under SW coexistence the long default
     // dwell also steals airtime from the live BLE link (supervision timeout
     // → peer drops → the scan reply never lands). Drop PS for the scan and
-    // cap active dwell so the whole sweep stays ~1.5 s, then restore.
+    // cap active dwell so a sweep stays short, then restore.
     esp_wifi_set_ps(WIFI_PS_NONE);
     wifi_scan_config_t cfg = {
         .scan_type            = WIFI_SCAN_TYPE_ACTIVE,
         .scan_time.active.min = 0,
-        .scan_time.active.max = 120,   // ms per channel
+        .scan_time.active.max = dwell_ms,
     };
     esp_err_t serr = esp_wifi_scan_start(&cfg, true);
     esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
     if (serr != ESP_OK) {
         SK_LOG_W("wifi", "scan.fail", "err=%s", esp_err_to_name(serr));
-        return 0;
+        return -1;
     }
     uint16_t ap_count = (uint16_t)max;
     wifi_ap_record_t *recs = calloc(ap_count, sizeof(wifi_ap_record_t));
-    if (!recs) return 0;
+    if (!recs) return -1;
     if (esp_wifi_scan_get_ap_records(&ap_count, recs) != ESP_OK) {
         free(recs);
-        return 0;
+        return -1;
     }
     int n = ap_count > max ? max : ap_count;
-    if (n == 0) {
-        SK_LOG_W("wifi", "scan.empty", "found=0");
-    }
     for (int i = 0; i < n; i++) {
         strncpy(out[i].ssid, (const char *)recs[i].ssid, SK_WIFI_SSID_MAX);
         out[i].ssid[SK_WIFI_SSID_MAX] = '\0';
@@ -547,6 +545,32 @@ int sk_wifi_scan(sk_wifi_scan_entry_t *out, int max)
     // strongest first, so re-sort. (No dedup of repeated SSIDs — the
     // raw view is more useful for diagnosing mesh / repeater setups.)
     sort_scan_by_rssi_desc(out, n);
+    return n;
+}
+
+int sk_wifi_scan(sk_wifi_scan_entry_t *out, int max)
+{
+    if (!out || max <= 0) return 0;
+
+    // First sweep: short dwell (120 ms/channel) keeps the whole pass ~1.5 s
+    // so a live BLE link never hits its supervision timeout.
+    int n = scan_sweep(out, max, 120);
+    if (n > 0) return n;
+
+    // Field failure mode this retry exists for: the FIRST scan of a session
+    // routinely comes back empty — under BLE/WiFi software coex the short
+    // dwell can miss every beacon, and during the boot auto-connect window
+    // esp_wifi_scan_start returns ESP_ERR_WIFI_STATE outright. Both are
+    // transient, so one retry after a breather (with a longer dwell for a
+    // better hit rate) turns "first scan shows no networks" into a reliable
+    // result while staying bounded (~1.5 s + ~2.5 s worst case).
+    SK_LOG_W("wifi", "scan.retry", "first_sweep=%d", n);
+    vTaskDelay(pdMS_TO_TICKS(400));
+    n = scan_sweep(out, max, 200);
+    if (n <= 0) {
+        SK_LOG_W("wifi", "scan.empty", "found=0 (after retry)");
+        return 0;
+    }
     return n;
 }
 
