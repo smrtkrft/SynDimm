@@ -26,7 +26,13 @@
 static const char *TAG = "sk_tcp";
 
 static sk_transport_tcp_cfg_t s_cfg = {
-    .port = 8080, .max_clients = 2, .task_priority = 4, .task_stack = 6144,
+    // task_stack: the client task runs the ENTIRE dispatch chain inline —
+    // ECDH X25519 pairing, HMAC-SHA256 handshake, JSON parse, command
+    // handler, JSON response build. 6144 overflowed in the field on
+    // SynDimm C6 ("Stack protection fault" in sk_tcp_cli0, ~10 s reboot
+    // loop while SKAPP reconnects over TCP). 10240 gives the deepest
+    // chain (pairing + signed dispatch) real headroom.
+    .port = 8080, .max_clients = 2, .task_priority = 4, .task_stack = 10240,
 };
 
 #define CLIENT_MAX 4
