@@ -377,6 +377,11 @@ void app_main(void)
     // Auth abonelikleri cihaz bileşenlerinden önce kurulmalı ki boot
     // sırasındaki bir olay düşmesin.
     ESP_ERROR_CHECK(sk_auth_init());
+    // Sabit güç: cihaz sahiplenilene (ilk bond) kadar HER ZAMAN eşleşilebilir
+    // kalsın — bond yokken pairing penceresi timeout'ta kapanmaz, BLE kapanmaz
+    // (kusursuz/her-zaman-stabil eşleşme). İlk bond oluşunca normal on-demand
+    // pencere davranışına döner. (Piller cihazlarda bu çağrılmaz.)
+    sk_auth_set_stay_open_when_bondless(true);
     ESP_ERROR_CHECK(sk_passphrase_init());
 
     // Kablosuz yığın.

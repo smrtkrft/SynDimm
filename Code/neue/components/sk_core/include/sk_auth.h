@@ -106,6 +106,12 @@ sk_auth_pairing_state_t sk_auth_pairing_state(void);
 esp_err_t sk_auth_open_pairing_mode(uint32_t timeout_sec);
 void      sk_auth_close_pairing_mode(const char *reason);
 
+// Opt-in: sabit-güçlü cihazlar (SynDimm gibi) açılışta `true` çağırır. Cihazın
+// HİÇ bond'u yokken pairing penceresi timeout'ta kapanmaz (yeniden kurulur) →
+// cihaz sahiplenilene kadar her zaman eşleşilebilir kalır. İlk bond oluşunca
+// normal (on-demand pencere) davranışa döner. Piller (BF) çağırmaz → değişmez.
+void      sk_auth_set_stay_open_when_bondless(bool enable);
+
 // -- ECDH (first pairing) --------------------------------------------------
 //
 // Flow:

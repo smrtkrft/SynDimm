@@ -45,6 +45,11 @@ static uint8_t                  s_active_key[SK_AUTH_TOKEN_LEN];
 static bool                     s_active_set   = false;
 static sk_auth_pairing_state_t  s_pairing      = SK_AUTH_PAIRING_IDLE;
 static esp_timer_handle_t       s_pair_timer   = NULL;
+// Sabit-güçlü cihazlar (ör. SynDimm) için opt-in: cihazın HİÇ bond'u yokken
+// pairing penceresi timeout'ta KAPANMAZ, yeniden kurulur → cihaz sahiplenilene
+// kadar her zaman keşfedilebilir/eşleşilebilir kalır ("kusursuz eşleşme").
+// İlk bond oluşunca normal davranışa döner. Piller (BF) varsayılan false bırakır.
+static bool                     s_stay_open_bondless = false;
 static SemaphoreHandle_t        s_mtx          = NULL;
 
 // Pending bond — used during the pairing-time passphrase flow. ECDH has
@@ -445,10 +450,26 @@ esp_err_t sk_auth_rotate_token(void)
 static void pair_timeout_cb(void *arg)
 {
     (void)arg;
+    // Sahipsiz (bond yok) + opt-in: pencereyi kapatma, yeniden kur — cihaz
+    // her zaman eşleşilebilir kalsın. pairing_state OPEN kaldığından BLE
+    // advertising de açık kalır (idle_timer_cb OPEN'da durdurmaz). İlk bond
+    // oluşunca bu dal atlanır ve pencere normal kapanır.
+    if (s_stay_open_bondless && !sk_auth_has_bond()) {
+        if (s_pair_timer) {
+            esp_timer_start_once(s_pair_timer, (uint64_t)60 * 1000000ULL);
+        }
+        return;
+    }
     sk_auth_close_pairing_mode("timeout");
 }
 
 sk_auth_pairing_state_t sk_auth_pairing_state(void) { return s_pairing; }
+
+// Sabit-güçlü cihazların açılışta çağırdığı opt-in (bkz. s_stay_open_bondless).
+void sk_auth_set_stay_open_when_bondless(bool enable)
+{
+    s_stay_open_bondless = enable;
+}
 
 esp_err_t sk_auth_open_pairing_mode(uint32_t timeout_sec)
 {

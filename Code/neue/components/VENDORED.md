@@ -17,6 +17,16 @@
 
 ## Uygulanan senkron diff'leri
 
+- **2026-07-03 · `sk_core/{src/sk_auth.c,include/sk_auth.h}` — "bond yokken pencere
+  açık kal" opt-in'i.** Bond'suz cihaz 60 sn boot pencere timeout'unda BLE'yi
+  kapatıyordu → cihaz görünmez oluyordu ("SKAPP bağlanmıyor" kök nedeni). Eklendi:
+  `sk_auth_set_stay_open_when_bondless(bool)` + `pair_timeout_cb`'de bond yoksa +
+  opt-in ise pencereyi yeniden kur (kapatma) → `pairing_state` OPEN kalır →
+  `idle_timer_cb` advertising'i açık tutar. SynDimm (sabit güç) `main.c`'de
+  `true` çağırır; piller (BF) çağırmaz → davranışı değişmez. **BF'de yapıldı+
+  derlendi** (sk_auth.c.obj OK), SynDimm'e kopyalandı, gerçek cihazda doğrulandı
+  (65 sn sonra pairing.status=open, ble=advertising).
+
 - **2026-07-03 · `sk_core/src/sk_wifi.c` — WiFi reconnect üstel backoff.**
   Eskiden `WIFI_EVENT_STA_DISCONNECTED` `esp_wifi_connect()`'i ANINDA çağırıyordu
   (AP uzun süre kapalıysa sürekli re-assoc = boşa akım). Eklendi: `s_reconnect_timer`
