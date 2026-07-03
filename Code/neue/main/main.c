@@ -437,7 +437,16 @@ void app_main(void)
     // Kilitli karar [Pairing]: her açılışta 60 sn eşleşme penceresi.
     // BLE transport init'ten SONRA çağrılır ki 'par' reklamı hemen başlasın.
     // Pencere dolunca kurulu bağlantılar kopmaz; bond'lular her an bağlanır.
-    ESP_ERROR_CHECK(sk_auth_open_pairing_mode(SD_PAIRING_BOOT_WINDOW_SEC));
+    //
+    // DONANIM BULGUSU (2026-07-03): bond YOKKEN sk_auth_init pencereyi ZATEN
+    // otomatik açıyor; bu ikinci çağrı ESP_ERR_INVALID_STATE dönüyordu ve
+    // ESP_ERROR_CHECK abort ediyordu → her fabrika-taze cihaz boot-loop.
+    // Pencerenin zaten açık olması bizim için BAŞARI: hoş gör, sadece
+    // beklenmeyen gerçek hatalarda abort et.
+    esp_err_t pair_err = sk_auth_open_pairing_mode(SD_PAIRING_BOOT_WINDOW_SEC);
+    if (pair_err != ESP_OK && pair_err != ESP_ERR_INVALID_STATE) {
+        ESP_ERROR_CHECK(pair_err);
+    }
 
     ESP_LOGI(TAG, "SynDimm neue up — id=%s fw=%s%s",
              sk_identity_get(), SK_FW_VERSION,
