@@ -12,10 +12,21 @@
 > satırlarıyla verilir. Sınıflandırma: **VAR** = mevcut koruma yeterli,
 > **EKSİK** = gerçek açık/öneri, **POTANSİYEL** = koşullu/latent risk.
 >
-> Durum (2026-07-03): Analiz tamamlandı. Kod düzeltmeleri DONANIM
-> OTURUMUNDA uygulanacak — TWDT panic ve reconnect backoff gibi değişiklikler
-> çalışma-zamanı davranışını değiştirir ve gerçek cihazda doğrulanmalıdır
-> (host testleri yalnız saf mantık modüllerini kapsar).
+> Durum (2026-07-03): Analiz + **kod düzeltmeleri UYGULANDI** (ESP-IDF build
+> yeşil + 6/6 host testi yeşil). Uygulananlar: **P0** TWDT PANIC + sd_cmd/sd_input
+> abonelik/besleme (hang→reset→recovery), **P1** eng_run_test refcount (timeout
+> leak kapatıldı), **P1** periyodik heap/health izleme + task high-water,
+> **P1** crash-loop eşiği 120sn→10dk (yavaş loop kaçağı daraltıldı), **P1** WiFi
+> üstel backoff (sk_wifi.c, BF-first), **P2** execute_test captured free + sürücü
+> kilit-sözleşmesi uyarısı, **P4** brownout/pwr-glitch recovery sayacından hariç.
+> Commit'ler: SynDimm 2bd8ae7 + (bu commit), BF sk_wifi.c ayrı commit.
+> **ÇALIŞMA-ZAMANI DAVRANIŞI DONANIMDA DOĞRULANMALI:** TWDT'nin gerçekten reset
+> atması (kasıtlı deadlock + `debug.panic`), backoff zamanlaması, refcount
+> concurrency'si ve heap.low eşiği host'ta test edilemez (host testleri yalnız
+> saf mantık modüllerini kapsar). Uygulanmayanlar (bilinçli): D1 trailing
+> debounce (mevcut 0.5 Hz zaten güvenli ~1 yıl), D2 aktif-slot debounce, D3
+> fragmantasyon (önce B4 ile izle), C3 çekirdek-yol 2. kademe recovery — hepsi
+> düşük öncelik / gözlem-önce.
 
 ---
 

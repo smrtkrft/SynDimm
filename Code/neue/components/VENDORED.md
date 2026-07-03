@@ -14,3 +14,13 @@
    BF derlenip gerçek donanımda test edilir, SONRA buraya aynı diff uygulanır.
 3. Upstream'den senkron alırken bu dosyadaki sürüm+tarih güncellenir.
 4. Sürüm kaynağı: her komponentin `idf_component.yml` dosyasındaki `version` alanı.
+
+## Uygulanan senkron diff'leri
+
+- **2026-07-03 · `sk_core/src/sk_wifi.c` — WiFi reconnect üstel backoff.**
+  Eskiden `WIFI_EVENT_STA_DISCONNECTED` `esp_wifi_connect()`'i ANINDA çağırıyordu
+  (AP uzun süre kapalıysa sürekli re-assoc = boşa akım). Eklendi: `s_reconnect_timer`
+  + `schedule_reconnect()` (1s,2s,4s,…,30s tavan; GOT_IP ile otomatik sıfırlanır).
+  **BF'de yapıldı ve derlendi** (kaynak-of-truth), buraya birebir kopyalandı; SynDimm
+  tam build yeşil. NOT: `LebensSpur/Neue/sk_core/src/sk_wifi.c` sürümü ıraksamış
+  (farklı md5) — aynı backoff'u oraya körlemesine kopyalamayın, elle merge gerekir.

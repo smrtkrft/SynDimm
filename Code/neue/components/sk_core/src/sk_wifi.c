@@ -73,6 +73,33 @@ static void resume_ble_after_wifi_cb(void *arg) {
     sk_event_bus_publish("ble.resume.after-wifi", NULL);
 }
 
+// Reconnect backoff (uzun-çalışma stabilitesi). Eskiden STA_DISCONNECTED
+// esp_wifi_connect()'i ANINDA çağırıyordu; AP aylarca kapalıysa bu sürekli
+// re-assoc = boşa radyo/akım. Şimdi üstel backoff: 1s,2s,4s,...,cap. GOT_IP
+// s_consecutive_fails'i sıfırladığından backoff da otomatik sıfırlanır.
+#define RECONNECT_BASE_MS  1000
+#define RECONNECT_MAX_MS   30000
+static esp_timer_handle_t  s_reconnect_timer = NULL;
+static void reconnect_cb(void *arg) {
+    (void)arg;
+    // Zamanlanmış andan bu yana niyet değişmiş olabilir (kullanıcı stop
+    // dedi, ya da SSID silindi) — tekrar denemeden önce kontrol et.
+    if (s_disconnect_pinned || !s_ssid[0]) return;
+    esp_wifi_connect();
+}
+static void schedule_reconnect(void) {
+    uint32_t shift = (s_consecutive_fails > 0) ? (uint32_t)(s_consecutive_fails - 1) : 0;
+    if (shift > 5) shift = 5;                         // 1<<5 = 32× taban tavanı
+    uint64_t delay_ms = (uint64_t)RECONNECT_BASE_MS << shift;
+    if (delay_ms > RECONNECT_MAX_MS) delay_ms = RECONNECT_MAX_MS;
+    if (s_reconnect_timer) {
+        esp_timer_stop(s_reconnect_timer);
+        esp_timer_start_once(s_reconnect_timer, delay_ms * 1000);
+    } else {
+        esp_wifi_connect();                           // timer yoksa eski davranış
+    }
+}
+
 // Forward decls — definitions live below (after the public API and CLI handlers).
 static void wifi_register_cli_and_hooks(void);
 static esp_err_t connect_slot(int slot);   // 1=primary, 2=backup; ESP_ERR_NOT_FOUND if empty
@@ -162,7 +189,8 @@ static void wifi_event_cb(void *arg, esp_event_base_t base, int32_t id, void *da
                          "ssid=%s reason=%d attempts=%d",
                          s_ssid, reason, s_consecutive_fails);
             }
-            esp_wifi_connect();
+            // Üstel backoff'lu yeniden bağlanma (eski: anında esp_wifi_connect).
+            schedule_reconnect();
             break;
         }
         }
@@ -207,6 +235,14 @@ esp_err_t sk_wifi_init(void)
         .name     = "sk_wifi_resume_ble",
     };
     esp_timer_create(&resume_args, &s_resume_ble_timer);
+
+    // Reconnect backoff timer (uzun-çalışma stabilitesi). Bir kez kurulur;
+    // STA_DISCONNECTED handler'ı schedule_reconnect ile tetikler.
+    const esp_timer_create_args_t reconnect_args = {
+        .callback = reconnect_cb,
+        .name     = "sk_wifi_reconnect",
+    };
+    esp_timer_create(&reconnect_args, &s_reconnect_timer);
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());

@@ -4,7 +4,12 @@
 // Plan §C1'in vücut bulmuş hali; ARCHITECTURE.md §3 kuralları geçerli:
 //   * Sürücü kendi task'ını AÇMAZ — motor tek task'tan çağırır.
 //   * Donanıma/ağa/NVS'e doğrudan erişim YOK — yalnız sd_ctx_* servisleri.
-//   * on_input BLOKLAMAZ; ağ işi sd_ctx_send ile kuyruğa gider.
+//   * on_input/test/on_timeout BLOKLAMAZ; ağ işi sd_ctx_send ile kuyruğa gider.
+//     KRİTİK: bu geri çağrılar motor kilidi (eng_lock) ALTINDA koşar. Bloke
+//     eden bir geri çağrı TÜM motoru dondurur (input+cmd+CLI+wifi hepsi
+//     eng_lock bekler) → hang. vTaskDelay / _perform / sendto / nvs_commit
+//     ASLA burada çağrılmaz. (Uzun-çalışma stabilitesi: sd_cmd/sd_input artık
+//     Task WDT'ye abone; yine de bloke etme — WDT son çare reset'tir.)
 //   * Yeni sürücü = bu struct'ı doldur + sd_behavior_register. Mevcut koda
 //     dokunulmaz (registry deseni = "kütüphane" kilitli kararı).
 // Plandan sapmalar (gerekçeli):
