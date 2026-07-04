@@ -13,7 +13,7 @@ void sd_seq_input_init(sd_seq_input_t *in)
 static void commit_segment(sd_seq_input_t *in)
 {
     if (in->cur_dir == 0 || in->cur_ticks == 0) return;
-    if (in->cur.len >= SD_SEQ_MAX_SEGMENTS || in->cur_ticks > SD_SEQ_MAX_TICKS) {
+    if (in->cur.len >= SD_SEQ_MAX_SET_SEGMENTS || in->cur_ticks > SD_SEQ_MAX_TICKS) {
         in->overflow = true;
         return;
     }
@@ -37,6 +37,17 @@ void sd_seq_input_button(sd_seq_input_t *in)
 {
     if (!in->active) return;
     commit_segment(in);
+}
+
+bool sd_seq_input_overflowed(const sd_seq_input_t *in)
+{
+    if (!in->active) return false;
+    if (in->overflow) return true;
+    // Bekleyen segment finalize'daki commit'te sınırı aşacaksa deneme
+    // şimdiden taşmış demektir (7. segment yön-değişimiyle değil idle
+    // timeout'la kapanırken bayrak ancak finalize içinde set edilirdi).
+    return in->cur_dir != 0 && in->cur_ticks > 0 &&
+           in->cur.len >= SD_SEQ_MAX_SET_SEGMENTS;
 }
 
 bool sd_seq_input_finalize(sd_seq_input_t *in, sd_seq_t *out)

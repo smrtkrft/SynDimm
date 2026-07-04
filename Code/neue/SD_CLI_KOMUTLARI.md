@@ -181,9 +181,12 @@ tasmota_dimmer, wiz_bulb).
  "endpoint":"<api.endpoint.add ile tanımlı ad>",
  "lockout":{"enabled":true,"after":5,"seconds":30}}
 ```
-Dizi grameri: `L`/`R` + tur (1-99), `-` ile ayrılır, sona isteğe bağlı `B`
-(buton); en çok 16 segment. **Diziler sırdır**: hiçbir çıktıda görünmez,
-`config.export`'ta da `"safe":"omitted"`. `safe.*` yalnız kimlikli kanalda.
+Dizi grameri: `L`/`R` + tur (1-50), `-` ile ayrılır, sona isteğe bağlı `B`
+(buton); **3-6 segment** (ürün kuralı — kısası `sequence_too_short`, uzunu
+`sequence_too_long` reddedilir; parser eski kayıtlar için 16'ya kadar okur ama
+`safe.set` 6'da keser). Cihazda 6+ segmentlik kilit açma denemeleri BAŞARISIZ
+sayılır ve lockout sayacını besler. **Kayıtlı diziler sırdır**: hiçbir çıktıda
+görünmez, `config.export`'ta da `"safe":"omitted"`. `safe.*` yalnız kimlikli kanalda.
 
 ### prefs — özellik anahtarları
 | Komut | Kullanım | Bayrak | Açıklama |

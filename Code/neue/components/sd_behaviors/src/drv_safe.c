@@ -27,6 +27,12 @@ static const char *TAG = "drv_safe";
 
 #define SAFE_IDLE_COMMIT_MS  2000   // eski safe_lock.c:39 ile aynı
 
+// Taşan giriş (7+ segment / 51+ tik) BAŞARISIZ deneme sayılır ve lockout
+// sayacını besler. 0 yapılırsa eski davranışa döner: taşma sessizce düşer —
+// ama o zaman saldırgan hep-uzun denemelerle lockout'u hiç tetiklemeden
+// sınırsız yoklama yapabilir (ürün kararı 2026-07-03: sayılır).
+#define SAFE_OVERFLOW_COUNTS_AS_FAIL 1
+
 typedef struct {
     sd_seq_input_t in;
     int            fail_count;
@@ -89,13 +95,20 @@ static esp_err_t safe_on_timeout(sd_behavior_ctx_t *ctx)
     safe_priv_t *p = sd_ctx_priv(ctx);
     if (!p) return ESP_ERR_INVALID_STATE;
 
+    // finalize giriş durumunu sıfırlar — taşma durumunu ÖNCE yakala
+    // (bekleyen 7. segment dahil; bkz. sd_seq_input_overflowed).
+    bool overflowed = sd_seq_input_overflowed(&p->in);
+
     sd_seq_t attempt;
-    if (!sd_seq_input_finalize(&p->in, &attempt)) {
-        return ESP_OK;   // giriş yok ya da taşma — deneme sayılmaz
+    bool have_attempt = sd_seq_input_finalize(&p->in, &attempt);
+    if (!have_attempt && !(SAFE_OVERFLOW_COUNTS_AS_FAIL && overflowed)) {
+        return ESP_OK;   // hiç giriş yoktu — deneme sayılmaz
     }
 
     char endpoint[SD_SAFE_ENDPOINT_MAX + 1];
-    int n = sd_safe_store_match(&attempt, endpoint, sizeof(endpoint));
+    int n = have_attempt
+        ? sd_safe_store_match(&attempt, endpoint, sizeof(endpoint))
+        : 0;   // taşan deneme: eşleşme denenmez, doğrudan başarısız yolu
     char evt[64];
 
     if (n > 0) {
@@ -112,7 +125,7 @@ static esp_err_t safe_on_timeout(sd_behavior_ctx_t *ctx)
         return ESP_OK;
     }
 
-    // Yanlış dizi.
+    // Yanlış dizi ya da taşan (6+ segment) deneme.
     p->fail_count++;
     snprintf(evt, sizeof(evt), "{\"n\":0,\"ok\":false}");
     sd_ctx_publish(ctx, "safe.triggered", evt);

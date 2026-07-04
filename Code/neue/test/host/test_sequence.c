@@ -94,14 +94,44 @@ static void test_input_overflow(void)
 {
     sd_seq_input_t in;
     sd_seq_t out;
-    // 17 segment → taşma → finalize false (eşleşme denenmez).
+    // Ürün kuralı: canlı giriş tavanı 6 segment (SD_SEQ_MAX_SET_SEGMENTS).
+    // 7. segment → taşma → finalize false; drv_safe taşmayı BAŞARISIZ
+    // deneme sayar (overflow bayrağı finalize'dan önce okunur).
+    _Static_assert(SD_SEQ_MAX_SET_SEGMENTS == 6, "urun kurali: sifre 3-6 eleman");
+    // 7 segment (sonuncusu bekleyen) → overflowed helper'ı finalize ÖNCESİ
+    // true döner (drv_safe'in okuduğu an); finalize false.
     sd_seq_input_init(&in);
-    for (int i = 0; i < 17; i++) rot(&in, (i % 2) ? -1 : +1, 1);
+    for (int i = 0; i < 7; i++) rot(&in, (i % 2) ? -1 : +1, 1);
+    assert(sd_seq_input_overflowed(&in));
     assert(!sd_seq_input_finalize(&in, &out));
+    // 8 segment (7.si yön-değişimiyle commit edilmiş) → ham bayrak da setli.
+    sd_seq_input_init(&in);
+    for (int i = 0; i < 8; i++) rot(&in, (i % 2) ? -1 : +1, 1);
+    assert(in.overflow && sd_seq_input_overflowed(&in));
+    assert(!sd_seq_input_finalize(&in, &out));
+    // 6 segment hâlâ geçerli (tavanın kendisi taşma değildir).
+    sd_seq_input_init(&in);
+    for (int i = 0; i < 6; i++) rot(&in, (i % 2) ? -1 : +1, 1);
+    assert(!sd_seq_input_overflowed(&in));
+    assert(sd_seq_input_finalize(&in, &out) && out.len == 6);
     // Tek segmentte 51 tik → taşma.
     sd_seq_input_init(&in);
     rot(&in, +1, 51);
+    assert(sd_seq_input_overflowed(&in));
     assert(!sd_seq_input_finalize(&in, &out));
+    // Giriş yokken taşma yok (drv_safe "hiç giriş yoktu" ayrımı).
+    sd_seq_input_init(&in);
+    assert(!sd_seq_input_overflowed(&in));
+}
+
+static void test_parse_bound_stays_16(void)
+{
+    // Parser sınırı bilinçli olarak 16'da kalır: NVS'te kalmış eski uzun
+    // kayıtlar parse edilebilir (boot-load'da safe_store reddeder), 17 red.
+    sd_seq_t s;
+    assert(sd_seq_parse("R1-L1-R1-L1-R1-L1-R1", &s) && s.len == 7);   // 7 segment
+    assert(sd_seq_parse(
+        "R1-L1-R1-L1-R1-L1-R1-L1-R1-L1-R1-L1-R1-L1-R1-L1", &s) && s.len == 16);
 }
 
 static void test_equal(void)
@@ -125,6 +155,7 @@ int main(void)
     test_input_button_commit();
     test_input_empty_and_reset();
     test_input_overflow();
+    test_parse_bound_stays_16();
     test_equal();
     printf("test_sequence: OK\n");
     return 0;

@@ -224,7 +224,7 @@ kalmak kaydıyla slot küçültme değil `sdkconfig` optimizasyonu.
   kurulup düğmeyle kontrol ediliyor.
 - **Faz 3 — Protokol tamamlama:** UDP + MQTT yürütücüleri, `shutter` + `mqtt_remote`
   sürücüleri, profil kataloğu v2 taşıma (eski 6 profil).
-- **Faz 4 — Safe:** `safe` sürücüsü (dizi eşleyici portu) + sk_api entegrasyonu + lockout.
+- **Faz 4 — Safe:** `safe` sürücüsü (dizi eşleyici portu) + sk_api entegrasyonu + lockout. Ürün kuralı (2026-07-03): dizi 3-6 segment, segment 1-50 tık; canlı girişte 6+ segment taşma sayılır ve deneme BAŞARISIZ kaydedilir (lockout beslenir).
 - **Faz 5 — SKAPP:** BLE/TCP secure session + eşleşme, device.manifest ekranları
   (knob dashboard ekran türü SKAPP tarafında renderer ister — SKAPP iş kalemi!),
   event aboneliği, endpoint editörü.

@@ -17,9 +17,14 @@
 extern "C" {
 #endif
 
-#define SD_SEQ_MAX_SEGMENTS  16
-#define SD_SEQ_MAX_TICKS     50    // segment başına (SAFE_MODE kılavuzu)
-#define SD_SEQ_MIN_SEGMENTS  3     // safe.set doğrulaması (kılavuz: en az 3)
+#define SD_SEQ_MAX_SEGMENTS      16  // parser/dizi sınırı (geriye-uyum: eski kayıtlar okunur)
+#define SD_SEQ_MAX_TICKS         50  // segment başına (SAFE_MODE kılavuzu)
+#define SD_SEQ_MIN_SEGMENTS      3   // safe.set doğrulaması (kılavuz: en az 3)
+// Yeni dizi OLUŞTURMA ve CANLI GİRİŞ tavanı (ürün kuralı: şifre 3-6 eleman).
+// Parser sınırı (16) bilinçli olarak ayrı tutulur: NVS'te kalmış eski uzun
+// kayıtlar parse edilebilir kalır ama safe.set reddeder, canlı giriş 7.
+// segmentte overflow işaretler (deneme başarısız sayılır — drv_safe.c).
+#define SD_SEQ_MAX_SET_SEGMENTS  6
 
 typedef struct {
     int8_t seg[SD_SEQ_MAX_SEGMENTS];
@@ -43,6 +48,11 @@ void sd_seq_input_rotate(sd_seq_input_t *in, int dir);
 
 // Buton: aktif segmenti kapatır (eski :290-303).
 void sd_seq_input_button(sd_seq_input_t *in);
+
+// Deneme taşmış mı? Bekleyen (henüz commit edilmemiş) segment dahil —
+// finalize'dan ÖNCE çağrılmalı; finalize durumu sıfırladığı için bayrak
+// orada kaybolur. drv_safe taşan denemeyi başarısız saymak için kullanır.
+bool sd_seq_input_overflowed(const sd_seq_input_t *in);
 
 // Zaman aşımı: kalan segmenti kapatır; sonuç out'a yazılır.
 // Dönüş false = giriş yoktu ya da taşma oldu (eşleşme denenmez).

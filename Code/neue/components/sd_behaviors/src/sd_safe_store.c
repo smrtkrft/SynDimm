@@ -60,6 +60,13 @@ static bool entry_from_json(const cJSON *root, safe_entry_t *e,
         *reason = "sequence_too_short";   // kılavuz: en az 3 segment
         return false;
     }
+    if (e->seq.len > SD_SEQ_MAX_SET_SEGMENTS) {
+        // Ürün kuralı: şifre 3-6 eleman. Bu yol boot-load'da da çalışır —
+        // NVS'te kalmış 7-16 segmentlik eski kayıtlar yüklenmez (canlı giriş
+        // 6'da kesildiği için zaten girilemezlerdi; grandfather bilinçli yok).
+        *reason = "sequence_too_long";
+        return false;
+    }
 
     *reason = "bad_endpoint";
     const char *ep = sd_jsonu_str(root, "endpoint");
