@@ -1,0 +1,26 @@
+{
+  "v": 2,
+  "id": "wled",
+  "name": "WLED",
+  "manufacturer": "WLED",
+  "protocol": "http",
+  "port": 80,
+  "behaviors": ["dimmer"],
+  "commands": {
+    "set_value": {
+      "method": "POST",
+      "path": "/json/state",
+      "body": "{\"on\":true,\"bri\":{value}}",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "map_min": 0,
+      "map_max": 255
+    },
+    "toggle": {
+      "method": "POST",
+      "path": "/json/state",
+      "body": "{\"on\":\"t\"}"
+    }
+  }
+}

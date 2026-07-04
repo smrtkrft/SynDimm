@@ -1,0 +1,22 @@
+{
+  "v": 2,
+  "id": "mqtt_cover",
+  "name": "Generic MQTT Cover — set topic prefix",
+  "manufacturer": "Generic",
+  "protocol": "mqtt",
+  "prefix": "cover1",
+  "behaviors": ["shutter"],
+  "commands": {
+    "set_value": {
+      "topic": "{prefix}/position/set",
+      "payload": "{value}",
+      "min": 0,
+      "max": 100,
+      "step": 5
+    },
+    "stop": {
+      "topic": "{prefix}/cmd",
+      "payload": "STOP"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "v": 2,
+  "id": "shelly_dim_g2",
+  "name": "Shelly Plus/Pro Dimmer (Gen2+)",
+  "manufacturer": "Shelly",
+  "protocol": "http",
+  "port": 80,
+  "behaviors": ["dimmer"],
+  "commands": {
+    "set_value": {
+      "method": "GET",
+      "path": "/rpc/Light.Set?id=0&on=true&brightness={value}",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    "toggle": {
+      "method": "GET",
+      "path": "/rpc/Light.Toggle?id=0"
+    }
+  }
+}

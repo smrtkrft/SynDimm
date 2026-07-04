@@ -165,8 +165,7 @@ broker'ı binding'e özgü: `params.broker` > profil broker alanı.
 ```
 `id` en fazla 15 karakter (NVS anahtar sınırı). Şablon belirteçleri:
 `{value}` `{toggle}` `{device_id}` `{auth_key}` `{prefix}` `{state}`.
-Repo kataloğu: `profiles/*.json` (hue_bulb, shelly25_cover, shelly_dimmer2,
-tasmota_dimmer, wiz_bulb).
+Repo kataloğu: `profiles/*.json` — dimmer: hue_bulb, mqtt_dimmer, shelly_dim_g2, shelly_dimmer2, tasmota_dimhttp, tasmota_dimmer, wiz_bulb, wled · shutter: mqtt_cover, shelly25_cover, shelly_cover_g2, tasmota_shutter.
 
 ### safe — dizi kilidi → webhook tetikleyici
 | Komut | Kullanım | Bayrak | Açıklama |

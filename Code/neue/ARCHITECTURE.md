@@ -223,7 +223,7 @@ kalmak kaydıyla slot küçültme değil `sdkconfig` optimizasyonu.
   sd_proto HTTP + coalescing + mode.test. Çıktı: gerçek bir Shelly/Hue USB CLI'dan
   kurulup düğmeyle kontrol ediliyor.
 - **Faz 3 — Protokol tamamlama:** UDP + MQTT yürütücüleri, `shutter` + `mqtt_remote`
-  sürücüleri, profil kataloğu v2 taşıma (eski 6 profil).
+  sürücüleri, profil kataloğu v2 taşıma. Katalog 2026-07-03'te 12 profile genişledi (dimmer: shelly_dimmer2, shelly_dim_g2, tasmota_dimmer, tasmota_dimhttp, wled, wiz_bulb, hue_bulb, mqtt_dimmer · shutter: shelly25_cover, shelly_cover_g2, tasmota_shutter, mqtt_cover); kaynak-of-truth repo `profiles/`, SKAPP aynı seti asset olarak paketler.
 - **Faz 4 — Safe:** `safe` sürücüsü (dizi eşleyici portu) + sk_api entegrasyonu + lockout. Ürün kuralı (2026-07-03): dizi 3-6 segment, segment 1-50 tık; canlı girişte 6+ segment taşma sayılır ve deneme BAŞARISIZ kaydedilir (lockout beslenir).
 - **Faz 5 — SKAPP:** BLE/TCP secure session + eşleşme, device.manifest ekranları
   (knob dashboard ekran türü SKAPP tarafında renderer ister — SKAPP iş kalemi!),
