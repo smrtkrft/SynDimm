@@ -39,7 +39,6 @@ esp_err_t sd_proto_execute(const cJSON *profile_root, const cJSON *cmd_node,
 
 // --- MQTT oturumu (tek esp-mqtt istemcisi, refcount; V1 TEK broker) --------
 // İkinci farklı URI → ESP_ERR_NOT_SUPPORTED (slot error'a düşer).
-// T3.2'ye kadar stub: ESP_ERR_NOT_SUPPORTED döner.
 esp_err_t sd_proto_mqtt_acquire(const char *broker_uri, const char *client_id);
 void      sd_proto_mqtt_release(void);
 bool      sd_proto_mqtt_is_connected(void);

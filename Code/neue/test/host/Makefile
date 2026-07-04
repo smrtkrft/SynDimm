@@ -7,7 +7,7 @@ CFLAGS  := -std=c11 -Wall -Wextra -Werror -g
 
 COMP    := ../../components
 
-TESTS   := test_quiet test_gesture test_template test_binding test_offline test_sequence
+TESTS   := test_quiet test_gesture test_template test_binding test_offline test_sequence test_profiles
 
 all: $(TESTS)
 
@@ -26,6 +26,10 @@ test_template: test_template.c $(COMP)/sd_proto/src/sd_template.c
 test_binding: test_binding.c $(COMP)/sd_mode_engine/src/sd_binding.c \
               $(COMP)/sd_util/src/sd_util_str.c vendor/cJSON.c
 	$(CC) $(CFLAGS) -Wno-error -I$(COMP)/sd_mode_engine/include -I$(COMP)/sd_util/include -Ivendor -o $@ $^
+
+test_profiles: test_profiles.c $(COMP)/sd_profiles/src/sd_profiles_validate.c \
+              $(COMP)/sd_util/src/sd_util_str.c vendor/cJSON.c
+	$(CC) $(CFLAGS) -Wno-error -I$(COMP)/sd_profiles/include -I$(COMP)/sd_util/include -Ivendor -o $@ $^
 
 test_offline: test_offline.c $(COMP)/sd_mode_engine/src/sd_offline.c
 	$(CC) $(CFLAGS) -I$(COMP)/sd_mode_engine/include -o $@ $^
