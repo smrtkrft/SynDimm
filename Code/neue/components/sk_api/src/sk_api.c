@@ -210,6 +210,8 @@ static bool peer_id_is_zero(const uint8_t peer_id[SK_API_PEER_ID_LEN])
 // Schema v2: same per-slot keys as v1 plus two extra:
 //   n<slot>kind  (u8)  — 0=USER, 1=SYSTEM. Missing → 0 (USER, legacy).
 //   n<slot>pid   (blob, 16 B) — SYSTEM only. Missing → all zeros (USER).
+//   n<slot>pl    (str) — stored payload template, USER only. Missing → ""
+//                        (send runtime payload verbatim — legacy behavior).
 //
 // Slots are addressed by a single linear index across both buckets:
 //   linear = slot               (USER, 0..USER_SLOTS-1)
@@ -236,7 +238,7 @@ static void slot_keys(int linear,
                       char k_name[16], char k_url[16], char k_tok[16],
                       char k_type[16], char k_meth[16], char k_auth[16],
                       char k_hdr[16],  char k_ct[16],   char k_dly[16],
-                      char k_kind[16], char k_pid[16])
+                      char k_kind[16], char k_pid[16],  char k_pl[16])
 {
     // %hhu + (unsigned char) cast bounds linear to <= 3 digits, so GCC
     // format-truncation analysis is happy with the 16-byte NVS-key buffers.
@@ -251,6 +253,7 @@ static void slot_keys(int linear,
     snprintf(k_dly,  16, "n%hhudly",  (unsigned char)linear);
     snprintf(k_kind, 16, "n%hhukind", (unsigned char)linear);
     snprintf(k_pid,  16, "n%hhupid",  (unsigned char)linear);
+    snprintf(k_pl,   16, "n%hhupl",   (unsigned char)linear);
 }
 
 static void save_linear(int linear, const sk_api_endpoint_t *e)
@@ -258,9 +261,10 @@ static void save_linear(int linear, const sk_api_endpoint_t *e)
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
     char k_name[16], k_url[16], k_tok[16], k_type[16], k_meth[16],
-         k_auth[16], k_hdr[16], k_ct[16], k_dly[16], k_kind[16], k_pid[16];
+         k_auth[16], k_hdr[16], k_ct[16], k_dly[16], k_kind[16], k_pid[16],
+         k_pl[16];
     slot_keys(linear, k_name, k_url, k_tok, k_type, k_meth, k_auth,
-              k_hdr, k_ct, k_dly, k_kind, k_pid);
+              k_hdr, k_ct, k_dly, k_kind, k_pid, k_pl);
     if (e->in_use) {
         nvs_set_str(h, k_name, e->name);
         nvs_set_str(h, k_url,  e->url);
@@ -277,13 +281,18 @@ static void save_linear(int linear, const sk_api_endpoint_t *e)
         } else {
             nvs_erase_key(h, k_pid);
         }
+        if (e->kind == SK_API_KIND_USER && e->payload[0] != '\0') {
+            nvs_set_str(h, k_pl, e->payload);
+        } else {
+            nvs_erase_key(h, k_pl);
+        }
     } else {
         nvs_erase_key(h, k_name); nvs_erase_key(h, k_url);
         nvs_erase_key(h, k_tok);  nvs_erase_key(h, k_type);
         nvs_erase_key(h, k_meth); nvs_erase_key(h, k_auth);
         nvs_erase_key(h, k_hdr);  nvs_erase_key(h, k_ct);
         nvs_erase_key(h, k_dly);  nvs_erase_key(h, k_kind);
-        nvs_erase_key(h, k_pid);
+        nvs_erase_key(h, k_pid);  nvs_erase_key(h, k_pl);
     }
     nvs_commit(h);
     nvs_close(h);
@@ -307,9 +316,10 @@ static void load_all_slots(void)
 
     for (int linear = 0; linear < SK_API_MAX_ENDPOINTS; linear++) {
         char k_name[16], k_url[16], k_tok[16], k_type[16], k_meth[16],
-             k_auth[16], k_hdr[16], k_ct[16], k_dly[16], k_kind[16], k_pid[16];
+             k_auth[16], k_hdr[16], k_ct[16], k_dly[16], k_kind[16], k_pid[16],
+             k_pl[16];
         slot_keys(linear, k_name, k_url, k_tok, k_type, k_meth, k_auth,
-                  k_hdr, k_ct, k_dly, k_kind, k_pid);
+                  k_hdr, k_ct, k_dly, k_kind, k_pid, k_pl);
 
         sk_api_endpoint_t scratch = {0};
         size_t name_sz = sizeof(scratch.name);
@@ -323,6 +333,8 @@ static void load_all_slots(void)
         nvs_get_str(h, k_hdr, scratch.header_name, &hdr_sz);
         size_t ct_sz = sizeof(scratch.content_type);
         nvs_get_str(h, k_ct, scratch.content_type, &ct_sz);
+        size_t pl_sz = sizeof(scratch.payload);
+        nvs_get_str(h, k_pl, scratch.payload, &pl_sz);   // missing key → ""
 
         uint8_t v = 0;
         nvs_get_u8(h, k_type, &v); scratch.type   = (sk_api_type_t)v;
@@ -460,6 +472,7 @@ esp_err_t sk_api_endpoint_add(const sk_api_endpoint_cfg_t *cfg)
     if (cfg->token       && strlen(cfg->token)        > SK_API_TOKEN_MAX)  return ESP_ERR_INVALID_ARG;
     if (cfg->header_name && strlen(cfg->header_name)  > SK_API_HEADER_MAX) return ESP_ERR_INVALID_ARG;
     if (cfg->content_type&& strlen(cfg->content_type) > SK_API_CT_MAX)     return ESP_ERR_INVALID_ARG;
+    if (cfg->payload     && strlen(cfg->payload)      > SK_API_EP_PAYLOAD_MAX) return ESP_ERR_INVALID_ARG;
 
     // USER kind name conflict guard: a SYSTEM slot may already occupy the
     // same human-visible name (deterministic skapp-<peer> label). Reject
@@ -489,6 +502,7 @@ esp_err_t sk_api_endpoint_add(const sk_api_endpoint_cfg_t *cfg)
     if (cfg->token)        strcpy(e->token,        cfg->token);
     if (cfg->header_name)  strcpy(e->header_name,  cfg->header_name);
     if (cfg->content_type) strcpy(e->content_type, cfg->content_type);
+    if (cfg->payload)      strcpy(e->payload,      cfg->payload);
     if (e->content_type[0] == '\0') strcpy(e->content_type, DEFAULT_CT);
     e->type   = cfg->type;
     e->method = cfg->method;   // 0 = POST default
@@ -832,6 +846,101 @@ static bool method_has_body(esp_http_client_method_t m)
     return m == HTTP_METHOD_POST || m == HTTP_METHOD_PUT || m == HTTP_METHOD_DELETE;
 }
 
+// -- Stored payload template rendering ---------------------------------------
+//
+// USER endpoints may carry a stored body template (`ep->payload`). At fire
+// time `{key}` tokens are replaced with top-level scalars pulled out of the
+// runtime payload the trigger passed to sk_api_send(). The special token
+// `{payload}` inlines the whole runtime JSON. Unknown tokens stay literal so
+// a misspelled key is visible downstream instead of silently vanishing.
+// Same lightweight strstr extraction the device engines use — sk_api has no
+// cJSON dependency.
+
+static size_t append_bytes(char *out, size_t off, size_t cap,
+                           const char *s, size_t n)
+{
+    if (off + 1 >= cap) return off;
+    size_t room = cap - off - 1;
+    if (n > room) n = room;
+    memcpy(out + off, s, n);
+    out[off + n] = '\0';
+    return off + n;
+}
+
+// Top-level scalar lookup. String values are returned without their quotes;
+// numbers/bools verbatim. Objects/arrays are rejected (not scalars).
+static bool extract_scalar(const char *json, const char *key,
+                           const char **out, size_t *out_len)
+{
+    if (!json || !json[0]) return false;
+    char pat[40];
+    int n = snprintf(pat, sizeof(pat), "\"%s\":", key);
+    if (n <= 0 || (size_t)n >= sizeof(pat)) return false;
+    const char *p = strstr(json, pat);
+    if (!p) return false;
+    p += n;
+    while (*p == ' ' || *p == '\t') p++;
+    if (*p == '"') {
+        p++;
+        const char *q = p;
+        while (*q && !(*q == '"' && q[-1] != '\\')) q++;
+        if (!*q) return false;
+        *out = p; *out_len = (size_t)(q - p);
+        return true;
+    }
+    if (*p == '{' || *p == '[') return false;
+    const char *q = p;
+    while (*q && *q != ',' && *q != '}' && *q != ']' &&
+           *q != ' ' && *q != '\n' && *q != '\r' && *q != '\t') q++;
+    if (q == p) return false;
+    *out = p; *out_len = (size_t)(q - p);
+    return true;
+}
+
+static void render_ep_payload(const char *tmpl, const char *runtime_json,
+                              char *out, size_t cap)
+{
+    size_t off = 0;
+    out[0] = '\0';
+    const char *p = tmpl;
+    while (*p) {
+        if (*p != '{') {
+            off = append_bytes(out, off, cap, p, 1);
+            p++;
+            continue;
+        }
+        // Candidate token: '{' [a-z0-9_]+ '}'. App-side double-brace
+        // placeholders are resolved before upload and never reach here.
+        const char *k = p + 1;
+        const char *e = k;
+        while (*e && ((*e >= 'a' && *e <= 'z') ||
+                      (*e >= '0' && *e <= '9') || *e == '_')) e++;
+        if (e > k && *e == '}') {
+            size_t klen = (size_t)(e - k);
+            char key[32];
+            if (klen < sizeof(key)) {
+                memcpy(key, k, klen);
+                key[klen] = '\0';
+                if (strcmp(key, "payload") == 0) {
+                    const char *rt = (runtime_json && runtime_json[0])
+                                       ? runtime_json : "{}";
+                    off = append_bytes(out, off, cap, rt, strlen(rt));
+                    p = e + 1;
+                    continue;
+                }
+                const char *val; size_t vlen;
+                if (extract_scalar(runtime_json, key, &val, &vlen)) {
+                    off = append_bytes(out, off, cap, val, vlen);
+                    p = e + 1;
+                    continue;
+                }
+            }
+        }
+        off = append_bytes(out, off, cap, p, 1);   // literal '{'
+        p++;
+    }
+}
+
 // Compact reason classifier for SK_LOG endpoint.fail messages. Keeps the
 // vocabulary small so log scrapers can grep: timeout / dns / tls / network /
 // http_<status> / config.
@@ -867,7 +976,18 @@ static void send_worker(void *arg)
     char  body[1024];
     char  auth_scratch[288];
 
-    sk_err_t berr = build_request(&job->ep, job->payload,
+    // USER slots with a stored template render it against the runtime
+    // payload; empty template = legacy pass-through. SYSTEM slots never
+    // carry a template (bond-signed listener contract stays byte-stable).
+    char rendered[1024];
+    const char *effective_payload = job->payload;
+    if (job->ep.kind == SK_API_KIND_USER && job->ep.payload[0] != '\0') {
+        render_ep_payload(job->ep.payload, job->payload,
+                          rendered, sizeof(rendered));
+        effective_payload = rendered;
+    }
+
+    sk_err_t berr = build_request(&job->ep, effective_payload,
                                   url, sizeof(url),
                                   body, sizeof(body));
     if (berr != SK_OK) {
@@ -1126,6 +1246,29 @@ static void mask_token(const char *tok, char *out, size_t cap)
     snprintf(out, cap, "%.4s...%s", tok, tok + n - 4);
 }
 
+// Minimal JSON string escaper for the stored payload template. Quotes and
+// backslashes are escaped; \n \r \t become their two-char escapes; any
+// other control char (<0x20) is dropped. Worst-case growth is 2x, which
+// sizes the caller's scratch buffer.
+static void json_escape(const char *in, char *out, size_t cap)
+{
+    size_t off = 0;
+    for (const char *p = in; *p && off + 2 < cap; p++) {
+        unsigned char c = (unsigned char)*p;
+        switch (c) {
+        case '"':  out[off++] = '\\'; out[off++] = '"';  break;
+        case '\\': out[off++] = '\\'; out[off++] = '\\'; break;
+        case '\n': out[off++] = '\\'; out[off++] = 'n';  break;
+        case '\r': out[off++] = '\\'; out[off++] = 'r';  break;
+        case '\t': out[off++] = '\\'; out[off++] = 't';  break;
+        default:
+            if (c >= 0x20) out[off++] = (char)c;
+            break;
+        }
+    }
+    out[off] = '\0';
+}
+
 // Append one endpoint as JSON to the buffer at *off. Returns updated
 // offset; truncation is silent (off may exceed BUF, in which case the
 // caller still emits the closing bracket and the result is invalid JSON
@@ -1146,31 +1289,44 @@ static size_t append_ep_json(char *buf, size_t off, size_t cap,
     if (ep->kind == SK_API_KIND_SYSTEM) {
         bytes_to_hex(ep->peer_id, SK_API_PEER_ID_LEN, pid_hex);
     }
-    return off + snprintf(buf + off, cap - off,
-                          "%s{\"slot\":%d,\"kind\":\"%s\",\"name\":\"%s\","
-                          "\"type\":\"%s\",\"url\":\"%s\","
-                          "\"method\":\"%s\",\"auth\":\"%s\",\"header\":\"%s\","
-                          "\"content_type\":\"%s\",\"masked_token\":\"%s\","
-                          "\"delay_after_sec\":%u,\"peer_id\":\"%s\"}",
-                          first ? "" : ",",
-                          slot,
-                          sk_api_kind_str(ep->kind),
-                          ep->name,
-                          sk_api_type_str(ep->type),
-                          ep->url,
-                          sk_api_method_str(ep->method),
-                          sk_api_auth_str(ep->auth),
-                          ep->header_name,
-                          ep->content_type,
-                          masked,
-                          (unsigned)ep->delay_after_sec,
-                          pid_hex);
+    // Payload template needs escaping — unlike name/url it may legally
+    // contain quotes and backslashes. Heap scratch: worst case is every
+    // char escaped to two bytes. NULL fallback keeps the row valid (empty
+    // payload) instead of dropping the whole listing on OOM.
+    char *pl_esc = malloc(SK_API_EP_PAYLOAD_MAX * 2 + 1);
+    if (pl_esc) {
+        json_escape(ep->payload, pl_esc, SK_API_EP_PAYLOAD_MAX * 2 + 1);
+    }
+    off += snprintf(buf + off, cap - off,
+                    "%s{\"slot\":%d,\"kind\":\"%s\",\"name\":\"%s\","
+                    "\"type\":\"%s\",\"url\":\"%s\","
+                    "\"method\":\"%s\",\"auth\":\"%s\",\"header\":\"%s\","
+                    "\"content_type\":\"%s\",\"masked_token\":\"%s\","
+                    "\"payload\":\"%s\","
+                    "\"delay_after_sec\":%u,\"peer_id\":\"%s\"}",
+                    first ? "" : ",",
+                    slot,
+                    sk_api_kind_str(ep->kind),
+                    ep->name,
+                    sk_api_type_str(ep->type),
+                    ep->url,
+                    sk_api_method_str(ep->method),
+                    sk_api_auth_str(ep->auth),
+                    ep->header_name,
+                    ep->content_type,
+                    masked,
+                    pl_esc ? pl_esc : "",
+                    (unsigned)ep->delay_after_sec,
+                    pid_hex);
+    free(pl_esc);
+    return off;
 }
 
 static sk_err_t cmd_api_endpoint_list(sk_cli_ctx_t *ctx)
 {
-    // 5 USER + 8 SYSTEM slots, up to ~535 bytes each -> ~7 KB worst case.
-    enum { BUF = 8192 };
+    // 5 USER slots up to ~535 B base + ~1 KB escaped payload each, plus
+    // 8 SYSTEM slots at ~535 B -> ~12 KB worst case.
+    enum { BUF = 16384 };
     char *buf = malloc(BUF);
     if (!buf) {
         sk_cli_err(ctx, SK_ERR_INTERNAL, "{\"reason\":\"oom\"}");
@@ -1215,6 +1371,7 @@ static sk_err_t cmd_api_endpoint_add(sk_cli_ctx_t *ctx)
     const char *hdr    = sk_cli_arg_named(ctx, "header-name");
     const char *ct     = sk_cli_arg_named(ctx, "content-type");
     const char *delays = sk_cli_arg_named(ctx, "delay-after");
+    const char *payld  = sk_cli_arg_named(ctx, "payload");
 
     if (!name || !typs || !url) {
         sk_cli_err(ctx, SK_ERR_MISSING_ARG, "{\"need\":[\"name\",\"type\",\"url\"]}");
@@ -1257,6 +1414,10 @@ static sk_err_t cmd_api_endpoint_add(sk_cli_ctx_t *ctx)
         sk_cli_err(ctx, SK_ERR_MISSING_ARG, "{\"field\":\"header-name\"}");
         return SK_OK;
     }
+    if (payld && strlen(payld) > SK_API_EP_PAYLOAD_MAX) {
+        sk_cli_err(ctx, SK_ERR_INVALID_ARG, "{\"field\":\"payload\"}");
+        return SK_OK;
+    }
 
     esp_err_t err = sk_api_endpoint_add(&(sk_api_endpoint_cfg_t){
         .name             = name,
@@ -1267,6 +1428,7 @@ static sk_err_t cmd_api_endpoint_add(sk_cli_ctx_t *ctx)
         .auth             = auth,
         .header_name      = hdr,
         .content_type     = ct,
+        .payload          = payld,
         .delay_after_sec  = delay_after,
     });
     if (err == ESP_ERR_NO_MEM) { sk_cli_err(ctx, SK_ERR_INTERNAL, "{\"reason\":\"slots_full\"}"); return SK_OK; }
@@ -1525,6 +1687,7 @@ static const sk_cli_command_t s_cmds[] = {
                "[--token ...] [--method POST|GET|PUT|DELETE] "
                "[--auth none|bearer|basic|header] "
                "[--header-name X-API-Key] [--content-type application/json] "
+               "[--payload '{\"text\":\"{event} on {device}\"}'] "
                "[--delay-after <seconds 0-300>]",
       .critical = true,
       .help_block =
@@ -1540,6 +1703,14 @@ static const sk_cli_command_t s_cmds[] = {
           "  webhook_post Generic POST with --auth control\n"
           "  generic      Any method / auth / header combination\n"
           "\n"
+          "--payload stores a body template (max 512). When set, it is\n"
+          "rendered at fire time and sent INSTEAD of the trigger payload.\n"
+          "Single-brace {key} tokens pull top-level scalars out of the\n"
+          "trigger payload; {payload} inlines the whole trigger JSON;\n"
+          "unknown tokens stay literal. BF trigger tokens: {event}\n"
+          "{duration_min} {face} {device} {value1} {value2} {value3}.\n"
+          "Empty/omitted --payload keeps the legacy pass-through body.\n"
+          "\n"
           "--delay-after seconds (0-300) is wait time AFTER this endpoint\n"
           "fires, before the next one in api.chain.run.\n"
           "\n"
@@ -1548,11 +1719,12 @@ static const sk_cli_command_t s_cmds[] = {
           "  api endpoint add --name lights --type ifttt \\\n"
           "    --url focus_done --token <KEY> --confirm-token <T>\n"
           "\n"
-          "  # Generic POST with bearer auth + 5s post-fire delay\n"
+          "  # Generic POST with bearer auth + custom body template\n"
           "  api endpoint add --name ha --type webhook_post \\\n"
           "    --url https://homeassistant.local/api/services/script/focus \\\n"
           "    --auth bearer --token <ACCESS_TOKEN> \\\n"
           "    --content-type application/json --delay-after 5 \\\n"
+          "    --payload '{\"entity_id\":\"script.focus\",\"note\":\"{event}\"}' \\\n"
           "    --confirm-token <T>",
       .handler = cmd_api_endpoint_add },
 
@@ -1680,7 +1852,11 @@ esp_err_t sk_api_init(void)
     int sub;
     sk_event_bus_subscribe("device.factory-reset.requested",
                            on_factory_reset, NULL, &sub);
-    sk_capabilities_register_book("sk_api", "0.3.0");
+    // 0.5.0: per-endpoint stored payload template (--payload) + fire-time
+    // {token} rendering. SKAPP feature-detects payload support at >= 0.5.0.
+    // (0.4.0 is taken: the LS tree used it for trigclass, without payload —
+    // keep the payload threshold uniform across BF/LS/SD.)
+    sk_capabilities_register_book("sk_api", "0.5.0");
     s_initialized = true;
     ESP_LOGI(TAG,
              "outbound HTTP ready (USER slots %d, SYSTEM slots %d)",
