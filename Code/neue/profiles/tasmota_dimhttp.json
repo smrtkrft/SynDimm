@@ -1,0 +1,22 @@
+{
+  "v": 2,
+  "id": "tasmota_dimhttp",
+  "name": "Tasmota Dimmer (HTTP)",
+  "manufacturer": "Tasmota",
+  "protocol": "http",
+  "port": 80,
+  "behaviors": ["dimmer"],
+  "commands": {
+    "set_value": {
+      "method": "GET",
+      "path": "/cm?cmnd=Dimmer%20{value}",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    "toggle": {
+      "method": "GET",
+      "path": "/cm?cmnd=Power%20TOGGLE"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "v": 2,
+  "id": "tasmota_shutter",
+  "name": "Tasmota Shutter (HTTP)",
+  "manufacturer": "Tasmota",
+  "protocol": "http",
+  "port": 80,
+  "behaviors": ["shutter"],
+  "commands": {
+    "set_value": {
+      "method": "GET",
+      "path": "/cm?cmnd=ShutterPosition%20{value}",
+      "min": 0,
+      "max": 100,
+      "step": 5
+    },
+    "stop": {
+      "method": "GET",
+      "path": "/cm?cmnd=ShutterStop"
+    }
+  }
+}

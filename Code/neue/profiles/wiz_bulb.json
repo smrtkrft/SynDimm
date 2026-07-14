@@ -1,0 +1,20 @@
+{
+  "v": 2,
+  "id": "wiz_bulb",
+  "name": "WiZ Smart Bulb",
+  "manufacturer": "WiZ",
+  "protocol": "udp",
+  "port": 38899,
+  "behaviors": ["dimmer"],
+  "commands": {
+    "set_value": {
+      "packet": "{\"method\":\"setPilot\",\"params\":{\"dimming\":{value}}}",
+      "min": 10,
+      "max": 100,
+      "step": 1
+    },
+    "toggle": {
+      "packet": "{\"method\":\"setState\",\"params\":{\"state\":{toggle}}}"
+    }
+  }
+}

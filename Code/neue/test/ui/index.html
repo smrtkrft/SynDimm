@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SynDimm UI Prototipleri</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',-apple-system,sans-serif;background:#0E0D0A;color:#F5EFDE;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:14px;padding:24px}
+h1{font-size:20px;font-weight:700;letter-spacing:.5px}
+p{font-size:12px;color:rgba(245,239,222,.4);letter-spacing:2px;text-transform:uppercase;margin-bottom:18px}
+a{display:block;width:100%;max-width:420px;padding:18px 22px;border-radius:16px;
+  background:#1F1D18;color:#F5EFDE;text-decoration:none;transition:all .2s;
+  border:1px solid rgba(245,239,222,.08)}
+a:hover{border-color:#D4A017;transform:translateY(-2px)}
+a strong{display:block;font-size:15px;margin-bottom:4px}
+a strong em{font-style:normal;color:#D4A017}
+a span{font-size:12px;color:rgba(245,239,222,.55);line-height:1.5}
+.note{font-size:11px;color:rgba(245,239,222,.35);max-width:420px;text-align:center;
+  line-height:1.6;margin-top:16px;text-transform:none;letter-spacing:.3px}
+</style>
+</head>
+<body>
+<h1>SynDimm Arayüz Prototipleri</h1>
+<p>SmartKraft · Flutter öncesi HTML testleri</p>
+
+<a href="design1.html">
+  <strong>Tasarım 1 · <em>Orbital</em></strong>
+  <span>Eski GUI'nin ruhu: orbital kadran, ince dev değer, alt hap sekmeler,
+  modal ayarlar — SmartKraft paletine (krem/warm-black + hardal) çekildi.</span>
+</a>
+
+<a href="design2.html">
+  <strong>Tasarım 2 · <em>Orbital Tactile</em></strong>
+  <span>Tasarım 1 kurgusunun SKAPP dokunsal estetiğiyle dökümü: dairesel
+  neumorfik çukur kadran + pelet disk, çukur tepside mod hapları, bottom-sheet
+  ayarlar (tutamaklı), floating snackbar. Beğenilen yerleşim + doğru stil.</span>
+</a>
+
+<a href="safe.html">
+  <strong>Safe Modu · <em>5 Konsept</em></strong>
+  <span>K4 Vault Çarkı türevleri: 5 ETKİLEŞİMSİZ ambient animasyon (Nefes,
+  Mekanizma, Tarama, Derin Nefes, Olay Provası) + açıklama notları.</span>
+</a>
+
+<div class="note">Her iki prototipte: kadran sürüklenir (veya tekerlek/ok
+tuşları), tık = aç-kapa, Kasa slotunda dizi girişi + lockout simülasyonu,
+tema anahtarı, hedef offline/online simülasyonu.</div>
+</body>
+</html>

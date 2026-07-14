@@ -1,0 +1,22 @@
+{
+  "v": 2,
+  "id": "mqtt_dimmer",
+  "name": "Generic MQTT Dimmer — set topic prefix",
+  "manufacturer": "Generic",
+  "protocol": "mqtt",
+  "prefix": "light1",
+  "behaviors": ["dimmer"],
+  "commands": {
+    "set_value": {
+      "topic": "{prefix}/set",
+      "payload": "{value}",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    "toggle": {
+      "topic": "{prefix}/set",
+      "payload": "TOGGLE"
+    }
+  }
+}

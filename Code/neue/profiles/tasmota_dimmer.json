@@ -1,0 +1,23 @@
+{
+  "v": 2,
+  "id": "tasmota_dimmer",
+  "name": "Tasmota Dimmer",
+  "manufacturer": "Tasmota",
+  "protocol": "mqtt",
+  "prefix": "cmnd/tasmota_dimmer",
+  "state_prefix": "stat/tasmota_dimmer",
+  "behaviors": ["dimmer"],
+  "commands": {
+    "set_value": {
+      "topic": "{prefix}/Dimmer",
+      "payload": "{value}",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    "toggle": {
+      "topic": "{prefix}/Power",
+      "payload": "TOGGLE"
+    }
+  }
+}
