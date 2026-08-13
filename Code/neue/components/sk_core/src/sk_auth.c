@@ -405,6 +405,11 @@ esp_err_t sk_auth_clear_all(void)
     s_active_set  = false;
     s_active_slot = SK_AUTH_BOND_SLOT_INVALID;
     memset(s_active_key, 0, sizeof(s_active_key));
+    // An in-flight passphrase-gated bond must die with the rest: otherwise
+    // `ble.unpair` ("forget every paired phone") leaves a derived key in RAM
+    // that a later `pairing.passphrase.verify` would happily commit, handing
+    // back access the user just revoked.
+    pending_clear();
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
         nvs_erase_all(h);
@@ -698,7 +703,12 @@ static sk_auth_pairing_result_t handle_ecdh_exchange(cJSON *msg,
                          (unsigned)sk_passphrase_attempts_left());
         if (n > 0) writer(reply, (size_t)n, user);
         ESP_LOGI(TAG, "ECDH derived; awaiting pairing.passphrase.verify");
-        return SK_AUTH_PAIRING_OK;
+        // PENDING, NOT OK: the bond lives in RAM only until the peer proves
+        // the passphrase. Reporting OK made every transport tear the link
+        // down right after this reply (and close_pairing_mode wiped
+        // s_pending), so the peer's `pairing.passphrase.verify` had nowhere
+        // to land — passphrase-gated pairing could never complete.
+        return SK_AUTH_PAIRING_PENDING;
     }
 
     // No gate — commit immediately to the proper slot using peer_id.
@@ -743,7 +753,9 @@ static sk_auth_pairing_result_t handle_passphrase_verify(cJSON *msg,
     cJSON *plain = args ? cJSON_GetObjectItemCaseSensitive(args, "plain") : NULL;
     if (!cJSON_IsString(plain)) {
         emit_err_json(writer, user, "ERR_MISSING_ARG");
-        return SK_AUTH_PAIRING_ERR;
+        // Pending bond is still valid — a malformed line must not cost the
+        // peer the whole pairing attempt.
+        return SK_AUTH_PAIRING_PENDING;
     }
 
     uint8_t left = 0;
@@ -775,10 +787,13 @@ static sk_auth_pairing_result_t handle_passphrase_verify(cJSON *msg,
                          "\"params\":{\"attempts_left\":%u}}\n",
                          (unsigned)left);
         if (n > 0) writer(reply, (size_t)n, user);
-        // Pending stays — peer may retry within the pairing window.
-        // Lockout (left==0 + sk_passphrase published factory-reset)
-        // wipes everything via the standard event path.
-        return SK_AUTH_PAIRING_ERR;
+        // Pending stays — peer may retry within the pairing window, so the
+        // link must stay open (SKAPP re-prompts and sends another verify on
+        // the SAME connection). Once the attempts are exhausted sk_passphrase
+        // has already published the factory-reset event and s_pending is
+        // gone: report ERR so the transport tears the link down.
+        return s_pending.active ? SK_AUTH_PAIRING_PENDING
+                                : SK_AUTH_PAIRING_ERR;
     }
 
     if (err == ESP_ERR_INVALID_STATE) {
@@ -818,17 +833,25 @@ sk_auth_pairing_result_t sk_auth_pairing_dispatch_line(
         return SK_AUTH_PAIRING_NOT_OPEN;
     }
 
+    // A garbled or off-protocol line while a bond is pending (passphrase
+    // gate armed) must NOT cost the peer its whole attempt: report PENDING
+    // so the transport keeps the link open and the peer can send the real
+    // `pairing.passphrase.verify`. BLE MTU fragmentation makes stray lines
+    // a realistic occurrence, not a theoretical one.
+    const sk_auth_pairing_result_t soft_err =
+        s_pending.active ? SK_AUTH_PAIRING_PENDING : SK_AUTH_PAIRING_ERR;
+
     cJSON *msg = cJSON_Parse(line);
     if (!msg) {
         emit_err_json(writer, writer_user, "ERR_INVALID_ARG");
-        return SK_AUTH_PAIRING_ERR;
+        return soft_err;
     }
 
     cJSON *cmd = cJSON_GetObjectItemCaseSensitive(msg, "cmd");
     if (!cJSON_IsString(cmd)) {
         cJSON_Delete(msg);
         emit_err_json(writer, writer_user, "ERR_UNKNOWN_COMMAND");
-        return SK_AUTH_PAIRING_ERR;
+        return soft_err;
     }
 
     sk_auth_pairing_result_t r;
@@ -838,7 +861,7 @@ sk_auth_pairing_result_t sk_auth_pairing_dispatch_line(
         r = handle_passphrase_verify(msg, writer, writer_user);
     } else {
         emit_err_json(writer, writer_user, "ERR_UNKNOWN_COMMAND");
-        r = SK_AUTH_PAIRING_ERR;
+        r = soft_err;
     }
     cJSON_Delete(msg);
     return r;

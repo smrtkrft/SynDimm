@@ -232,10 +232,22 @@ static void pairing_handle_line(const char *line, size_t len)
     sk_auth_pairing_result_t r = sk_auth_pairing_dispatch_line(
         line, len, pairing_writer_adapter, NULL);
 
-    // Whatever the outcome, the BLE pairing connection is one-shot —
-    // we always tear it down. On OK the peer reconnects as bonded and
-    // runs the secure-session handshake; on ERR/NOT_OPEN the peer sees
-    // the JSON error and we drop them.
+    // PENDING = passphrase gate armed. The derived bond is RAM-only until
+    // the peer answers with `pairing.passphrase.verify`, which it sends on
+    // THIS connection. Tearing the link down here (the old unconditional
+    // one-shot behaviour) also ran close_pairing_mode → pending_clear, so
+    // passphrase-gated pairing could never complete on any transport.
+    // s_mode stays SKBT_CONN_PAIRING, so the follow-up line routes back
+    // here through skbt_gatt_on_cmd_rx.
+    if (r == SK_AUTH_PAIRING_PENDING) {
+        ESP_LOGI(TAG, "pairing pending (passphrase gate) — keeping link open");
+        return;
+    }
+
+    // Otherwise the BLE pairing connection is one-shot — we tear it down.
+    // On OK the peer reconnects as bonded and runs the secure-session
+    // handshake; on ERR/NOT_OPEN the peer sees the JSON error and we drop
+    // them.
     if (r == SK_AUTH_PAIRING_OK) {
         ESP_LOGI(TAG, "ECDH pairing complete; closing connection for bonded reconnect");
         pairing_finish_and_disconnect();

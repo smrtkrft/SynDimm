@@ -34,3 +34,35 @@
   **BF'de yapıldı ve derlendi** (kaynak-of-truth), buraya birebir kopyalandı; SynDimm
   tam build yeşil. NOT: `LebensSpur/Neue/sk_core/src/sk_wifi.c` sürümü ıraksamış
   (farklı md5) — aynı backoff'u oraya körlemesine kopyalamayın, elle merge gerekir.
+
+- **2026-08-13 · `sk_core/{include/sk_auth.h,src/sk_auth.c,src/sk_transport_ble_gatt.c,
+  src/sk_transport_tcp.c}` — parola-kapılı eşleşme linki erken kapanıyordu.**
+  `handle_ecdh_exchange` kapı açıkken bond'u RAM'de bekletip `need_passphrase:true`
+  dönüyor ama `SK_AUTH_PAIRING_OK` raporluyordu; taşıyıcılar OK'i "bitti" sayıp linki
+  kapatıyor, `close_pairing_mode` de bekleyen bond'u siliyordu → peer'in
+  `pairing.passphrase.verify`'ı inecek yer yok = parola kapısı açıkken eşleşme HİÇ
+  tamamlanamıyor. Eklendi: `SK_AUTH_PAIRING_PENDING` sonucu ("peer aynı link üzerinde
+  bir satır daha gönderecek, KAPATMA"); taşıyıcılar PENDING'de linki açık tutar; TCP'ye
+  `client_t.pairing_repair` bayrağı (onarım yolunda ikinci satır ecdh substring kapısına
+  takılmasın, pencere kapalıysa düzgün `ERR_PAIRING_NOT_OPEN` dönsün). Ayrıca
+  `sk_auth_clear_all` artık `pending_clear()` çağırıyor (ble.unpair sonrası RAM'de kalan
+  bekleyen bond'un commit edilip erişimi geri vermesi kapandı). **BF'de yapıldı+derlendi**,
+  SynDimm'e birebir kopyalandı, iki ağaç da build yeşil (%19 boş). Donanım doğrulaması
+  BEKLİYOR.
+
+- **2026-08-13 · `sk_core/{include/sk_auth.h,private_include/sk_secure_session.h,
+  src/sk_auth_handshake.c,src/sk_auth_hmac.c,src/sk_secure_session.c}` — imzalı-zarf
+  katmanı OTURUM KAPSAMINA alındı.** Cihaz aynı anda birden çok peer'e hizmet ediyor
+  (4 TCP client + 1 BLE) ama hem 64'lük nonce halkası hem "aktif bond" GLOBAL'di:
+  (a) her SKAPP CliSigner'ı nonce=1'den başladığı için ikinci peer'in nonce'ları
+  birincininkiyle çakışıp replay sanılıyordu; (b) ikinci peer'in handshake'i
+  `sk_auth_active_bond_clear()` ile birincinin aktif anahtarını siliyor, sonra kendi
+  slotunu aktive ediyordu → birinci peer'in komutları yanlış anahtarla doğrulanıp
+  `ERR_HMAC_INVALID` alıyordu; (c) `handshake_answer` global aktif anahtarla cevap
+  ürettiği için iki peer birbirinin cevabını alıyordu. Eklendi: `sk_auth_handshake_t`
+  içine `bond_set/bond_slot/bond_key`, `sk_auth_replay_t` (oturum başına halka),
+  `sk_auth_verify_message_with()`, `sk_auth_handshake_answer(hs, ...)`. Global
+  `sk_auth_verify_message`/`sk_auth_replay_reset` geriye-uyum için duruyor; global
+  slot aktivasyonu yalnız `bond.list.active_slot` raporlaması için korundu.
+  **BF'de yapıldı+derlendi**, SynDimm'e birebir kopyalandı (`diff -rq` temiz), iki ağaç
+  da build yeşil. Çok-eşli donanım doğrulaması BEKLİYOR.
