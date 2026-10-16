@@ -29,6 +29,7 @@
 #include "cJSON.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
+#include "freertos/task.h"
 
 static const char *TAG = "EXT_FLASH";
 
@@ -92,6 +93,52 @@ static void load_active_slot(void)
         nvs_close(nvs);
     }
     ESP_LOGI(TAG, "Aktif GUI slot: %c", s_active_slot);
+}
+
+/*
+ * LittleFS'i GUVENLI mount et.
+ * Eski davranis format_if_mount_failed=true idi: SPI hattinda gecici bir okuma
+ * hatasi (sinyal butunlugu, besleme dusmesi) Slot A'yi -> GUI + profiller +
+ * modlar -> aninda biciyordu. Simdi: 3 deneme; hala olmuyorsa bolumun basi
+ * tamamen 0xFF ise (hic yazilmamis cip) formatla, degilse DOKUNMA ve hata don.
+ */
+static esp_err_t mount_littlefs_safe(const esp_partition_t *part, const char *label,
+                                     const char *base_path)
+{
+    esp_vfs_littlefs_conf_t conf = {
+        .base_path = base_path,
+        .partition_label = label,
+        .format_if_mount_failed = false,
+        .dont_mount = false,
+    };
+    esp_err_t ret = ESP_FAIL;
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        ret = esp_vfs_littlefs_register(&conf);
+        if (ret == ESP_OK) return ESP_OK;
+        ESP_LOGW(TAG, "%s mount denemesi %d/3 basarisiz: %s", label, attempt, esp_err_to_name(ret));
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    /* Bos cip tespiti: ilk 4 KB tamamen 0xFF mi? */
+    bool blank = true;
+    uint8_t *probe = malloc(4096);
+    if (probe && part && esp_partition_read(part, 0, probe, 4096) == ESP_OK) {
+        for (int i = 0; i < 4096; i++) {
+            if (probe[i] != 0xFF) { blank = false; break; }
+        }
+    } else {
+        blank = false;
+    }
+    free(probe);
+
+    if (blank) {
+        ESP_LOGW(TAG, "%s bos gorunuyor, formatlaniyor (ilk kurulum)", label);
+        conf.format_if_mount_failed = true;
+        ret = esp_vfs_littlefs_register(&conf);
+    } else {
+        ESP_LOGE(TAG, "%s mount edilemedi ve veri iceriyor: FORMAT YAPILMADI (veri korundu)", label);
+    }
+    return ret;
 }
 
 esp_err_t ext_flash_init(void)
@@ -199,14 +246,7 @@ esp_err_t ext_flash_init(void)
     // ============================================================
     // LittleFS Mount - Slot A (GUI + Data)
     // ============================================================
-    esp_vfs_littlefs_conf_t slot_a_conf = {
-        .base_path = SLOT_A_MOUNT,
-        .partition_label = SLOT_A_LABEL,
-        .format_if_mount_failed = true,
-        .dont_mount = false,
-    };
-
-    ret = esp_vfs_littlefs_register(&slot_a_conf);
+    ret = mount_littlefs_safe(slot_a_part, SLOT_A_LABEL, SLOT_A_MOUNT);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Slot A LittleFS mount hatasi: %s", esp_err_to_name(ret));
     } else {
@@ -218,14 +258,7 @@ esp_err_t ext_flash_init(void)
     // ============================================================
     // LittleFS Mount - Slot B (GUI OTA)
     // ============================================================
-    esp_vfs_littlefs_conf_t slot_b_conf = {
-        .base_path = SLOT_B_MOUNT,
-        .partition_label = SLOT_B_LABEL,
-        .format_if_mount_failed = true,
-        .dont_mount = false,
-    };
-
-    ret = esp_vfs_littlefs_register(&slot_b_conf);
+    ret = mount_littlefs_safe(slot_b_part, SLOT_B_LABEL, SLOT_B_MOUNT);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Slot B LittleFS mount hatasi: %s", esp_err_to_name(ret));
     } else {

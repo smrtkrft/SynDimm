@@ -22,14 +22,35 @@
 #include "gui_ota.h"
 #include "fw_ota.h"
 #include "esp_ota_ops.h"
+#include "esp_app_desc.h"
 #include "encoder.h"
 #include "buzzer.h"
 #include "device_driver.h"
 #include "sys_log.h"
 #include "esp_task_wdt.h"
+#include "esp_timer.h"
 
 static const char *TAG = "MAIN";
 static char device_name[20] = {0};
+
+/* OTA geri donus korumasi: yeni firmware ancak OTA_VALID_AFTER_S saniye boyunca
+ * cokmeden calisirsa "gecerli" isaretlenir. Hemen isaretlemek korumayi anlamsiz
+ * kiliyordu (WiFi/web dogrulanmadan onaylaniyordu). Bu sure icinde panic/WDT/
+ * brownout olursa bootloader onceki surume doner. */
+#define OTA_VALID_AFTER_S   60
+
+static void ota_confirm_cb(void *arg)
+{
+    (void)arg;
+    esp_ota_img_states_t st;
+    const esp_partition_t *run = esp_ota_get_running_partition();
+    if (esp_ota_get_state_partition(run, &st) == ESP_OK && st == ESP_OTA_IMG_PENDING_VERIFY) {
+        esp_ota_mark_app_valid_cancel_rollback();
+        ESP_LOGI(TAG, "OTA: firmware %d sn stabil calisti, gecerli isaretlendi", OTA_VALID_AFTER_S);
+        sys_log_write("INFO", "ota", "Firmware %s dogrulandi (%d sn stabil)",
+                      esp_app_get_description()->version, OTA_VALID_AFTER_S);
+    }
+}
 
 /* Encoder + Buzzer periyodik guncelleme task'i */
 static bool s_mode_change_active = false;
@@ -242,8 +263,16 @@ void app_main(void)
     // Input task - encoder yoklama + buzzer guncelleme
     xTaskCreate(input_task, "input_task", 4096, NULL, 5, NULL);
 
-    // OTA rollback korumasi: basarili boot'u onayla
-    esp_ota_mark_app_valid_cancel_rollback();
+    // OTA rollback korumasi: onay OTA_VALID_AFTER_S sn sonra (ota_confirm_cb)
+    {
+        const esp_timer_create_args_t ta = { .callback = ota_confirm_cb, .name = "ota_ok" };
+        esp_timer_handle_t t = NULL;
+        if (esp_timer_create(&ta, &t) == ESP_OK) {
+            esp_timer_start_once(t, (uint64_t)OTA_VALID_AFTER_S * 1000000ULL);
+        } else {
+            esp_ota_mark_app_valid_cancel_rollback();   // zamanlayici yoksa eski davranis
+        }
+    }
 
     // Flash ozet bilgisi
     {
