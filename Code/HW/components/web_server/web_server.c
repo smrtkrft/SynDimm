@@ -285,16 +285,42 @@ static auth_session_t *auth_session_create(void)
     return victim;
 }
 
+/* Cookie basligindan sd_sess token'ini al. Baslik uzunlugu sinirsiz (ayni IP'de
+ * baska servislerin cerezleri olabilir): dinamik tampon; "sd_sess=" yalnizca
+ * baslangicta veya "; " sonrasinda eslesir. */
+static bool auth_cookie_token(httpd_req_t *req, char tok[AUTH_TOKEN_LEN + 1])
+{
+    tok[0] = '\0';
+    size_t len = httpd_req_get_hdr_value_len(req, "Cookie");
+    if (len == 0 || len > 4096) return false;
+    char *hdr = malloc(len + 1);
+    if (!hdr) return false;
+    bool found = false;
+    if (httpd_req_get_hdr_value_str(req, "Cookie", hdr, len + 1) == ESP_OK) {
+        const char *p = hdr;
+        while ((p = strstr(p, "sd_sess=")) != NULL) {
+            if (p == hdr || (p >= hdr + 2 && p[-1] == ' ' && p[-2] == ';') || p[-1] == ';') {
+                strncpy(tok, p + 8, AUTH_TOKEN_LEN);
+                tok[AUTH_TOKEN_LEN] = '\0';
+                found = true;
+                break;
+            }
+            p += 8;
+        }
+    }
+    free(hdr);
+    return found;
+}
+
 /* Istekte gecerli oturum var mi? Cerez "sd_sess" veya "X-Auth-Token" basligi */
 static bool auth_request_ok(httpd_req_t *req)
 {
     char tok[AUTH_TOKEN_LEN + 1] = {0};
-    char hdr[256];
+    char hdr[64];
     if (httpd_req_get_hdr_value_str(req, "X-Auth-Token", hdr, sizeof(hdr)) == ESP_OK) {
         strncpy(tok, hdr, AUTH_TOKEN_LEN);
-    } else if (httpd_req_get_hdr_value_str(req, "Cookie", hdr, sizeof(hdr)) == ESP_OK) {
-        const char *c = strstr(hdr, "sd_sess=");
-        if (c) strncpy(tok, c + 8, AUTH_TOKEN_LEN);
+    } else {
+        auth_cookie_token(req, tok);
     }
     if (strlen(tok) != AUTH_TOKEN_LEN) return false;
 
@@ -333,10 +359,13 @@ static esp_err_t auth_gate_handler(httpd_req_t *req)
 static int read_body(httpd_req_t *req, char *buf, size_t size)
 {
     if (req->content_len <= 0 || req->content_len >= size) return -1;
-    int total = 0;
+    int total = 0, timeouts = 0;
     while (total < (int)req->content_len) {
         int r = httpd_req_recv(req, buf + total, req->content_len - total);
-        if (r <= 0) { if (r == HTTPD_SOCK_ERR_TIMEOUT) continue; return -1; }
+        if (r <= 0) {
+            if (r == HTTPD_SOCK_ERR_TIMEOUT && ++timeouts < 3) continue;  /* veri gondermeyen istemci httpd'yi kilitlemesin */
+            return -1;
+        }
         total += r;
     }
     buf[total] = '\0';
@@ -415,11 +444,8 @@ static esp_err_t api_auth_login_handler(httpd_req_t *req)
 // POST /api/auth/logout
 static esp_err_t api_auth_logout_handler(httpd_req_t *req)
 {
-    char hdr[256], tok[AUTH_TOKEN_LEN + 1] = {0};
-    if (httpd_req_get_hdr_value_str(req, "Cookie", hdr, sizeof(hdr)) == ESP_OK) {
-        const char *c = strstr(hdr, "sd_sess=");
-        if (c) strncpy(tok, c + 8, AUTH_TOKEN_LEN);
-    }
+    char tok[AUTH_TOKEN_LEN + 1] = {0};
+    auth_cookie_token(req, tok);
     for (int i = 0; i < AUTH_MAX_SESSIONS; i++) {
         if (s_sessions[i].token[0] && ct_equal(s_sessions[i].token, tok, AUTH_TOKEN_LEN)) {
             s_sessions[i].token[0] = '\0';
@@ -576,16 +602,24 @@ static bool static_path_allowed(const char *p)
     return false;
 }
 
+static bool client_accepts_gzip(httpd_req_t *req)
+{
+    char ae[128];
+    if (httpd_req_get_hdr_value_str(req, "Accept-Encoding", ae, sizeof(ae)) != ESP_OK) return false;
+    return strstr(ae, "gzip") != NULL;
+}
+
 static esp_err_t serve_static_path(httpd_req_t *req, const char *clean_path)
 {
     if (!static_path_allowed(clean_path)) {
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Dosya bulunamadi");
         return ESP_FAIL;
     }
+    bool gz_ok = client_accepts_gzip(req);   /* curl/eski istemciler: duz dosya varsa o */
     if (ext_flash_is_slot_a_mounted() || ext_flash_is_slot_b_mounted()) {
         char gz_path[140];
         snprintf(gz_path, sizeof(gz_path), "%s.gz", clean_path);
-        if (ext_flash_active_get_file_size(gz_path) > 0) {
+        if (gz_ok && ext_flash_active_get_file_size(gz_path) > 0) {
             set_static_headers(req, clean_path, true);
             return send_active_slot_file_chunked(req, gz_path);
         }
@@ -961,11 +995,11 @@ static esp_err_t api_modes_post_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Bellek yetersiz");
         return ESP_FAIL;
     }
-    int total = 0;
+    int total = 0, timeouts = 0;
     while (total < (int)req->content_len) {
         int r = httpd_req_recv(req, buf + total, req->content_len - total);
         if (r <= 0) {
-            if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
+            if (r == HTTPD_SOCK_ERR_TIMEOUT && ++timeouts < 3) continue;
             free(buf);
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Govde alinamadi");
             return ESP_FAIL;
@@ -1766,7 +1800,9 @@ static esp_err_t api_profiles_list_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    device_driver_list_profiles(mode, json_out, 4096);
+    if (device_driver_list_profiles(mode, json_out, 4096) != ESP_OK) {
+        strcpy(json_out, "[]");   /* gecersiz mod veya bellek: bos liste */
+    }
 
     httpd_resp_set_type(req, "application/json");
     esp_err_t ret = httpd_resp_send(req, json_out, strlen(json_out));
@@ -2175,7 +2211,7 @@ static const route_t s_routes[] = {
     { "/api/reset/config", HTTP_GET, api_reset_config_get_handler, true },
     { "/api/reset/config", HTTP_POST, api_reset_config_save_handler, true },
     { "/api/reset/generate", HTTP_POST, api_reset_generate_handler, true },
-    { "/api/reset", HTTP_GET, api_reset_handler, true },
+    { "/api/reset", HTTP_GET, api_reset_handler, false },   /* kendi API anahtari ile korunur (dis otomasyon) */
     { "/api/gui-ota/info", HTTP_GET, api_gui_ota_info_handler, true },
     { "/api/gui-ota/start", HTTP_POST, api_gui_ota_start_handler, true },
     { "/api/gui-ota/status", HTTP_GET, api_gui_ota_status_handler, true },

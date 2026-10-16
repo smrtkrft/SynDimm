@@ -19,6 +19,8 @@
 #include "esp_littlefs.h"
 #include "driver/spi_common.h"
 #include "driver/spi_master.h"
+#include "driver/gpio.h"
+#include "esp_rom_sys.h"
 #include "esp_flash.h"
 #include "esp_flash_spi_init.h"
 #include "nvs_flash.h"
@@ -36,10 +38,17 @@ static const char *TAG = "EXT_FLASH";
 
 // SPI Pin tanimlamalari
 #define EXT_FLASH_SPI_HOST   SPI2_HOST
-#define PIN_CS               21   // D3 = GPIO21
-#define PIN_MISO             0    // D0 = GPIO0
-#define PIN_MOSI             22   // D4 = GPIO22
-#define PIN_SCLK             16   // D6 = GPIO16
+/* Varsayilan pinler (XIAO ESP32-C6: D3, D0, D4, D6). Gercek eslesme NVS'den
+ * ("ext_flash" ad alani) yuklenir; cip yanit vermezse 24 rol kombinasyonu taranir. */
+#define PIN_CS_DEFAULT       21   // D3 = GPIO21
+#define PIN_MISO_DEFAULT     0    // D0 = GPIO0
+#define PIN_MOSI_DEFAULT     22   // D4 = GPIO22
+#define PIN_SCLK_DEFAULT     16   // D6 = GPIO16
+
+static int PIN_CS   = PIN_CS_DEFAULT;
+static int PIN_MISO = PIN_MISO_DEFAULT;
+static int PIN_MOSI = PIN_MOSI_DEFAULT;
+static int PIN_SCLK = PIN_SCLK_DEFAULT;
 
 // ============================================================
 // Partition Haritasi (8MB aktif + kalan yedek; cip boyutu calisma zamaninda okunur)
@@ -142,9 +151,112 @@ static esp_err_t mount_littlefs_safe(const esp_partition_t *part, const char *la
     return ret;
 }
 
+/* Verilen pinlerle bus'i ac, cipi resetle (0xAB,0x66,0x99), JEDEC ID oku, bus'i kapat.
+ * esp_flash surucusu kullanilmaz: bus temiz kalir, tekrar tekrar cagrilabilir. */
+static bool raw_jedec_id(int cs, int miso, int mosi, int sclk, uint8_t id[3])
+{
+    id[0] = id[1] = id[2] = 0;
+    spi_bus_config_t bus = { .mosi_io_num = mosi, .miso_io_num = miso, .sclk_io_num = sclk,
+                             .quadwp_io_num = -1, .quadhd_io_num = -1, .max_transfer_sz = 64 };
+    esp_err_t e = spi_bus_initialize(EXT_FLASH_SPI_HOST, &bus, SPI_DMA_DISABLED);
+    if (e != ESP_OK) { ESP_LOGW(TAG, "raw: bus init %s", esp_err_to_name(e)); return false; }
+    spi_device_interface_config_t dcfg = { .clock_speed_hz = 1000000, .mode = 0, .spics_io_num = cs, .queue_size = 1 };
+    spi_device_handle_t dev = NULL;
+    bool ok = false;
+    e = spi_bus_add_device(EXT_FLASH_SPI_HOST, &dcfg, &dev);
+    if (e != ESP_OK) ESP_LOGW(TAG, "raw: add device %s", esp_err_to_name(e));
+    if (e == ESP_OK) {
+        const uint8_t seq[] = { 0xAB, 0x66, 0x99 };
+        for (size_t i = 0; i < sizeof(seq); i++) {
+            spi_transaction_t tr = { .length = 8, .tx_buffer = &seq[i] };
+            spi_device_polling_transmit(dev, &tr);
+            esp_rom_delay_us(100);
+        }
+        esp_rom_delay_us(2000);   /* tRST; vTaskDelay(2) 100 Hz tick'te 0 olurdu */
+        uint8_t tx[4] = { 0x9F, 0, 0, 0 }, rx[4] = { 0 };
+        spi_transaction_t tr = { .length = 32, .tx_buffer = tx, .rx_buffer = rx };
+        e = spi_device_polling_transmit(dev, &tr);
+        if (e == ESP_OK) {
+            id[0] = rx[1]; id[1] = rx[2]; id[2] = rx[3];
+            ok = true;
+        } else {
+            ESP_LOGW(TAG, "raw: transmit %s", esp_err_to_name(e));
+        }
+        spi_bus_remove_device(dev);
+    }
+    e = spi_bus_free(EXT_FLASH_SPI_HOST);
+    if (e != ESP_OK) ESP_LOGW(TAG, "raw: bus free %s", esp_err_to_name(e));
+    return ok;
+}
+
+static bool jedec_valid(const uint8_t id[3])
+{
+    bool all0 = (id[0] == 0 && id[1] == 0 && id[2] == 0);
+    bool allf = (id[0] == 0xFF && id[1] == 0xFF && id[2] == 0xFF);
+    return !all0 && !allf && id[0] != 0 && id[0] != 0xFF;
+}
+
+static void load_pins_from_nvs(void)
+{
+    nvs_handle_t nvs;
+    if (nvs_open("ext_flash", NVS_READONLY, &nvs) != ESP_OK) return;
+    uint8_t v;
+    if (nvs_get_u8(nvs, "cs", &v) == ESP_OK)   PIN_CS = v;
+    if (nvs_get_u8(nvs, "miso", &v) == ESP_OK) PIN_MISO = v;
+    if (nvs_get_u8(nvs, "mosi", &v) == ESP_OK) PIN_MOSI = v;
+    if (nvs_get_u8(nvs, "sclk", &v) == ESP_OK) PIN_SCLK = v;
+    nvs_close(nvs);
+}
+
+static void save_pins_to_nvs(void)
+{
+    nvs_handle_t nvs;
+    if (nvs_open("ext_flash", NVS_READWRITE, &nvs) != ESP_OK) return;
+    nvs_set_u8(nvs, "cs", PIN_CS); nvs_set_u8(nvs, "miso", PIN_MISO);
+    nvs_set_u8(nvs, "mosi", PIN_MOSI); nvs_set_u8(nvs, "sclk", PIN_SCLK);
+    nvs_commit(nvs);
+    nvs_close(nvs);
+}
+
+/* Dort pinin 24 rol kombinasyonunu tara; gecerli JEDEC ID veren ilkini sec. */
+static bool probe_pin_roles(void)
+{
+    const int pins[4] = { PIN_CS, PIN_MISO, PIN_MOSI, PIN_SCLK };
+    static const int perm[24][4] = {
+        {0,1,2,3},{0,1,3,2},{0,2,1,3},{0,2,3,1},{0,3,1,2},{0,3,2,1},
+        {1,0,2,3},{1,0,3,2},{1,2,0,3},{1,2,3,0},{1,3,0,2},{1,3,2,0},
+        {2,0,1,3},{2,0,3,1},{2,1,0,3},{2,1,3,0},{2,3,0,1},{2,3,1,0},
+        {3,0,1,2},{3,0,2,1},{3,1,0,2},{3,1,2,0},{3,2,0,1},{3,2,1,0} };
+    ESP_LOGW(TAG, "Pin rolleri taraniyor (%d, %d, %d, %d)...", pins[0], pins[1], pins[2], pins[3]);
+    for (int i = 0; i < 24; i++) {
+        int cs = pins[perm[i][0]], miso = pins[perm[i][1]], mosi = pins[perm[i][2]], sclk = pins[perm[i][3]];
+        uint8_t id[3];
+        if (raw_jedec_id(cs, miso, mosi, sclk, id) && jedec_valid(id)) {
+            ESP_LOGW(TAG, "BULUNDU: CS=%d MISO=%d MOSI=%d SCLK=%d -> JEDEC %02X %02X %02X",
+                     cs, miso, mosi, sclk, id[0], id[1], id[2]);
+            PIN_CS = cs; PIN_MISO = miso; PIN_MOSI = mosi; PIN_SCLK = sclk;
+            save_pins_to_nvs();
+            return true;
+        }
+    }
+    ESP_LOGE(TAG, "Hicbir pin kombinasyonunda cip yanit vermedi: besleme (3.3V/GND) veya cip arizali");
+    return false;
+}
+
 esp_err_t ext_flash_init(void)
 {
     ESP_LOGI(TAG, "Harici flash baslatiliyor...");
+    load_pins_from_nvs();
+
+    /* On kontrol: ham JEDEC ID. Gecersizse pin rollerini tara. */
+    {
+        uint8_t id[3];
+        raw_jedec_id(PIN_CS, PIN_MISO, PIN_MOSI, PIN_SCLK, id);
+        ESP_LOGI(TAG, "Ham JEDEC ID (1 MHz): %02X %02X %02X", id[0], id[1], id[2]);
+        if (!jedec_valid(id) && !probe_pin_roles()) {
+            return ESP_ERR_INVALID_RESPONSE;
+        }
+    }
     ESP_LOGI(TAG, "Pinler: CS=GPIO%d, MISO=GPIO%d, MOSI=GPIO%d, SCLK=GPIO%d",
              PIN_CS, PIN_MISO, PIN_MOSI, PIN_SCLK);
 
@@ -163,6 +275,9 @@ esp_err_t ext_flash_init(void)
         ESP_LOGE(TAG, "SPI bus baslatilamadi: %s", esp_err_to_name(ret));
         return ret;
     }
+
+    gpio_set_direction(PIN_CS, GPIO_MODE_OUTPUT);
+    gpio_set_level(PIN_CS, 1);
 
     // Harici flash chip konfigurasyonu
     // NOT: MX25L25645G, DIO modunda >6 byte yazma bozuluyor (sinyal butunlugu)
@@ -192,24 +307,6 @@ esp_err_t ext_flash_init(void)
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Flash init hatasi: %s (cip yanit vermiyor: baglanti/besleme/cip kontrol edin)",
                  esp_err_to_name(ret));
-        /* Tani: ham JEDEC ID (0x9F). FF FF FF = MISO bosta/cip yok, 00 00 00 = besleme/kisa devre */
-        spi_bus_remove_flash_device(s_ext_flash);
-        s_ext_flash = NULL;
-        spi_device_interface_config_t dcfg = {
-            .clock_speed_hz = 1 * 1000 * 1000,
-            .mode = 0,
-            .spics_io_num = PIN_CS,
-            .queue_size = 1,
-        };
-        spi_device_handle_t dev = NULL;
-        if (spi_bus_add_device(EXT_FLASH_SPI_HOST, &dcfg, &dev) == ESP_OK) {
-            uint8_t tx[4] = { 0x9F, 0, 0, 0 }, rx[4] = { 0 };
-            spi_transaction_t tr = { .length = 32, .tx_buffer = tx, .rx_buffer = rx };
-            if (spi_device_polling_transmit(dev, &tr) == ESP_OK) {
-                ESP_LOGE(TAG, "Tani JEDEC ID (1 MHz, 0x9F): %02X %02X %02X", rx[1], rx[2], rx[3]);
-            }
-            spi_bus_remove_device(dev);
-        }
         return ret;
     }
 
@@ -869,17 +966,26 @@ static bool needs_update(void)
     buf[len] = '\0';
     fclose(f);
 
-    ESP_LOGI(TAG, "Slot A config.json: %s", buf);
-    ESP_LOGI(TAG, "Beklenen versiyon: " WEB_FILES_VERSION);
-
-    // Versiyonu ara (bosluklu veya bosluksuz formati destekle)
-    char *ver = strstr(buf, WEB_FILES_VERSION);
-    if (ver == NULL) {
-        ESP_LOGI(TAG, "Versiyon uyusmuyor, guncelleme gerekli");
-        return true;
+    /* Slot A'daki surum gomuluden ESKIYSE yaz. "Esit degilse yaz" kurali GUI OTA ile
+     * indirilen daha yeni arayuzu bir sonraki acilista siliyordu. */
+    char slot_ver[24] = {0};
+    cJSON *root = cJSON_Parse(buf);
+    if (root) {
+        cJSON *v = cJSON_GetObjectItem(root, "version");
+        if (v && cJSON_IsString(v)) strncpy(slot_ver, v->valuestring, sizeof(slot_ver) - 1);
+        cJSON_Delete(root);
     }
+    ESP_LOGI(TAG, "Slot A GUI surumu: %s, gomulu: %s", slot_ver[0] ? slot_ver : "?", WEB_FILES_VERSION);
+    if (!slot_ver[0]) return true;
 
-    ESP_LOGI(TAG, "Versiyon eslesti, guncelleme gerekli degil");
+    int a[3] = {0}, b[3] = {0};
+    sscanf(slot_ver, "%d.%d.%d", &a[0], &a[1], &a[2]);
+    sscanf(WEB_FILES_VERSION, "%d.%d.%d", &b[0], &b[1], &b[2]);
+    for (int i = 0; i < 3; i++) {
+        if (b[i] > a[i]) { ESP_LOGI(TAG, "Gomulu GUI daha yeni, guncelleme gerekli"); return true; }
+        if (b[i] < a[i]) { ESP_LOGI(TAG, "Slot A GUI daha yeni (OTA), korunuyor"); return false; }
+    }
+    ESP_LOGI(TAG, "GUI surumu esit, guncelleme gerekli degil");
     return false;
 }
 

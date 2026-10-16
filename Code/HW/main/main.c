@@ -38,7 +38,9 @@ static char device_name[20] = {0};
  * brownout olursa bootloader onceki surume doner. */
 #define OTA_VALID_AFTER_S   60
 
-static void ota_confirm_cb(void *arg)
+/* Flash yazimi ve log, esp_timer gorevinde degil ayri bir goreve yapilir
+ * (timer gorevi bloklanmasin, yigini dar). */
+static void ota_confirm_task(void *arg)
 {
     (void)arg;
     esp_ota_img_states_t st;
@@ -49,6 +51,13 @@ static void ota_confirm_cb(void *arg)
         sys_log_write("INFO", "ota", "Firmware %s dogrulandi (%d sn stabil)",
                       esp_app_get_description()->version, OTA_VALID_AFTER_S);
     }
+    vTaskDelete(NULL);
+}
+
+static void ota_confirm_cb(void *arg)
+{
+    (void)arg;
+    xTaskCreate(ota_confirm_task, "ota_ok", 4096, NULL, 3, NULL);
 }
 
 /* Encoder + Buzzer periyodik guncelleme task'i */

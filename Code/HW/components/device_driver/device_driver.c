@@ -733,17 +733,22 @@ esp_err_t device_driver_set_mode(const char *mode)
 
     dd_mode_t new_mode = mode_from_str(mode);
 
+    /* Kilit sirasi HER YERDE: profile_lock -> state_lock (command_task ve
+     * load_profile ile ayni). Ters sira deadlock yapiyordu. */
+    profile_lock();
     state_lock();
     if (new_mode == s_mode) {
         state_unlock();
+        profile_unlock();
         return ESP_OK;
     }
+    bool was_mqtt = (s_proto == DD_PROTO_MQTT);
+    state_unlock();
 
-    // MQTT baglantisini kapat
-    if (s_proto == DD_PROTO_MQTT) {
-        proto_mqtt_stop();
-    }
+    // MQTT baglantisini kapat (saniyeler surebilir: state_lock disinda)
+    if (was_mqtt) proto_mqtt_stop();
 
+    state_lock();
     s_mode = new_mode;
     strncpy(s_mode_str, mode_to_str(s_mode), sizeof(s_mode_str) - 1);
 
@@ -753,6 +758,7 @@ esp_err_t device_driver_set_mode(const char *mode)
     s_state = false;
     update_status_text();
     state_unlock();
+    profile_unlock();
 
     nvs_write_str("mode", s_mode_str);
     nvs_write_str("profile", "");
@@ -1062,12 +1068,14 @@ esp_err_t device_driver_delete_profile(const char *profile_id)
         snprintf(path, sizeof(path), "/slot_a/profiles/%s/%s.json", modes[i], profile_id);
         if (ext_flash_delete_file(path) == ESP_OK) {
             ESP_LOGI(TAG, "Profil silindi: %s", path);
+            profile_lock();
             state_lock();
             if (strcmp(s_profile_id, profile_id) == 0) {
                 clear_profile();
                 s_profile_id[0] = '\0';
             }
             state_unlock();
+            profile_unlock();
             nvs_write_str("profile", "");
             return ESP_OK;
         }

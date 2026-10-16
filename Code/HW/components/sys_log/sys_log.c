@@ -151,7 +151,8 @@ static const char *wifi_mode_name(uint8_t m)
  * "akim yetersiz" yorumu yapilir. */
 static bool event_is_load_peak(uint32_t ev)
 {
-    return ev == SL_EV_AP_CLIENT_JOIN || ev == SL_EV_GUI_SERVE ||
+    /* BOOT: radyo acilisi + flash init -> acilis akim piki */
+    return ev == SL_EV_BOOT || ev == SL_EV_AP_CLIENT_JOIN || ev == SL_EV_GUI_SERVE ||
            ev == SL_EV_STA_CONNECTING || ev == SL_EV_STA_GOT_IP ||
            ev == SL_EV_OTA_FW || ev == SL_EV_OTA_GUI || ev == SL_EV_HTTP_CMD;
 }
@@ -404,15 +405,25 @@ static void analyze_previous_run_and_log(void)
         rtc_commit();
         return;
     }
-    if (prev_uptime < MIN_RUN_S) {
+    bool short_run = (prev_uptime < MIN_RUN_S);
+    if (short_run) {
         s_rtc.short_boots = short_boots + 1;
         rtc_commit();
-        ESP_LOGW(TAG, "Kisa calisma (%lu sn) loga yazilmadi, kisa acilis sayisi=%lu",
-                 (unsigned long)prev_uptime, (unsigned long)s_rtc.short_boots);
-        return;
+        /* Kisa calismalar normalde loglanmaz. Ancak neden GUC veya YAZILIM ise
+         * (acilista brownout = boot dongusu) kaydedilmezse en yaygin ariza
+         * gorunmez olur: 1., 10., 20., ... kisa acilista toplu tek satir yaz. */
+        bool serious = (strcmp(c.cat, "power") == 0 || strcmp(c.cat, "software") == 0);
+        uint32_t n = s_rtc.short_boots;
+        if (!serious || !(n == 1 || n % 10 == 0)) {
+            ESP_LOGW(TAG, "Kisa calisma (%lu sn) loga yazilmadi, kisa acilis sayisi=%lu",
+                     (unsigned long)prev_uptime, (unsigned long)n);
+            return;
+        }
+        short_boots = n;        /* kayda toplam kisa acilis sayisi girsin */
+    } else {
+        s_rtc.short_boots = 0;
+        rtc_commit();
     }
-    s_rtc.short_boots = 0;
-    rtc_commit();
 
     /* Onceki calismanin bitis zamani (biliniyorsa) */
     uint32_t end_epoch = (prev.boot_epoch > 0) ? prev.boot_epoch + prev_uptime : 0;
@@ -447,7 +458,9 @@ static void analyze_previous_run_and_log(void)
 static void monitor_task(void *arg)
 {
     (void)arg;
-    uint32_t last_ckpt = 0;
+    /* Ilk kontrol noktasi 60 sn'de (init'teki up=0 kaydini kisa surede ezer),
+     * sonra 10 dakikada bir. */
+    uint32_t last_ckpt = 60 - CKPT_INTERVAL_S;
     uint32_t last_health = 0;
 
     while (1) {

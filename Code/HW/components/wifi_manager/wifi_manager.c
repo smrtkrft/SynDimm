@@ -235,6 +235,7 @@ static void do_connect(const wifi_cred_t *cred)
 
     strncpy(s_sta_ssid, cred->ssid, sizeof(s_sta_ssid) - 1);
     s_retry_count = 0;
+    if (s_retry_timer) esp_timer_stop(s_retry_timer);   /* eski retry yeni denemenin ustune binmesin */
 
     ESP_LOGI(TAG, "Baglaniliyor: '%s' (IP:%s)",
              cred->ssid, strlen(cred->ip) > 0 ? cred->ip : "DHCP");
@@ -836,6 +837,7 @@ esp_err_t wifi_manager_connect_sta(const char *ssid, const char *password,
 
     s_trying_backup = false;
     s_retry_count = 0;
+    if (s_retry_timer) esp_timer_stop(s_retry_timer);
     stop_reconnect_task();
 
     // Mevcut STA baglantisini kes (AP etkilenmez)

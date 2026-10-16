@@ -48,6 +48,12 @@ CONFIG_ESP_BROWNOUT_DET=y
 # WiFi event handler icinde loglama/dosya yazimi var: varsayilan 2304 yigin dar
 CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
 
+# --- Konsol: USB Serial/JTAG ---
+# UART0 TX/RX = GPIO16/17 = harici flash SCLK (D6) ve buzzer (D7)! UART konsolu
+# acilista SCLK'ya log basiyordu; CS bosta oldugu icin flash cipi cop komut aliyordu.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
 # --- Log Level ---
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 CONFIG_LOG_DEFAULT_LEVEL=3
