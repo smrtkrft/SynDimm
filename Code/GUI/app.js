@@ -371,7 +371,9 @@ function toggleSettings(){
         document.querySelectorAll('[id^="sistem-detail-"]').forEach(d=>d.style.display='none');
         if(document.getElementById('sistem-main')) document.getElementById('sistem-main').style.display='';
         if(document.getElementById('info-main')) document.getElementById('info-main').style.display='';
+        if(document.getElementById('modlar-main')) document.getElementById('modlar-main').style.display='';
         subpageActive=false;updateFooterBtn();
+        loadProfileSummary();
     }
 }
 function switchTab(tabName,btn){
@@ -384,6 +386,7 @@ function switchTab(tabName,btn){
     document.querySelectorAll('[id^="sistem-detail-"]').forEach(d=>d.style.display='none');
     if(document.getElementById('sistem-main')) document.getElementById('sistem-main').style.display='';
     if(document.getElementById('info-main')) document.getElementById('info-main').style.display='';
+    if(document.getElementById('modlar-main')) document.getElementById('modlar-main').style.display='';
     subpageActive=false;updateFooterBtn();
 }
 // Modal kapanma: sadece X butonu ile
@@ -487,7 +490,7 @@ let subpageActive=false;
 
 function updateFooterBtn(){
     const btn=document.getElementById('footerCancelBtn');
-    if(btn) btn.textContent=subpageActive?t('app.back'):t('app.cancel');
+    if(btn) btn.textContent=subpageActive?t('app.back'):t('app.close');
 }
 
 /* ── Info & System ────────────────────────────────── */
@@ -782,6 +785,148 @@ function factoryReset(){
     fetch('/api/device/factory-reset',{method:'POST'}).catch(()=>{});
 }
 
+/* ── Hedef cihaz / profil ekrani ─────────────────── */
+let profState={mode:'',active:null,list:[],catalog:[],selected:null};
+function loadProfileSummary(){
+    fetch('/api/profiles/active').then(r=>r.json()).then(a=>{
+        const sub=document.getElementById('profile-card-sub');
+        if(sub) sub.textContent=a.id?((a.name||a.id)+(a.host?' @ '+a.host:'')):t('profile.none');
+    }).catch(()=>{});
+}
+function showProfileDetail(){
+    document.getElementById('modlar-main').style.display='none';
+    document.getElementById('modlar-detail-profile').style.display='block';
+    subpageActive=true;updateFooterBtn();
+    loadProfileDetail();
+}
+function hideProfileDetail(){
+    document.getElementById('modlar-detail-profile').style.display='none';
+    document.getElementById('modlar-main').style.display='block';
+    subpageActive=false;updateFooterBtn();
+    loadProfileSummary();
+}
+function loadProfileDetail(){
+    document.getElementById('prof-msg').textContent='';
+    fetch('/api/profiles/active').then(r=>r.json()).then(a=>{
+        profState.active=a;profState.mode=a.mode||'';profState.selected=a.id||null;
+        document.getElementById('prof-mode').textContent=t('modes.type_'+a.mode)||a.mode||'--';
+        document.getElementById('prof-active').textContent=a.id?(a.name||a.id):t('profile.none');
+        document.getElementById('prof-host').value=a.host||'';
+        document.getElementById('prof-devid').value=a.device_id||'';
+        document.getElementById('prof-auth').value='';
+        const isSafe=a.mode==='safe';
+        document.getElementById('prof-form').style.display=isSafe?'none':'';
+        document.getElementById('prof-safe-note').style.display=isSafe?'':'none';
+        if(isSafe) return;
+        return Promise.all([
+            fetch('/api/profiles?mode='+encodeURIComponent(a.mode)).then(r=>r.json()),
+            fetch('/api/catalog/list').then(r=>r.json())
+        ]).then(([list,cat])=>{
+            profState.list=Array.isArray(list)?list:[];
+            profState.catalog=(Array.isArray(cat)?cat:[]).filter(c=>c.mode===a.mode);
+            renderProfileLists();
+        });
+    }).catch(()=>{});
+}
+function renderProfileLists(){
+    const list=document.getElementById('prof-list');
+    const cat=document.getElementById('prof-catalog');
+    if(profState.list.length===0){
+        list.innerHTML='<div class="log-empty">'+esc(t('profile.empty'))+'</div>';
+    } else {
+        list.innerHTML=profState.list.map(p=>{
+            const isActive=profState.active&&profState.active.id===p.id;
+            const isSel=profState.selected===p.id;
+            return '<div class="prof-item'+(isSel?' active':'')+'" data-id="'+esc(p.id)+'">'+
+                '<div class="prof-info"><strong>'+esc(p.name||p.id)+'</strong>'+
+                '<span>'+esc([p.manufacturer,p.protocol,isActive?t('app.active'):''].filter(Boolean).join(' · '))+'</span></div>'+
+                '<button data-act="sel" '+(isSel?'disabled':'')+'>'+esc(t('app.select'))+'</button>'+
+                '<button class="del" data-act="del">'+esc(t('modes.delete'))+'</button>'+
+                '</div>';
+        }).join('');
+    }
+    const installedIds=new Set(profState.list.map(p=>p.id));
+    cat.innerHTML=profState.catalog.map(c=>{
+        const inst=installedIds.has(c.id)||c.installed;
+        return '<div class="prof-item" data-id="'+esc(c.id)+'">'+
+            '<div class="prof-info"><strong>'+esc(c.name||c.id)+'</strong>'+
+            '<span>'+esc([c.manufacturer,c.protocol].filter(Boolean).join(' · '))+'</span></div>'+
+            '<button data-act="inst" '+(inst?'disabled':'')+'>'+esc(inst?t('app.installed'):t('app.install'))+'</button>'+
+            '</div>';
+    }).join('')||'<div class="log-empty">--</div>';
+}
+document.getElementById('prof-list').addEventListener('click',function(e){
+    const btn=e.target.closest('button[data-act]');if(!btn||btn.disabled)return;
+    const id=btn.closest('.prof-item').dataset.id;
+    if(btn.dataset.act==='sel'){profState.selected=id;renderProfileLists();}
+    else if(btn.dataset.act==='del'){
+        const p=profState.list.find(x=>x.id===id);
+        if(!confirm(t('profile.delete_confirm',{n:(p&&p.name)||id}))) return;
+        fetch('/api/profiles?id='+encodeURIComponent(id),{method:'DELETE'}).then(()=>loadProfileDetail()).catch(()=>{});
+    }
+});
+document.getElementById('prof-catalog').addEventListener('click',function(e){
+    const btn=e.target.closest('button[data-act="inst"]');if(!btn||btn.disabled)return;
+    const id=btn.closest('.prof-item').dataset.id;
+    btn.disabled=true;
+    fetch('/api/catalog/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})})
+        .then(r=>r.json()).then(()=>loadProfileDetail()).catch(()=>{btn.disabled=false;});
+});
+function applyProfile(){
+    const msg=document.getElementById('prof-msg');
+    if(!profState.selected){msg.textContent=t('profile.select_first');return;}
+    const body={id:profState.selected,host:document.getElementById('prof-host').value.trim(),
+        device_id:document.getElementById('prof-devid').value.trim()};
+    const auth=document.getElementById('prof-auth').value;
+    if(auth) body.auth_key=auth;
+    fetch('/api/profiles/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(r=>r.json()).then(d=>{
+        msg.textContent=d.status==='ok'?t('app.saved'):(d.message||t('app.error'));
+        loadProfileDetail();
+    }).catch(()=>{msg.textContent=t('app.conn_error');});
+}
+
+/* ── Ana ekran kontrolu (halka surukle = deger, merkez = ac/kapat) ── */
+(function(){
+    const el=document.getElementById('orbital-container');
+    if(!el) return;
+    const prog=document.createElement('div');prog.className='orbital-progress';el.insertBefore(prog,el.firstChild);
+    let dragging=false,moved=false,lastSent=0,pending=null,timer=null;
+    function curMode(){const m=modeConfig.modes.find(x=>x.id===activeMode);return m?m.type:'';}
+    function setLocal(v){document.getElementById('big-val').textContent=v;prog.style.setProperty('--pct',v+'%');}
+    function send(action,value){
+        fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value==null?{action}:{action,value})}).catch(()=>{});
+    }
+    function sendSet(v){
+        const now=Date.now();
+        if(now-lastSent>120){lastSent=now;send('set',v);pending=null;}
+        else{pending=v;clearTimeout(timer);timer=setTimeout(()=>{if(pending!=null){lastSent=Date.now();send('set',pending);pending=null;}},150);}
+    }
+    function angleToPct(e){
+        const r=el.getBoundingClientRect();
+        const dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2);
+        let a=Math.atan2(dx,-dy)*180/Math.PI; if(a<0)a+=360;   // 0 = tepe, saat yonu
+        return Math.round(a/3.6);
+    }
+    function dist(e){const r=el.getBoundingClientRect();return Math.hypot(e.clientX-(r.left+r.width/2),e.clientY-(r.top+r.height/2));}
+    el.addEventListener('pointerdown',e=>{
+        if(curMode()==='safe'||!activeMode) return;
+        el.setPointerCapture(e.pointerId);dragging=true;moved=false;
+        el.classList.add('dragging');
+        if(dist(e)>95){moved=true;const v=angleToPct(e);setLocal(v);sendSet(v);}
+    });
+    el.addEventListener('pointermove',e=>{
+        if(!dragging) return;
+        if(dist(e)>60){moved=true;const v=angleToPct(e);setLocal(v);sendSet(v);}
+    });
+    function up(e){
+        if(!dragging) return;dragging=false;el.classList.remove('dragging');
+        if(!moved){send(curMode()==='shutter'?'stop':'toggle');}
+    }
+    el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
+    window.__setDialPct=v=>prog.style.setProperty('--pct',v+'%');
+})();
+
 /* ── SSE (Real-time) ──────────────────────────────── */
 let sseSource=null;
 function connectSSE(){
@@ -803,6 +948,7 @@ function connectSSE(){
                 const mode=modeConfig.modes.find(m=>m.id===activeMode);
                 if(mode&&mode.type!=='safe'){
                     document.getElementById('big-val').textContent=d.value;
+                    if(window.__setDialPct) window.__setDialPct(d.value);
                 }
                 // Update status line
                 const sl=document.getElementById('status-line');
@@ -824,23 +970,14 @@ function connectSSE(){
 /* ── Footer Buttons ──────────────────────────────── */
 function footerCancel(){
     if(subpageActive){
-        const sistemPanel=document.querySelector('.tab-panel[data-tab="sistem"]');
-        const infoPanel=document.querySelector('.tab-panel[data-tab="info"]');
-        if(sistemPanel&&sistemPanel.classList.contains('active')){
-            // Sistem tab: wifi/backup/ap veya fw/gui detay açık olabilir
-            hideSistemDetail();hideDevDetail();
-        } else if(infoPanel&&infoPanel.classList.contains('active')){
-            hideInfoDetail();
-        }
+        const active=document.querySelector('.tab-panel.active');
+        const tab=active?active.getAttribute('data-tab'):'';
+        if(tab==='sistem'){hideSistemDetail();hideDevDetail();}
+        else if(tab==='info'){hideInfoDetail();}
+        else if(tab==='modlar'){hideProfileDetail();}
     } else {
         toggleSettings();
     }
-}
-function footerSave(){
-    // Tum kaydet islemleri tek seferde
-    // WiFi ayarlari kullanici "Baglan" veya "Kaydet" butonuna basarak zaten kaydediliyor
-    // Burada genel ayarlari (tema, dil vb) kaydedip modalı kapat
-    toggleSettings();
 }
 
 /* ── Helpers ──────────────────────────────────────── */
@@ -854,6 +991,7 @@ initLang().then(()=>{
     loadWifiConfig();
     loadFwOtaInfo();
     loadGuiOtaInfo();
+    loadProfileSummary();
     connectSSE();
 });
 

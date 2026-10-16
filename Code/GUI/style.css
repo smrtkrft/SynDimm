@@ -31,7 +31,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .brand-title{font-size:28px;font-weight:700;color:var(--text-primary);letter-spacing:1px}
 .brand-sub{font-size:13px;color:var(--text-tertiary);letter-spacing:3px;text-transform:uppercase;margin-top:2px}
 
-.orbital-container{position:relative;width:300px;height:300px;display:flex;align-items:center;justify-content:center;margin-top:-6vh}
+.orbital-container{position:relative;width:300px;height:300px;display:flex;align-items:center;justify-content:center;margin-top:-6vh;touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
+.orbital-container.dragging .orbital-ring::before{animation-play-state:paused}
+.orbital-progress{position:absolute;inset:0;border-radius:50%;background:conic-gradient(rgba(var(--accent-rgb),0.35) var(--pct,0%),transparent 0);-webkit-mask:radial-gradient(circle,transparent 146px,#000 147px);mask:radial-gradient(circle,transparent 146px,#000 147px);pointer-events:none;transition:--pct .1s}
+.control-hint{font-size:10px;color:var(--text-tertiary);letter-spacing:.5px;margin-top:6px;opacity:.7}
+.mode-safe .control-hint{display:none}
+.prof-item{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:8px;background:rgba(var(--accent-rgb),0.03);border:1px solid var(--border);border-radius:10px}
+.prof-item.active{border-color:var(--accent)}
+.prof-info{flex:1;min-width:0}
+.prof-info strong{display:block;font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prof-info span{font-size:11px;color:var(--text-tertiary)}
+.prof-item button{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);font-size:11px;cursor:pointer}
+.prof-item button:hover{background:rgba(var(--accent-rgb),0.08);color:var(--text-primary)}
+.prof-item button.del:hover{background:rgba(239,68,68,0.15);color:var(--danger)}
+.prof-item button:disabled{opacity:.35;cursor:default}
 .orbital-ring{position:absolute;width:100%;height:100%;border-radius:50%;border:2px solid var(--border)}
 .orbital-ring::before{content:'';position:absolute;inset:-2px;border-radius:50%;border:2px solid transparent;border-top-color:var(--accent);transition:border-color .5s;animation:orbit 4s linear infinite}
 @keyframes orbit{to{transform:rotate(360deg)}}

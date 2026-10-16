@@ -72,6 +72,28 @@ const char *device_driver_get_mode(void);
 esp_err_t device_driver_load_profile(const char *profile_id);
 
 /**
+ * GUI'den kontrol: action = "set" (value 0..100 olcek), "inc", "dec", "toggle", "stop".
+ * Safe modunda ESP_ERR_INVALID_STATE. Ag islemi command_task'a kuyruklanir.
+ */
+esp_err_t device_driver_control(const char *action, int value);
+
+/** Aktif hedef cihaz bilgileri (NVS'den yuklenir, select_profile ile degisir) */
+const char *device_driver_get_host(void);
+int         device_driver_get_port(void);
+const char *device_driver_get_device_id(void);
+bool        device_driver_has_auth_key(void);
+
+/**
+ * Firmware'e gomulu profil katalogu (internet gerekmez).
+ * install_all: eksik olanlari /slot_a/profiles altina yazar (acilista cagrilir).
+ * catalog_json: [{"id","name","manufacturer","protocol","mode","installed"}]
+ * install_one: tek profili (id) yazar; yoksa ESP_ERR_NOT_FOUND.
+ */
+void      device_driver_install_builtin_profiles(void);
+esp_err_t device_driver_builtin_catalog_json(char *out, size_t max_len);
+esp_err_t device_driver_install_builtin_profile(const char *id);
+
+/**
  * Dosya yoluna giren ad (profil id, mod) guvenli mi?
  * Sadece [A-Za-z0-9_-], 1..48 karakter. ".." ve "/" ile dizin disina cikis engellenir.
  */

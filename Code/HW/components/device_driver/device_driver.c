@@ -714,6 +714,8 @@ esp_err_t device_driver_init(void)
             if (stat(keeps[i], &st) != 0) ext_flash_write_file(keeps[i], "", 0);
         }
     }
+    /* Gomulu profil katalogu: eksikler yazilir, kullanici degisiklikleri korunur */
+    device_driver_install_builtin_profiles();
 
     update_status_text();
 
@@ -771,6 +773,119 @@ esp_err_t device_driver_set_mode(const char *mode)
 const char *device_driver_get_mode(void)
 {
     return s_mode_str;
+}
+
+/* ========== Gomulu profil katalogu ========== */
+extern const char _binary_hue_bulb_json_start[];
+extern const char _binary_shelly_dimmer2_json_start[];
+extern const char _binary_tasmota_dimmer_json_start[];
+extern const char _binary_wiz_bulb_json_start[];
+extern const char _binary_shelly_25_shutter_json_start[];
+
+typedef struct { const char *id; const char *mode; const char *json; } builtin_profile_t;
+static const builtin_profile_t s_builtin[] = {
+    { "hue_bulb",          "dimmer",  _binary_hue_bulb_json_start },
+    { "shelly_dimmer2",    "dimmer",  _binary_shelly_dimmer2_json_start },
+    { "tasmota_dimmer",    "dimmer",  _binary_tasmota_dimmer_json_start },
+    { "wiz_bulb",          "dimmer",  _binary_wiz_bulb_json_start },
+    { "shelly_25_shutter", "shutter", _binary_shelly_25_shutter_json_start },
+};
+#define BUILTIN_COUNT (sizeof(s_builtin) / sizeof(s_builtin[0]))
+
+static bool builtin_installed(const builtin_profile_t *b, char *path, size_t path_size)
+{
+    snprintf(path, path_size, "/slot_a/profiles/%s/%s.json", b->mode, b->id);
+    struct stat st;
+    return stat(path, &st) == 0;
+}
+
+esp_err_t device_driver_install_builtin_profile(const char *id)
+{
+    for (size_t i = 0; i < BUILTIN_COUNT; i++) {
+        if (strcmp(s_builtin[i].id, id) == 0) {
+            char path[128];
+            builtin_installed(&s_builtin[i], path, sizeof(path));
+            return ext_flash_write_file(path, s_builtin[i].json, strlen(s_builtin[i].json));
+        }
+    }
+    return ESP_ERR_NOT_FOUND;
+}
+
+void device_driver_install_builtin_profiles(void)
+{
+    int n = 0;
+    for (size_t i = 0; i < BUILTIN_COUNT; i++) {
+        char path[128];
+        if (!builtin_installed(&s_builtin[i], path, sizeof(path))) {
+            if (ext_flash_write_file(path, s_builtin[i].json, strlen(s_builtin[i].json)) == ESP_OK) n++;
+        }
+    }
+    if (n) ESP_LOGI(TAG, "Gomulu profiller yazildi: %d", n);
+}
+
+esp_err_t device_driver_builtin_catalog_json(char *out, size_t max_len)
+{
+    if (!out || max_len < 3) return ESP_ERR_INVALID_ARG;
+    cJSON *arr = cJSON_CreateArray();
+    for (size_t i = 0; i < BUILTIN_COUNT; i++) {
+        cJSON *prof = cJSON_Parse(s_builtin[i].json);
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "id", s_builtin[i].id);
+        cJSON_AddStringToObject(item, "mode", s_builtin[i].mode);
+        if (prof) {
+            cJSON *j;
+            if ((j = cJSON_GetObjectItem(prof, "name")) && cJSON_IsString(j)) cJSON_AddStringToObject(item, "name", j->valuestring);
+            if ((j = cJSON_GetObjectItem(prof, "manufacturer")) && cJSON_IsString(j)) cJSON_AddStringToObject(item, "manufacturer", j->valuestring);
+            if ((j = cJSON_GetObjectItem(prof, "protocol")) && cJSON_IsString(j)) cJSON_AddStringToObject(item, "protocol", j->valuestring);
+            cJSON_Delete(prof);
+        }
+        char path[128];
+        cJSON_AddBoolToObject(item, "installed", builtin_installed(&s_builtin[i], path, sizeof(path)));
+        cJSON_AddItemToArray(arr, item);
+    }
+    char *str = cJSON_PrintUnformatted(arr);
+    cJSON_Delete(arr);
+    if (!str) { snprintf(out, max_len, "[]"); return ESP_ERR_NO_MEM; }
+    snprintf(out, max_len, "%s", str);
+    free(str);
+    return ESP_OK;
+}
+
+/* ========== GUI kontrol ========== */
+const char *device_driver_get_host(void)      { return s_host; }
+int         device_driver_get_port(void)      { return s_port; }
+const char *device_driver_get_device_id(void) { return s_device_id; }
+bool        device_driver_has_auth_key(void)  { return s_auth_key[0] != '\0'; }
+
+esp_err_t device_driver_control(const char *action, int value)
+{
+    if (!action) return ESP_ERR_INVALID_ARG;
+
+    state_lock();
+    dd_mode_t mode = s_mode;
+    state_unlock();
+    if (mode == DD_MODE_SAFE) return ESP_ERR_INVALID_STATE;
+
+    if (strcmp(action, "inc") == 0) return device_driver_handle_event('R');
+    if (strcmp(action, "dec") == 0) return device_driver_handle_event('L');
+    if (strcmp(action, "toggle") == 0 || strcmp(action, "stop") == 0) return device_driver_handle_event('B');
+
+    if (strcmp(action, "set") == 0) {
+        dd_cmd_t cmd = {0};
+        state_lock();
+        if (value < s_val_min) value = s_val_min;
+        if (value > s_val_max) value = s_val_max;
+        s_current_value = value;
+        if (mode == DD_MODE_DIMMER) s_state = (value > s_val_min);
+        update_status_text();
+        state_unlock();
+        cmd.type = CMD_SET_VALUE;
+        cmd.value = value;
+        enqueue_cmd(&cmd);
+        nvs_save_schedule();
+        return ESP_OK;
+    }
+    return ESP_ERR_INVALID_ARG;
 }
 
 bool device_driver_valid_name(const char *s)

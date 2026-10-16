@@ -31,6 +31,7 @@
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="11" width="18" height="11" rx="2"/><circle cx="12" cy="16" r="1"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
         </div>
         <div class="status-line" id="status-line">&nbsp;</div>
+        <div class="control-hint" id="control-hint" data-i18n="control.hint">Halkayi surukleyin, merkeze dokunun</div>
         <div class="safe-label" id="safe-label" style="display:none" data-i18n="app.password_lock">Password Lock</div>
     </div>
 </div>
@@ -67,6 +68,20 @@
 
         <!-- ── Modlar ──────────────────────────────────── -->
         <div class="tab-panel active" data-tab="modlar">
+            <div id="modlar-main">
+            <div class="s-label" data-i18n="profile.title">Hedef Cihaz</div>
+            <div class="info-cards">
+                <div class="info-card" onclick="showProfileDetail()">
+                    <div class="info-card-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                    </div>
+                    <div class="info-card-text">
+                        <strong data-i18n="profile.card">Hedef Cihaz ve Profil</strong>
+                        <span id="profile-card-sub">--</span>
+                    </div>
+                    <svg class="info-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                </div>
+            </div>
             <div class="s-label" data-i18n="modes.config">Mod Yapilandirmasi</div>
             <div class="s-row">
                 <span data-i18n="modes.multi">Coklu Mod</span>
@@ -93,6 +108,31 @@
                 <div style="display:flex;gap:8px">
                     <button class="s-btn" onclick="addMode()" style="flex:1" data-i18n="app.add">Ekle</button>
                     <button class="s-btn s-btn-secondary" onclick="hideAddMode()" style="flex:1" data-i18n="app.cancel">Iptal</button>
+                </div>
+            </div>
+            </div><!-- /modlar-main -->
+
+            <!-- Profil / hedef cihaz detay -->
+            <div id="modlar-detail-profile" class="info-detail" style="display:none">
+                <button class="info-back" onclick="hideProfileDetail()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    <span data-i18n="app.back">Geri</span>
+                </button>
+                <div class="s-label" data-i18n="profile.title">Hedef Cihaz</div>
+                <p class="s-hint" data-i18n="profile.hint">Profil, cihazin hangi komutlarla konustugunu tanimlar.</p>
+                <div class="s-row"><span data-i18n="profile.hw_mode">Donanim modu</span><span class="s-val" id="prof-mode">--</span></div>
+                <div class="s-row"><span data-i18n="profile.active">Aktif profil</span><span class="s-val" id="prof-active">--</span></div>
+                <p class="s-hint" id="prof-safe-note" style="display:none" data-i18n="profile.safe_note"></p>
+                <div id="prof-form">
+                    <div class="s-field"><input class="s-input" type="text" id="prof-host" placeholder="Host" data-i18n-ph="profile.host_ph"></div>
+                    <div class="s-field"><input class="s-input" type="text" id="prof-devid" placeholder="device_id" data-i18n-ph="profile.device_id_ph"></div>
+                    <div class="s-field"><input class="s-input" type="password" id="prof-auth" placeholder="Auth key" data-i18n-ph="profile.auth_ph" autocomplete="off"></div>
+                    <button class="s-btn" onclick="applyProfile()" data-i18n="profile.apply">Profili Uygula</button>
+                    <span class="s-hint" id="prof-msg"></span>
+                    <div class="s-label" data-i18n="profile.installed">Kurulu Profiller</div>
+                    <div id="prof-list"><div class="log-empty" data-i18n="app.loading">Yukleniyor...</div></div>
+                    <div class="s-label" data-i18n="profile.catalog">Katalog (firmware ici)</div>
+                    <div id="prof-catalog"></div>
                 </div>
             </div>
         </div>
@@ -531,8 +571,7 @@
 
         </div><!-- /tab-content -->
         <div class="modal-footer">
-            <button class="btn-footer-cancel" id="footerCancelBtn" onclick="footerCancel()" data-i18n="app.cancel">Iptal</button>
-            <button class="btn-footer-save" id="footerSaveBtn" onclick="footerSave()" data-i18n="app.save">Kaydet</button>
+            <button class="btn-footer-save" id="footerCancelBtn" onclick="footerCancel()">Kapat</button>
         </div>
     </div>
 </div>

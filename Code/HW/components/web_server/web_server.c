@@ -1415,7 +1415,14 @@ static esp_err_t api_reset_handler(httpd_req_t *req)
         return send_json(req, "{\"status\":\"error\",\"message\":\"Gecersiz API anahtari\"}");
     }
 
-    return send_json(req, "{\"status\":\"ok\",\"message\":\"API triggered\"}");
+    /* Anahtar dogru: cihazi yeniden baslat (uzaktan kurtarma) */
+    sys_log_mark_event(SL_EV_USER_RESTART, 1);
+    sys_log_set_restart_reason(SL_RST_USER_WEB);
+    sys_log_write("WARN", "sys", "Uzaktan yeniden baslatma (API anahtari)");
+    esp_err_t r = send_json(req, "{\"status\":\"ok\",\"message\":\"Cihaz yeniden baslatiliyor\"}");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+    return r;
 }
 
 // ============================================================
@@ -1770,6 +1777,22 @@ static esp_err_t api_profiles_list_handler(httpd_req_t *req)
 // GET /api/profiles/active
 static esp_err_t api_profiles_active_handler(httpd_req_t *req)
 {
+    {
+        dd_status_t st2;
+        device_driver_get_status(&st2);
+        char resp2[384];
+        char name_esc[96], host_esc[96], dev_esc[48];
+        json_escape(st2.device_name, name_esc, sizeof(name_esc));
+        json_escape(device_driver_get_host(), host_esc, sizeof(host_esc));
+        json_escape(device_driver_get_device_id(), dev_esc, sizeof(dev_esc));
+        snprintf(resp2, sizeof(resp2),
+                 "{\"id\":\"%s\",\"name\":\"%s\",\"mode\":\"%s\",\"connected\":%s,"
+                 "\"host\":\"%s\",\"port\":%d,\"device_id\":\"%s\",\"has_auth\":%s}",
+                 st2.profile_id, name_esc, st2.mode_str, st2.connected ? "true" : "false",
+                 host_esc, device_driver_get_port(), dev_esc,
+                 device_driver_has_auth_key() ? "true" : "false");
+        return send_json(req, resp2);
+    }
     dd_status_t st;
     device_driver_get_status(&st);
 
@@ -2009,126 +2032,65 @@ static esp_err_t api_safe_delete_handler(httpd_req_t *req)
     return send_json(req, resp);
 }
 
-// GET /api/catalog/list
+// GET /api/catalog/list - Firmware'e gomulu profil katalogu (internet gerekmez)
 static esp_err_t api_catalog_list_handler(httpd_req_t *req)
 {
-    // Onbellekten oku
     char *buf = malloc(4096);
     if (!buf) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Bellek yetersiz");
         return ESP_FAIL;
     }
-
-    int len = ext_flash_read_file("/ext/catalog_cache.json", buf, 4095);
-    if (len > 0) {
-        buf[len] = '\0';
-        httpd_resp_set_type(req, "application/json");
-        esp_err_t ret = httpd_resp_send(req, buf, len);
-        free(buf);
-        return ret;
-    }
-
+    device_driver_builtin_catalog_json(buf, 4096);
+    esp_err_t r = send_json(req, buf);
     free(buf);
-
-    // Onbellek bos - bos dizi dondur
-    const char *empty = "{\"profiles\":[]}";
-    return send_json(req, empty);
+    return r;
 }
 
-// POST /api/catalog/download  ← {"id":"hue_bulb","mode":"dimmer"}
+// POST /api/catalog/download  <- {"id":"hue_bulb"}  (gomulu katalogdan Slot A'ya yazar)
 static esp_err_t api_catalog_download_handler(httpd_req_t *req)
 {
-    char buf[128] = {0};
-    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    if (len <= 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Body gerekli");
+    char buf[256];
+    if (read_body(req, buf, sizeof(buf)) <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[len] = '\0';
-
-    char id[32] = {0}, mode[12] = {0};
+    char id[32] = {0};
     parse_json_string(buf, "id", id, sizeof(id));
-    parse_json_string(buf, "mode", mode, sizeof(mode));
-
-    if (strlen(id) == 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "id alani gerekli");
+    if (!device_driver_valid_name(id)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "id gecersiz");
         return ESP_FAIL;
     }
-    if (strlen(mode) == 0) {
-        strncpy(mode, device_driver_get_mode(), sizeof(mode) - 1);
-    }
-
-    // GitHub'dan indir
-    // URL: https://raw.githubusercontent.com/smrtkrft/SynDimm/main/profiles/{mode}/{id}.json
-    char url[256];
-    snprintf(url, sizeof(url),
-             "https://raw.githubusercontent.com/smrtkrft/SynDimm/main/profiles/%s/%s.json",
-             mode, id);
-
-    ESP_LOGI(TAG, "Katalog indirme: %s", url);
-
-    // esp_http_client ile indir
-    esp_http_client_config_t cfg = {
-        .url = url,
-        .timeout_ms = 10000,
-        .crt_bundle_attach = esp_crt_bundle_attach,   /* HTTPS: sertifika paketi olmadan TLS her zaman basarisizdi */
-    };
-
-    esp_http_client_handle_t client = esp_http_client_init(&cfg);
-    if (!client) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "HTTP client olusturulamadi");
-        return ESP_FAIL;
-    }
-
-    esp_err_t err = esp_http_client_open(client, 0);
-    if (err != ESP_OK) {
-        esp_http_client_cleanup(client);
-        char resp[128];
-        snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Baglanti hatasi\"}");
-        return send_json(req, resp);
-    }
-
-    esp_http_client_fetch_headers(client);
-    char *dl_buf = malloc(8192);
-    if (!dl_buf) {
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Bellek yetersiz");
-        return ESP_FAIL;
-    }
-
-    int dl_len = esp_http_client_read_response(client, dl_buf, 8191);
-    int status_code = esp_http_client_get_status_code(client);
-    esp_http_client_close(client);
-    esp_http_client_cleanup(client);
-
-    if (dl_len <= 0 || status_code != 200) {
-        free(dl_buf);
-        char resp[128];
-        snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Indirme basarisiz (HTTP %d)\"}", status_code);
-        return send_json(req, resp);
-    }
-    dl_buf[dl_len] = '\0';
-
-    // Dosyayi kaydet (mode/id yol suzmesinden gecmis olmali)
-    if (!device_driver_valid_name(mode) || !device_driver_valid_name(id)) {
-        free(dl_buf);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "mode/id gecersiz");
-        return ESP_FAIL;
-    }
-    char path[128];
-    snprintf(path, sizeof(path), "/slot_a/profiles/%s/%s.json", mode, id);
-    err = ext_flash_write_file(path, dl_buf, dl_len);
-    free(dl_buf);
-
-    char resp[256];
+    esp_err_t err = device_driver_install_builtin_profile(id);
+    char resp[160];
     if (err == ESP_OK) {
-        snprintf(resp, sizeof(resp), "{\"status\":\"ok\",\"id\":\"%s\",\"path\":\"%s\"}", id, path);
+        snprintf(resp, sizeof(resp), "{\"status\":\"ok\",\"id\":\"%s\"}", id);
+    } else if (err == ESP_ERR_NOT_FOUND) {
+        snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Katalogda yok\"}");
     } else {
-        snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Dosya yazma hatasi\"}");
+        snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Yazilamadi\"}");
     }
-
     return send_json(req, resp);
+}
+
+// POST /api/control <- {"action":"set","value":42} | inc | dec | toggle | stop
+static esp_err_t api_control_handler(httpd_req_t *req)
+{
+    char buf[128];
+    if (read_body(req, buf, sizeof(buf)) <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
+        return ESP_FAIL;
+    }
+    char action[16] = {0};
+    int value = 0;
+    parse_json_string(buf, "action", action, sizeof(action));
+    const char *p = strstr(buf, "\"value\":");
+    if (p) value = atoi(p + 8);
+
+    esp_err_t err = device_driver_control(action, value);
+    if (err == ESP_OK) return send_json(req, "{\"status\":\"ok\"}");
+    if (err == ESP_ERR_INVALID_STATE)
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Safe modunda kontrol yok\"}");
+    return send_json(req, "{\"status\":\"error\",\"message\":\"Gecersiz komut\"}");
 }
 
 // ============================================================
@@ -2231,6 +2193,7 @@ static const route_t s_routes[] = {
     { "/api/profiles/upload", HTTP_POST, api_profiles_upload_handler, true },
     { "/api/profiles", HTTP_DELETE, api_profiles_delete_handler, true },
     { "/api/status", HTTP_GET, api_device_status_handler, true },
+    { "/api/control", HTTP_POST, api_control_handler, true },
     { "/api/safe/list", HTTP_GET, api_safe_list_handler, true },
     { "/api/safe/add", HTTP_POST, api_safe_add_handler, true },
     { "/api/safe", HTTP_DELETE, api_safe_delete_handler, true },
