@@ -174,6 +174,41 @@ static void delete_dir_contents(const char *dir_path)
     closedir(dir);
 }
 
+/* GUI slotunu temizle ama kullanici verilerini koru.
+ * Kullanici verileri her zaman Slot A'da durur (device_driver /slot_a/profiles,
+ * web_server /slot_a/modes.json). Hedef slot A ise bunlara dokunulmaz; aksi halde
+ * aktif slot B iken yapilan GUI guncellemesi tum profilleri ve modlari siliyordu. */
+static void clear_gui_slot(const char *mount)
+{
+    static const char *keep[] = { "profiles", "modes.json", NULL };
+    DIR *dir = opendir(mount);
+    if (!dir) return;
+    struct dirent *entry;
+    char path[320];
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        bool skip = false;
+        for (int i = 0; keep[i]; i++) {
+            if (strcmp(entry->d_name, keep[i]) == 0) { skip = true; break; }
+        }
+        if (skip) {
+            ESP_LOGI(TAG, "  Korunuyor: %s/%s", mount, entry->d_name);
+            continue;
+        }
+        snprintf(path, sizeof(path), "%s/%s", mount, entry->d_name);
+        struct stat st;
+        if (stat(path, &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                delete_dir_contents(path);
+                rmdir(path);
+            } else {
+                remove(path);
+            }
+        }
+    }
+    closedir(dir);
+}
+
 // HTTP ile dosya indir ve belirtilen path'e yaz
 static esp_err_t download_file_to_path(const char *url, const char *dest_path)
 {
@@ -360,7 +395,7 @@ static void gui_ota_task(void *arg)
     const char *target_mount = ext_flash_get_inactive_mount();
     ESP_LOGI(TAG, "Hedef slot: %s", target_mount);
 
-    delete_dir_contents(target_mount);
+    clear_gui_slot(target_mount);
 
     // 5. Alt dizinleri olustur
     char dir_path[64];
