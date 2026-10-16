@@ -1,3 +1,41 @@
+/* ── i18n ─────────────────────────────────────────── */
+/* Ceviriler /lang/<kod>.json dosyalarindan yuklenir (Slot A'da, firmware ile gelir).
+ * data-i18n (textContent), data-i18n-html (innerHTML), data-i18n-ph (placeholder),
+ * data-i18n-title (title). t(key, vars) dinamik metinler icin. */
+const LANGS=['tr','en','de','es','fr','it'];
+let currentLang=localStorage.getItem('syndimm-lang')||'tr';
+if(LANGS.indexOf(currentLang)<0) currentLang='tr';
+let I18N={};
+function t(key,vars){
+    let s=I18N[key];
+    if(s==null) s=key;
+    if(vars) for(const k in vars) s=s.split('{'+k+'}').join(vars[k]);
+    return s;
+}
+function applyI18n(){
+    document.documentElement.lang=currentLang;
+    document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n');if(I18N[k]!=null) el.textContent=I18N[k];});
+    document.querySelectorAll('[data-i18n-html]').forEach(el=>{const k=el.getAttribute('data-i18n-html');if(I18N[k]!=null) el.innerHTML=I18N[k];});
+    document.querySelectorAll('[data-i18n-ph]').forEach(el=>{const k=el.getAttribute('data-i18n-ph');if(I18N[k]!=null) el.placeholder=I18N[k];});
+    document.querySelectorAll('[data-i18n-title]').forEach(el=>{const k=el.getAttribute('data-i18n-title');if(I18N[k]!=null) el.title=I18N[k];});
+    updateFooterBtn();
+    if(typeof logData!=='undefined' && logData) renderLogs();
+}
+function loadLanguage(lang){
+    return fetch('/lang/'+lang+'.json').then(r=>r.json()).then(d=>{I18N=d;applyI18n();}).catch(()=>{});
+}
+function setLanguage(lang){
+    if(LANGS.indexOf(lang)<0) return;
+    currentLang=lang;
+    localStorage.setItem('syndimm-lang',lang);
+    loadLanguage(lang);
+}
+function initLang(){
+    const sel=document.getElementById('lang-select');
+    if(sel) sel.value=currentLang;
+    return loadLanguage(currentLang);
+}
+
 /* ── Auth (cihaz parolasi) ───────────────────────── */
 /* Tum fetch'ler sarilir: 401 gelirse giris ekrani acilir. Oturum HttpOnly cerezde,
  * JS'in token tutmasi gerekmez. */
@@ -28,17 +66,17 @@ function doLogin(){
     .then(({ok,d})=>{
         btn.disabled=false;
         if(ok && d.status==='ok'){ location.reload(); }
-        else { err.textContent=(d&&d.message)||'Parola yanlis'; }
-    }).catch(()=>{btn.disabled=false;err.textContent='Baglanti hatasi';});
+        else { err.textContent=(d&&d.message)||t('auth.wrong'); }
+    }).catch(()=>{btn.disabled=false;err.textContent=t('app.conn_error');});
 }
 document.getElementById('login-pass').addEventListener('keydown',e=>{if(e.key==='Enter') doLogin();});
 function loadAuthStatus(){
     fetch('/api/auth/status').then(r=>r.json()).then(d=>{
         authState=d;
         const sub=document.getElementById('auth-card-sub');
-        if(sub) sub.textContent=d.enabled?'Parola ayarli':'Parola yok (onerilir)';
+        if(sub) sub.textContent=d.enabled?t('auth.set'):t('auth.not_set');
         const st=document.getElementById('auth-state');
-        if(st) st.textContent=d.enabled?'Korumali':'Acik';
+        if(st) st.textContent=d.enabled?t('auth.protected'):t('auth.open');
         const cw=document.getElementById('auth-cur-wrap');
         if(cw) cw.style.display=d.enabled?'':'none';
         const rb=document.getElementById('auth-remove-btn');
@@ -55,20 +93,20 @@ function setPassword(remove){
     const msg=document.getElementById('auth-msg');
     msg.textContent='';
     if(remove){
-        if(!confirm('Parola kaldirilacak, arayuz herkese acik olacak. Emin misiniz?')) return;
+        if(!confirm(t('auth.remove_confirm'))) return;
     } else {
-        if(p1.length<4||p1.length>64){msg.textContent='Parola 4-64 karakter olmali';return;}
-        if(p1!==p2){msg.textContent='Parolalar eslesmiyor';return;}
+        if(p1.length<4||p1.length>64){msg.textContent=t('auth.len_error');return;}
+        if(p1!==p2){msg.textContent=t('auth.mismatch');return;}
     }
     fetch('/api/auth/set',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({current:cur,password:remove?'':p1})})
     .then(r=>r.json()).then(d=>{
         if(d.status==='ok'){
-            msg.textContent=remove?'Parola kaldirildi':'Parola kaydedildi';
+            msg.textContent=remove?t('auth.removed'):t('auth.saved');
             ['auth-cur','auth-new','auth-new2'].forEach(id=>document.getElementById(id).value='');
             loadAuthStatus();
-        } else msg.textContent=d.message||'Hata';
-    }).catch(()=>{msg.textContent='Baglanti hatasi';});
+        } else msg.textContent=d.message||t('app.error');
+    }).catch(()=>{msg.textContent=t('app.conn_error');});
 }
 function doLogout(){
     fetch('/api/auth/logout',{method:'POST'}).then(()=>location.reload()).catch(()=>{});
@@ -220,10 +258,10 @@ function renderModeList(){
                 '<span class="mode-badge">'+esc(m.type)+'</span>'+
             '</div>'+
             '<div class="mode-card-actions">'+
-                '<button title="Duzenle" data-act="rename">'+
+                '<button title="'+esc(t('modes.edit'))+'" data-act="rename">'+
                     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'+
                 '</button>'+
-                '<button class="del" title="Sil" data-act="delete">'+
+                '<button class="del" title="'+esc(t('modes.delete'))+'" data-act="delete">'+
                     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>'+
                 '</button>'+
             '</div>';
@@ -281,7 +319,7 @@ function addMode(){
 }
 
 function deleteMode(id){
-    if(!confirm('Bu mod silinecek. Emin misiniz?')) return;
+    if(!confirm(t('modes.delete_confirm'))) return;
     modeConfig.modes=modeConfig.modes.filter(m=>m.id!==id);
     saveModeConfig();
     if(modeConfig.modes.length===0){
@@ -294,7 +332,7 @@ function deleteMode(id){
 function renameMode(id){
     const mode=modeConfig.modes.find(m=>m.id===id);
     if(!mode) return;
-    const newName=prompt('Yeni mod adi:',mode.name);
+    const newName=prompt(t('modes.rename_prompt'),mode.name);
     if(!newName||!newName.trim()) return;
     mode.name=newName.trim();
     saveModeConfig();
@@ -420,10 +458,10 @@ function wifiConnect(){
     const ip=document.getElementById('wifi-inp-ip').value.trim();
     if(!ssid) return;
     const btn=document.getElementById('wifi-connect-btn');
-    btn.disabled=true;btn.textContent='Baglaniyor...';
+    btn.disabled=true;btn.textContent=t('wifi.connecting');
     fetch('/api/wifi/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:pass,static_ip:ip})})
-        .then(r=>r.json()).then(()=>{btn.textContent='Baglan';btn.disabled=false;setTimeout(loadWifiConfig,2000);})
-        .catch(()=>{btn.textContent='Baglan';btn.disabled=false;});
+        .then(r=>r.json()).then(()=>{btn.textContent=t('wifi.connect');btn.disabled=false;setTimeout(loadWifiConfig,2000);})
+        .catch(()=>{btn.textContent=t('wifi.connect');btn.disabled=false;});
 }
 function wifiBackupSave(){
     const ssid=document.getElementById('wifi-bak-ssid').value.trim();
@@ -431,10 +469,10 @@ function wifiBackupSave(){
     const ip=document.getElementById('wifi-bak-ip').value.trim();
     if(!ssid) return;
     const btn=document.getElementById('wifi-backup-btn');
-    btn.disabled=true;btn.textContent='Kaydediliyor...';
+    btn.disabled=true;btn.textContent=t('wifi.saving');
     fetch('/api/wifi/backup/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:pass,static_ip:ip})})
-        .then(r=>r.json()).then(()=>{btn.textContent='Yedek Agi Kaydet';btn.disabled=false;})
-        .catch(()=>{btn.textContent='Yedek Agi Kaydet';btn.disabled=false;});
+        .then(r=>r.json()).then(()=>{btn.textContent=t('wifi.backup_save');btn.disabled=false;})
+        .catch(()=>{btn.textContent=t('wifi.backup_save');btn.disabled=false;});
 }
 function toggleAP(){
     const tog=document.getElementById('ap-toggle');
@@ -449,7 +487,7 @@ let subpageActive=false;
 
 function updateFooterBtn(){
     const btn=document.getElementById('footerCancelBtn');
-    if(btn) btn.textContent=subpageActive?'Geri':'Iptal';
+    if(btn) btn.textContent=subpageActive?t('app.back'):t('app.cancel');
 }
 
 /* ── Info & System ────────────────────────────────── */
@@ -472,12 +510,7 @@ function updateUsageBar(fillId,textId,used,total,unit){
     const textEl=document.getElementById(textId);
     if(fillEl) fillEl.style.width=pct+'%';
     if(textEl){
-        if(unit==='KB'){
-            const freeVal=total-used;
-            textEl.textContent=pct+'% kullaniliyor  ('+Math.round(freeVal)+' KB bos / '+Math.round(total)+' KB toplam)';
-        } else {
-            textEl.textContent=pct+'% kullaniliyor  ('+Math.round(total-used)+' / '+Math.round(total)+' KB)';
-        }
+        textEl.textContent=t('sysinfo.used',{pct:pct,free:Math.round(total-used),total:Math.round(total)});
     }
 }
 
@@ -519,27 +552,32 @@ function loadSystemInfo(){
         document.getElementById('sys-idf').textContent=d.idf_version||'--';
         if(d.uptime!=null){
             const h=Math.floor(d.uptime/3600),m=Math.floor((d.uptime%3600)/60);
-            document.getElementById('sys-uptime').textContent=h+'s '+m+'dk';
+            document.getElementById('sys-uptime').textContent=fmtDur(d.uptime);
         }
         const boots=document.getElementById('sys-boots');
-        if(boots) boots.textContent=(d.boot_count!=null)?('#'+d.boot_count+(d.short_boots?' ('+d.short_boots+' kisa)':'')):'--';
+        if(boots) boots.textContent=(d.boot_count!=null)?('#'+d.boot_count+(d.short_boots?' ('+t('sysinfo.short_boots',{n:d.short_boots})+')':'')):'--';
     }).catch(()=>{});
 }
 
 /* ── Olay Kayitlari (sys_log) ─────────────────────── */
 let logData=null, logFilter='all';
-const LOG_EV_TR={BOOT:'Acilis tamamlandi',AP_CLIENT_JOIN:'AP istemci baglandi',AP_CLIENT_LEAVE:'AP istemci ayrildi',
-    STA_CONNECTING:'Router\'a baglaniliyor',STA_GOT_IP:'Router\'a baglandi',STA_LOST:'Router baglantisi koptu',
-    GUI_SERVE:'GUI dosyasi sunuluyor',HTTP_CMD:'Cihaza komut gonderildi',OTA_FW:'Firmware OTA',OTA_GUI:'GUI OTA',
-    TX_POWER:'TX gucu degisti',USER_RESTART:'Kullanici yeniden baslatma',NONE:'--'};
-const LOG_CAT_TR={power:'GUC',software:'YAZILIM',user:'KULLANICI',other:'DIGER',unknown:'BILINMIYOR'};
 function fmtDur(sec){
     sec=Math.max(0,sec|0);
     const d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60),s=sec%60;
-    if(d>0) return d+'g '+h+'s '+m+'dk';
-    if(h>0) return h+'s '+m+'dk';
-    if(m>0) return m+'dk '+s+'sn';
-    return s+'sn';
+    const D=t('log.dur_d'),H=t('log.dur_h'),M=t('log.dur_m'),S=t('log.dur_s');
+    if(d>0) return d+D+' '+h+H+' '+m+M;
+    if(h>0) return h+H+' '+m+M;
+    if(m>0) return m+M+' '+s+S;
+    return s+S;
+}
+/* Firmware'den gelen sebep/olay kodlari yerel dile cevrilir; cevirisi yoksa cihaz metni */
+function causeText(e){const k='cause.'+e.cause;return I18N[k]!=null?I18N[k]:(e.msg||e.cause||'');}
+function hintText(e){
+    if(!e.hint) return '';
+    if(e.cause==='brownout') return t(/akim yetersiz/i.test(e.hint)?'hint.brownout_load':'hint.brownout_other');
+    if(e.cause==='power_loss') return t('hint.power_loss');
+    if(e.cause==='task_wdt') return t('hint.task_wdt');
+    return e.hint;
 }
 function fmtTs(ts){
     if(!ts) return '';
@@ -553,13 +591,13 @@ function loadLogs(){
         logData=d;
         const sum=document.getElementById('log-summary');
         if(sum){
-            let t='Bu acilis: <strong>#'+d.boot+'</strong> &middot; calisma '+fmtDur(d.uptime);
-            if(d.short) t+=' &middot; '+d.short+' kisa acilis atlandi';
-            t+=d.epoch?' &middot; saat senkron':' &middot; saat yok (sure bazli)';
-            sum.innerHTML=t;
+            let txt=esc(t('log.this_boot'))+': <strong>#'+d.boot+'</strong> &middot; '+esc(t('log.running'))+' '+esc(fmtDur(d.uptime));
+            if(d.short) txt+=' &middot; '+esc(t('log.short_skipped',{n:d.short}));
+            txt+=' &middot; '+esc(d.epoch?t('log.time_synced'):t('log.time_none'));
+            sum.innerHTML=txt;
         }
         renderLogs();
-    }).catch(()=>{list.innerHTML='<div class="log-empty">Kayitlar alinamadi</div>';});
+    }).catch(()=>{list.innerHTML='<div class="log-empty">'+esc(t('log.fetch_error'))+'</div>';});
 }
 function setLogFilter(f,btn){
     logFilter=f;
@@ -569,7 +607,7 @@ function setLogFilter(f,btn){
 }
 function renderLogs(){
     const list=document.getElementById('log-list');
-    if(!logData||!logData.entries){list.innerHTML='<div class="log-empty">Log kaydi yok</div>';return;}
+    if(!logData||!logData.entries){list.innerHTML='<div class="log-empty">'+esc(t('log.empty'))+'</div>';return;}
     const items=logData.entries.filter(e=>{
         if(logFilter==='all') return true;
         if(logFilter==='boot') return e.type==='boot';
@@ -577,36 +615,37 @@ function renderLogs(){
         if(logFilter==='wifi') return e.cat==='wifi';
         return true;
     });
-    if(items.length===0){list.innerHTML='<div class="log-empty">Bu filtrede kayit yok</div>';return;}
+    if(items.length===0){list.innerHTML='<div class="log-empty">'+esc(t('log.empty_filter'))+'</div>';return;}
     list.innerHTML=items.map(e=>{
         if(e.type==='boot'){
             const cat=e.cat||'unknown';
             const chips=[];
-            chips.push('calisma '+(e.approx?'~':'')+fmtDur(e.up));
-            if(e.ev&&e.ev!=='NONE') chips.push('son olay: '+(LOG_EV_TR[e.ev]||e.ev)+(e.ev_dt>=0?' ('+fmtDur(e.ev_dt)+' once)':''));
-            if(e.wifi&&e.wifi!=='?') chips.push('wifi '+e.wifi+(e.cl?' / '+e.cl+' istemci':''));
+            chips.push(t('log.run',{d:(e.approx?'~':'')+fmtDur(e.up)}));
+            if(e.ev&&e.ev!=='NONE') chips.push(t('log.last_event',{e:t('ev.'+e.ev)})+(e.ev_dt>=0?' ('+t('log.ago',{d:fmtDur(e.ev_dt)})+')':''));
+            if(e.wifi&&e.wifi!=='?') chips.push('wifi '+e.wifi+(e.cl?' / '+t('log.clients',{n:e.cl}):''));
             if(e.rssi) chips.push('rssi '+e.rssi);
             if(e.tx) chips.push('tx '+e.tx+' dBm');
-            if(e.heap_min) chips.push('heap min '+Math.round(e.heap_min/1024)+' KB');
-            if(e.short) chips.push(e.short+' kisa acilis');
+            if(e.heap_min) chips.push(t('log.heap_min',{n:Math.round(e.heap_min/1024)}));
+            if(e.short) chips.push(t('log.short_boots',{n:e.short}));
+            const hint=hintText(e);
             return '<div class="log-item cat-'+cat+'">'+
-                '<div class="log-head"><span class="log-title">'+(LOG_CAT_TR[cat]||cat)+' &middot; Acilis #'+e.n+' sonu</span>'+
-                '<span class="log-time">'+(fmtTs(e.ts)||('boot #'+e.n))+'</span></div>'+
-                '<div class="log-msg">'+esc(e.msg||e.cause||'')+'</div>'+
-                (e.hint?'<div class="log-hint">'+esc(e.hint)+'</div>':'')+
+                '<div class="log-head"><span class="log-title">'+esc(t('cat.'+cat))+' &middot; '+esc(t('log.boot_end',{n:e.n}))+'</span>'+
+                '<span class="log-time">'+esc(fmtTs(e.ts)||t('log.boot_ref',{n:e.n}))+'</span></div>'+
+                '<div class="log-msg">'+esc(causeText(e))+'</div>'+
+                (hint?'<div class="log-hint">'+esc(hint)+'</div>':'')+
                 '<div class="log-chips">'+chips.map(c=>'<span class="log-chip">'+esc(c)+'</span>').join('')+'</div>'+
                 '</div>';
         }
         const lvl=e.lvl||'INFO';
         return '<div class="log-item cat-'+(e.cat||'sys')+' lvl-'+lvl+'">'+
-            '<div class="log-head"><span class="log-title">'+esc((e.cat||'sys').toUpperCase())+' &middot; '+esc(lvl)+'</span>'+
-            '<span class="log-time">'+(fmtTs(e.ts)||('#'+e.n+' +'+fmtDur(e.up)))+'</span></div>'+
+            '<div class="log-head"><span class="log-title">'+esc(I18N['cat.'+(e.cat||'sys')]||(e.cat||'sys').toUpperCase())+' &middot; '+esc(lvl)+'</span>'+
+            '<span class="log-time">'+esc(fmtTs(e.ts)||('#'+e.n+' +'+fmtDur(e.up)))+'</span></div>'+
             '<div class="log-msg">'+esc(e.msg||'')+'</div>'+
             '</div>';
     }).join('');
 }
 function clearLogs(){
-    if(!confirm('Tum olay kayitlari silinecek. Emin misiniz?')) return;
+    if(!confirm(t('log.clear_confirm'))) return;
     fetch('/api/system/logs',{method:'DELETE'}).then(()=>loadLogs()).catch(()=>{});
 }
 
@@ -628,7 +667,7 @@ function loadFwOtaInfo(){
     fetch('/api/fw-ota/info').then(r=>r.json()).then(d=>{
         document.getElementById('fw-version').textContent=d.current_version?'v'+d.current_version:'--';
         document.getElementById('fw-partition').textContent=d.running_partition||'--';
-        document.getElementById('fw-rollback').textContent=d.can_rollback?'v'+d.rollback_version:'Yok';
+        document.getElementById('fw-rollback').textContent=d.can_rollback?'v'+d.rollback_version:t('app.none');
         if(d.can_rollback) document.getElementById('fw-rollback-btn').style.display='';
         else document.getElementById('fw-rollback-btn').style.display='none';
         // Kart versiyonu
@@ -638,26 +677,26 @@ function loadFwOtaInfo(){
 }
 function fwOtaCheck(){
     const btn=document.getElementById('fw-check-btn');
-    btn.disabled=true;btn.textContent='Kontrol ediliyor...';
+    btn.disabled=true;btn.textContent=t('ota.checking');
     fetch('/api/fw-ota/check',{method:'POST'}).then(r=>r.json()).then(()=>{
         // GitHub TLS istegi birkac saniye surer: CHECKING (1) bitene kadar poll et
         let tries=0;
         const poll=()=>{
             fetch('/api/fw-ota/status').then(r=>r.json()).then(s=>{
                 if(s.state===1 && tries++<30){setTimeout(poll,700);return;}
-                btn.textContent='Kontrol Et';btn.disabled=false;
+                btn.textContent=t('ota.check');btn.disabled=false;
                 if(s.state===2){// UPDATE_AVAILABLE
                     document.getElementById('fw-start-btn').style.display='';
                     showOtaProgress('fw',s);
                 } else if(s.state===3){// NO_UPDATE
-                    showOtaProgress('fw',{progress_pct:100,message:'Guncel surumdesiniz.'});
+                    showOtaProgress('fw',{progress_pct:100,message:t('ota.up_to_date')});
                 } else {
-                    showOtaProgress('fw',{progress_pct:0,message:s.message||'Kontrol tamamlanamadi'});
+                    showOtaProgress('fw',{progress_pct:0,message:s.message||t('ota.check_failed')});
                 }
-            }).catch(()=>{btn.textContent='Kontrol Et';btn.disabled=false;});
+            }).catch(()=>{btn.textContent=t('ota.check');btn.disabled=false;});
         };
         setTimeout(poll,700);
-    }).catch(()=>{btn.textContent='Kontrol Et';btn.disabled=false;});
+    }).catch(()=>{btn.textContent=t('ota.check');btn.disabled=false;});
 }
 function fwOtaStart(){
     document.getElementById('fw-check-btn').disabled=true;
@@ -676,13 +715,13 @@ function fwOtaStart(){
     }).catch(()=>{document.getElementById('fw-check-btn').disabled=false;});
 }
 function fwOtaRollback(){
-    if(!confirm('Onceki firmware surumune donulecek. Emin misiniz?')) return;
+    if(!confirm(t('ota.rollback_confirm'))) return;
     fetch('/api/fw-ota/rollback',{method:'POST'}).then(r=>r.json()).then(d=>{
         if(d&&d.status==='ok'){
-            alert('Rollback hazir. Cihaz yeniden baslatiliyor.');
+            alert(t('ota.rollback_ok'));
             fetch('/api/device/restart',{method:'POST'}).catch(()=>{});
         } else {
-            alert('Rollback basarisiz: '+((d&&d.message)||'bilinmeyen hata'));
+            alert(t('ota.rollback_fail')+': '+((d&&d.message)||''));
         }
     }).catch(()=>{});
 }
@@ -700,7 +739,7 @@ function loadGuiOtaInfo(){
 }
 function guiOtaStart(){
     document.getElementById('gui-start-btn').disabled=true;
-    document.getElementById('gui-start-btn').textContent='Indiriliyor...';
+    document.getElementById('gui-start-btn').textContent=t('ota.downloading');
     fetch('/api/gui-ota/start',{method:'POST'}).then(()=>{
         guiOtaPoll=setInterval(()=>{
             fetch('/api/gui-ota/status').then(r=>r.json()).then(s=>{
@@ -708,20 +747,20 @@ function guiOtaStart(){
                 if(s.state>=5){// DONE or ERROR
                     clearInterval(guiOtaPoll);guiOtaPoll=null;
                     document.getElementById('gui-start-btn').disabled=false;
-                    document.getElementById('gui-start-btn').textContent='Arayuzu Guncelle';
+                    document.getElementById('gui-start-btn').textContent=t('ota.gui_update');
                     loadGuiOtaInfo();
                 }
             });
         },600);
     }).catch(()=>{
         document.getElementById('gui-start-btn').disabled=false;
-        document.getElementById('gui-start-btn').textContent='Arayuzu Guncelle';
+        document.getElementById('gui-start-btn').textContent=t('ota.gui_update');
     });
 }
 function guiOtaRollback(){
-    if(!confirm('Onceki arayuz slotuna donulecek. Emin misiniz?')) return;
+    if(!confirm(t('ota.gui_rollback_confirm'))) return;
     fetch('/api/gui-ota/rollback',{method:'POST'}).then(()=>{
-        alert('GUI rollback basarili.');loadGuiOtaInfo();
+        alert(t('ota.gui_rollback_ok'));loadGuiOtaInfo();
     }).catch(()=>{});
 }
 
@@ -735,11 +774,11 @@ function showOtaProgress(prefix,s){
 
 /* ── Device Actions ───────────────────────────────── */
 function deviceRestart(){
-    if(!confirm('Cihaz yeniden baslatilacak. Emin misiniz?')) return;
+    if(!confirm(t('sys.restart_confirm'))) return;
     fetch('/api/device/restart',{method:'POST'}).catch(()=>{});
 }
 function factoryReset(){
-    if(!confirm('TUM AYARLAR SILINECEK. Bu islem geri alinamaz. Emin misiniz?')) return;
+    if(!confirm(t('sys.factory_confirm'))) return;
     fetch('/api/device/factory-reset',{method:'POST'}).catch(()=>{});
 }
 
@@ -768,8 +807,8 @@ function connectSSE(){
                 // Update status line
                 const sl=document.getElementById('status-line');
                 if(mode&&mode.type!=='safe'){
-                    const stateText=d.state==='on'?'<span class="on">On</span>':'Off';
-                    const connText=d.connected!==false?'Connected':'Disconnected';
+                    const stateText=d.state==='on'?'<span class="on">'+esc(t('app.on'))+'</span>':esc(t('app.off'));
+                    const connText=d.connected!==false?esc(t('app.connected')):esc(t('app.disconnected'));
                     sl.innerHTML=stateText+' &middot; '+connText;
                 }
             }
@@ -780,18 +819,6 @@ function connectSSE(){
         // Reconnect after 5s
         setTimeout(connectSSE,5000);
     };
-}
-
-/* ── Language ─────────────────────────────────────── */
-let currentLang=localStorage.getItem('syndimm-lang')||'tr';
-function setLanguage(lang){
-    currentLang=lang;
-    localStorage.setItem('syndimm-lang',lang);
-    // Ceviriler sonra eklenecek - simdilik sadece secimi kaydet
-}
-function initLang(){
-    const sel=document.getElementById('lang-select');
-    if(sel) sel.value=currentLang;
 }
 
 /* ── Footer Buttons ──────────────────────────────── */
@@ -821,13 +848,14 @@ function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'
 
 /* ── Init ─────────────────────────────────────────── */
 initTheme();
-loadAuthStatus();
-loadModeConfig();
-loadWifiConfig();
-loadFwOtaInfo();
-loadGuiOtaInfo();
-connectSSE();
-initLang();
+initLang().then(()=>{
+    loadAuthStatus();
+    loadModeConfig();
+    loadWifiConfig();
+    loadFwOtaInfo();
+    loadGuiOtaInfo();
+    connectSSE();
+});
 
 // Dev kart click listener'lari
 document.getElementById('dev-card-fw').addEventListener('click',function(){showDevDetail('fw')});
