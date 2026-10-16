@@ -23,6 +23,15 @@ static bool s_mqtt_connected = false;
 static char s_last_state_payload[512] = "";
 static bool s_state_received = false;
 
+/* snprintf kesilmis olsa bile "yazilacak" uzunlugu doner; ilerlemeyi kalan alana kirp.
+ * Aksi halde oi > out_size olur ve out[oi]='\0' tampon disina yazar (yigin bozulmasi). */
+static inline size_t tmpl_advance(int n, size_t avail)
+{
+    if (n <= 0) return 0;
+    if ((size_t)n >= avail) return avail > 0 ? avail - 1 : 0;
+    return (size_t)n;
+}
+
 // ============================================================
 // Template genisleme
 // ============================================================
@@ -39,14 +48,14 @@ static void expand_topic(const char *tmpl, char *out, size_t out_size,
             if (strncmp(tmpl + ti, "{prefix}", 8) == 0) {
                 int n = snprintf(out + oi, out_size - oi, "%s",
                                  prefix ? prefix : "");
-                oi += n;
+                oi += tmpl_advance(n, out_size - oi);
                 ti += 8;
                 continue;
             }
             if (strncmp(tmpl + ti, "{state}", 7) == 0) {
                 int n = snprintf(out + oi, out_size - oi, "%s",
                                  state_prefix ? state_prefix : "");
-                oi += n;
+                oi += tmpl_advance(n, out_size - oi);
                 ti += 7;
                 continue;
             }
@@ -67,14 +76,14 @@ static void expand_payload(const char *tmpl, char *out, size_t out_size,
         if (tmpl[ti] == '{') {
             if (strncmp(tmpl + ti, "{value}", 7) == 0) {
                 int n = snprintf(out + oi, out_size - oi, "%d", value);
-                oi += n;
+                oi += tmpl_advance(n, out_size - oi);
                 ti += 7;
                 continue;
             }
             if (strncmp(tmpl + ti, "{toggle}", 8) == 0) {
                 int n = snprintf(out + oi, out_size - oi, "%s",
                                  toggle_val ? "ON" : "OFF");
-                oi += n;
+                oi += tmpl_advance(n, out_size - oi);
                 ti += 8;
                 continue;
             }

@@ -19,6 +19,15 @@ static const char *TAG = "PROTO_UDP";
 #define UDP_TIMEOUT_MS  2000
 #define UDP_RX_BUF_SIZE 1024
 
+/* snprintf kesilmis olsa bile "yazilacak" uzunlugu doner; ilerlemeyi kalan alana kirp.
+ * Aksi halde oi > out_size olur ve out[oi]='\0' tampon disina yazar (yigin bozulmasi). */
+static inline size_t tmpl_advance(int n, size_t avail)
+{
+    if (n <= 0) return 0;
+    if ((size_t)n >= avail) return avail > 0 ? avail - 1 : 0;
+    return (size_t)n;
+}
+
 // ============================================================
 // Template genisleme
 // ============================================================
@@ -34,14 +43,14 @@ static void expand_template(const char *tmpl, char *out, size_t out_size,
         if (tmpl[ti] == '{') {
             if (strncmp(tmpl + ti, "{value}", 7) == 0) {
                 int n = snprintf(out + oi, out_size - oi, "%d", value);
-                oi += n;
+                oi += tmpl_advance(n, out_size - oi);
                 ti += 7;
                 continue;
             }
             if (strncmp(tmpl + ti, "{toggle}", 8) == 0) {
                 int n = snprintf(out + oi, out_size - oi, "%s",
                                  toggle_val ? "true" : "false");
-                oi += n;
+                oi += tmpl_advance(n, out_size - oi);
                 ti += 8;
                 continue;
             }

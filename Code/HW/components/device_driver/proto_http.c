@@ -74,6 +74,15 @@ static esp_http_client_handle_t ka_get_client(const char *host, int port,
     return s_keep_alive_client;
 }
 
+/* snprintf kesilmis olsa bile "yazilacak" uzunlugu doner; ilerlemeyi kalan alana kirp.
+ * Aksi halde oi > out_size olur ve out[oi]='\0' tampon disina yazar (yigin bozulmasi). */
+static inline size_t tmpl_advance(int n, size_t avail)
+{
+    if (n <= 0) return 0;
+    if ((size_t)n >= avail) return avail > 0 ? avail - 1 : 0;
+    return (size_t)n;
+}
+
 // ============================================================
 // Template genisleme
 // ============================================================
@@ -90,28 +99,28 @@ static void expand_template(const char *tmpl, char *out, size_t out_size,
         if (tmpl[ti] == '{') {
             if (strncmp(tmpl + ti, "{value}", 7) == 0) {
                 int n = snprintf(out + oi, out_size - oi, "%d", value);
-                oi += n;
+                oi += tmpl_advance(n, out_size - oi);
                 ti += 7;
                 continue;
             }
             if (strncmp(tmpl + ti, "{toggle}", 8) == 0) {
                 int n = snprintf(out + oi, out_size - oi, "%s",
                                  toggle_val ? "true" : "false");
-                oi += n;
+                oi += tmpl_advance(n, out_size - oi);
                 ti += 8;
                 continue;
             }
             if (strncmp(tmpl + ti, "{auth_key}", 10) == 0) {
                 int n = snprintf(out + oi, out_size - oi, "%s",
                                  auth_key ? auth_key : "");
-                oi += n;
+                oi += tmpl_advance(n, out_size - oi);
                 ti += 10;
                 continue;
             }
             if (strncmp(tmpl + ti, "{device_id}", 11) == 0) {
                 int n = snprintf(out + oi, out_size - oi, "%s",
                                  device_id ? device_id : "");
-                oi += n;
+                oi += tmpl_advance(n, out_size - oi);
                 ti += 11;
                 continue;
             }
