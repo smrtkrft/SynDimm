@@ -255,8 +255,28 @@ static void set_static_headers(httpd_req_t *req, const char *clean_path, bool gz
  * (gz yoksa) aynen sunulur; gui_ota hedef slotu tamamen temizledigi icin eski
  * .gz dosyalari yeni duz dosyalari golgeleyemez.
  */
+/* Statik servis beyaz listesi: aktif slotta GUI disinda kullanici verileri de durur
+ * (profiles altindaki json dosyalarinda kasa kombinasyonu ve auth basliklari, modes.json). Yalnizca
+ * GUI dosyalari disari verilir; ".." iceren yollar reddedilir. */
+static bool static_path_allowed(const char *p)
+{
+    if (!p || p[0] != '/' || strstr(p, "..")) return false;
+    static const char *exact[] = {
+        "/index.html", "/style.css", "/app.js", "/config.json", "/favicon.ico", "/setup.html", NULL
+    };
+    for (int i = 0; exact[i]; i++) if (strcmp(p, exact[i]) == 0) return true;
+    if (strncmp(p, "/pic/", 5) == 0 || strncmp(p, "/lang/", 6) == 0) {
+        return strchr(p + 1, '/') == strrchr(p, '/');   /* tek seviye alt dizin */
+    }
+    return false;
+}
+
 static esp_err_t serve_static_path(httpd_req_t *req, const char *clean_path)
 {
+    if (!static_path_allowed(clean_path)) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Dosya bulunamadi");
+        return ESP_FAIL;
+    }
     if (ext_flash_is_slot_a_mounted() || ext_flash_is_slot_b_mounted()) {
         char gz_path[140];
         snprintf(gz_path, sizeof(gz_path), "%s.gz", clean_path);
@@ -786,17 +806,41 @@ static esp_err_t api_events_handler(httpd_req_t *req)
 
     s_sse_fds[slot] = fd;
 
-    // SSE header'lari gonder
-    httpd_resp_set_status(req, "200 OK");
-    httpd_resp_set_type(req, "text/event-stream");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-
-    httpd_resp_send_chunk(req, "data: connected\n\n", 17);
+    /* Basliklar HAM gonderilir. httpd_resp_send_chunk kullanilsaydi yanit
+     * "Transfer-Encoding: chunked" olarak acilir, sonraki httpd_socket_send
+     * yazimlari chunk cercevesiz gider ve tarayici akisi gecersiz sayar
+     * (surekli reconnect). Content-Length olmadan baglanti acik kalir. */
+    static const char hdr[] =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/event-stream\r\n"
+        "Cache-Control: no-cache\r\n"
+        "Connection: keep-alive\r\n"
+        "Access-Control-Allow-Origin: *\r\n"
+        "\r\n"
+        "data: connected\n\n";
+    if (httpd_socket_send(req->handle, fd, hdr, sizeof(hdr) - 1, 0) < 0) {
+        s_sse_fds[slot] = -1;
+        return ESP_FAIL;
+    }
+    httpd_sess_update_lru_counter(req->handle, fd);
 
     ESP_LOGI(TAG, "SSE istemci baglandi (fd=%d, slot=%d)", fd, slot);
     return ESP_OK;
+}
+
+/* Oturum kapanisi: SSE slotunu bosalt. close_fn verildiginde soketi kapatmak
+ * bize duser; aksi halde fd numarasi yeni bir baglantiya verilip SSE verisi
+ * o yanita karisirdi. */
+static void sse_session_close(httpd_handle_t hd, int sockfd)
+{
+    (void)hd;
+    for (int i = 0; i < SSE_MAX_CLIENTS; i++) {
+        if (s_sse_fds[i] == sockfd) {
+            s_sse_fds[i] = -1;
+            ESP_LOGI(TAG, "SSE istemci ayrildi (fd=%d)", sockfd);
+        }
+    }
+    close(sockfd);
 }
 
 // SSE gonderim - cihaz durumu ile
@@ -823,6 +867,9 @@ static void sse_do_send(void)
                 ESP_LOGW(TAG, "SSE gonderim basarisiz (fd=%d), kapatiliyor", s_sse_fds[i]);
                 httpd_sess_trigger_close(s_server, s_sse_fds[i]);
                 s_sse_fds[i] = -1;
+            } else {
+                /* Aktif akis LRU temizliginde kurban secilmesin */
+                httpd_sess_update_lru_counter(s_server, s_sse_fds[i]);
             }
         }
     }
@@ -1516,6 +1563,12 @@ static esp_err_t api_profiles_upload_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "id ve mode alanlari gerekli");
         return ESP_FAIL;
     }
+    if (!device_driver_valid_name(id_j->valuestring) || !device_driver_valid_name(mode_j->valuestring)) {
+        cJSON_Delete(root);
+        free(buf);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "id/mode sadece harf, rakam, _ ve - icerebilir");
+        return ESP_FAIL;
+    }
 
     // Dosya yolunu olustur
     char path[128];
@@ -1637,8 +1690,8 @@ static esp_err_t api_safe_delete_handler(httpd_req_t *req)
         httpd_query_key_value(query, "id", id, sizeof(id));
     }
 
-    if (strlen(id) == 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "id parametresi gerekli");
+    if (!device_driver_valid_name(id)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "id parametresi gecersiz");
         return ESP_FAIL;
     }
 
@@ -1760,7 +1813,12 @@ static esp_err_t api_catalog_download_handler(httpd_req_t *req)
     }
     dl_buf[dl_len] = '\0';
 
-    // Dosyayi kaydet
+    // Dosyayi kaydet (mode/id yol suzmesinden gecmis olmali)
+    if (!device_driver_valid_name(mode) || !device_driver_valid_name(id)) {
+        free(dl_buf);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "mode/id gecersiz");
+        return ESP_FAIL;
+    }
     char path[128];
     snprintf(path, sizeof(path), "/slot_a/profiles/%s/%s.json", mode, id);
     err = ext_flash_write_file(path, dl_buf, dl_len);
@@ -1833,8 +1891,11 @@ esp_err_t web_server_start(void)
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = 52;
     config.stack_size = 8192;
-    config.max_open_sockets = 7;
+    /* Tarayici 6 paralel istek + 3 kalici SSE: 7 soket yetmiyordu, LRU temizligi
+     * SSE'yi kesiyordu. LWIP_MAX_SOCKETS=16 -> httpd icin 12 (+3 dahili) uygun. */
+    config.max_open_sockets = 12;
     config.lru_purge_enable = true;
+    config.close_fn = sse_session_close;
 
     esp_err_t ret = httpd_start(&s_server, &config);
     if (ret != ESP_OK) {

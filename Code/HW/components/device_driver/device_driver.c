@@ -740,9 +740,22 @@ const char *device_driver_get_mode(void)
     return s_mode_str;
 }
 
+bool device_driver_valid_name(const char *s)
+{
+    if (!s || !*s) return false;
+    size_t n = 0;
+    for (; s[n]; n++) {
+        char c = s[n];
+        bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                  (c >= '0' && c <= '9') || c == '_' || c == '-';
+        if (!ok || n >= 48) return false;
+    }
+    return true;
+}
+
 esp_err_t device_driver_load_profile(const char *profile_id)
 {
-    if (!profile_id || strlen(profile_id) == 0) return ESP_ERR_INVALID_ARG;
+    if (!device_driver_valid_name(profile_id)) return ESP_ERR_INVALID_ARG;
 
     char path[128];
     snprintf(path, sizeof(path), "/slot_a/profiles/%s/%s.json",
@@ -815,7 +828,7 @@ const char *device_driver_get_active_profile(void)
 
 esp_err_t device_driver_list_profiles(const char *mode, char *json_out, size_t max_len)
 {
-    if (!mode || !json_out) return ESP_ERR_INVALID_ARG;
+    if (!json_out || !device_driver_valid_name(mode)) return ESP_ERR_INVALID_ARG;
 
     char dir_path[64];
     snprintf(dir_path, sizeof(dir_path), "/slot_a/profiles/%s", mode);
@@ -883,7 +896,7 @@ esp_err_t device_driver_list_profiles(const char *mode, char *json_out, size_t m
 
 esp_err_t device_driver_delete_profile(const char *profile_id)
 {
-    if (!profile_id) return ESP_ERR_INVALID_ARG;
+    if (!device_driver_valid_name(profile_id)) return ESP_ERR_INVALID_ARG;
 
     const char *modes[] = {"dimmer", "shutter", "safe"};
     for (int i = 0; i < 3; i++) {
@@ -1102,6 +1115,11 @@ esp_err_t device_driver_add_safe_profile(const char *json_str)
 
     cJSON *id_j = cJSON_GetObjectItem(root, "id");
     if (!id_j || !cJSON_IsString(id_j)) {
+        cJSON_Delete(root);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!device_driver_valid_name(id_j->valuestring)) {
         cJSON_Delete(root);
         return ESP_ERR_INVALID_ARG;
     }

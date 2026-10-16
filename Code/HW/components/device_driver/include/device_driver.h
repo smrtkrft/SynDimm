@@ -72,6 +72,12 @@ const char *device_driver_get_mode(void);
 esp_err_t device_driver_load_profile(const char *profile_id);
 
 /**
+ * Dosya yoluna giren ad (profil id, mod) guvenli mi?
+ * Sadece [A-Za-z0-9_-], 1..48 karakter. ".." ve "/" ile dizin disina cikis engellenir.
+ */
+bool device_driver_valid_name(const char *s);
+
+/**
  * Aktif profil ID
  */
 const char *device_driver_get_active_profile(void);
