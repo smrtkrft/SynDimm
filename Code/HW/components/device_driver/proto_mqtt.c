@@ -97,6 +97,19 @@ static void expand_payload(const char *tmpl, char *out, size_t out_size,
 // MQTT event handler
 // ============================================================
 
+/* Bekleyen durum aboneligi: subscribe baglanti kurulmadan istenirse burada
+ * saklanir ve CONNECTED olayinda (her yeniden baglanmada) uygulanir. Eskiden
+ * init'ten hemen sonra cagrilan subscribe her zaman INVALID_STATE donuyordu. */
+static char s_sub_topic[128] = {0};
+static bool s_sub_pending = false;
+
+static void apply_pending_subscribe(void)
+{
+    if (!s_sub_pending || !s_mqtt_client || !s_mqtt_connected) return;
+    int msg_id = esp_mqtt_client_subscribe(s_mqtt_client, s_sub_topic, 0);
+    ESP_LOGI(TAG, "MQTT subscribe: %s (%s)", s_sub_topic, msg_id >= 0 ? "ok" : "hata");
+}
+
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
                                 int32_t event_id, void *event_data)
 {
@@ -106,6 +119,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT baglandi");
             s_mqtt_connected = true;
+            apply_pending_subscribe();
             break;
 
         case MQTT_EVENT_DISCONNECTED:
@@ -179,6 +193,7 @@ esp_err_t proto_mqtt_init(const char *broker, int port)
 
 void proto_mqtt_stop(void)
 {
+    s_sub_pending = false;
     if (s_mqtt_client) {
         esp_mqtt_client_stop(s_mqtt_client);
         esp_mqtt_client_destroy(s_mqtt_client);
@@ -230,62 +245,15 @@ esp_err_t proto_mqtt_send_command(const char *topic, const char *payload,
 esp_err_t proto_mqtt_subscribe_status(const char *topic, const char *prefix,
                                        const char *state_prefix)
 {
+    if (!topic || !*topic) return ESP_ERR_INVALID_ARG;
+    expand_topic(topic, s_sub_topic, sizeof(s_sub_topic), prefix, state_prefix);
+    s_sub_pending = true;
+
     if (!s_mqtt_client || !s_mqtt_connected) {
-        ESP_LOGW(TAG, "MQTT bagli degil, subscribe bekletiliyor");
-        // Baglanti sonrasi otomatik subscribe icin topic'i saklayabiliriz
-        // Simdilik sadece hata dondur
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    char expanded_topic[128];
-    expand_topic(topic, expanded_topic, sizeof(expanded_topic),
-                 prefix, state_prefix);
-
-    ESP_LOGI(TAG, "MQTT subscribe: %s", expanded_topic);
-
-    int msg_id = esp_mqtt_client_subscribe(s_mqtt_client, expanded_topic, 0);
-    return (msg_id >= 0) ? ESP_OK : ESP_FAIL;
-}
-
-esp_err_t proto_mqtt_get_status(const char *value_key, const char *state_key,
-                                 int *out_value, bool *out_state)
-{
-    if (!s_state_received) {
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    // JSON parse
-    cJSON *root = cJSON_Parse(s_last_state_payload);
-    if (!root) {
-        // Duz string olabilir (ör: "ON", "OFF", "72")
-        if (state_key && out_state) {
-            *out_state = (strcasecmp(s_last_state_payload, "ON") == 0);
-        }
-        if (value_key && out_value) {
-            int v = atoi(s_last_state_payload);
-            if (v > 0) *out_value = v;
-        }
+        ESP_LOGI(TAG, "MQTT henuz bagli degil, subscribe baglaninca uygulanacak: %s", s_sub_topic);
         return ESP_OK;
     }
-
-    if (value_key && out_value) {
-        cJSON *val = cJSON_GetObjectItem(root, value_key);
-        if (val && cJSON_IsNumber(val)) {
-            *out_value = val->valueint;
-        }
-    }
-
-    if (state_key && out_state) {
-        cJSON *st = cJSON_GetObjectItem(root, state_key);
-        if (st) {
-            if (cJSON_IsString(st)) {
-                *out_state = (strcasecmp(st->valuestring, "ON") == 0);
-            } else if (cJSON_IsBool(st)) {
-                *out_state = cJSON_IsTrue(st);
-            }
-        }
-    }
-
-    cJSON_Delete(root);
+    apply_pending_subscribe();
     return ESP_OK;
 }
+

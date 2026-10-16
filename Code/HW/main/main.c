@@ -18,7 +18,6 @@
 #include "wifi_manager.h"
 #include "web_server.h"
 #include "ext_flash.h"
-#include "flash_sync.h"
 #include "gui_ota.h"
 #include "fw_ota.h"
 #include "esp_ota_ops.h"
@@ -189,14 +188,6 @@ void app_main(void)
     // Sistem olay kaydi: onceki calismayi analiz et (reset nedeni, sure, baglam)
     // Reserve bolumu mount degilse sadece RTC'de tutar.
     sys_log_init();
-
-    // Flash senkronizasyon baslatma
-    ret = flash_sync_init();
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Flash senkronizasyon baslatilamadi: %s", esp_err_to_name(ret));
-    } else {
-        ESP_LOGI(TAG, "Flash senkronizasyon hazir");
-    }
 
     // GUI OTA baslatma
     ret = gui_ota_init();

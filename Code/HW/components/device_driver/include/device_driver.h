@@ -162,22 +162,10 @@ esp_err_t proto_http_send_command(const char *host, int port,
                                   const char *body, const char *auth_key,
                                   const char *device_id, int value, bool toggle_val);
 
-esp_err_t proto_http_get_status(const char *host, int port,
-                                 const char *method, const char *path,
-                                 const char *auth_key, const char *device_id,
-                                 const char *value_key, const char *state_key,
-                                 int *out_value, bool *out_state,
-                                 int map_min, int map_max);
-
 // UDP protokol
 esp_err_t proto_udp_send_command(const char *host, int port,
                                   const char *packet_template,
                                   int value, bool toggle_val);
-
-esp_err_t proto_udp_get_status(const char *host, int port,
-                                const char *packet_template,
-                                const char *value_key, const char *state_key,
-                                int *out_value, bool *out_state);
 
 // MQTT protokol
 esp_err_t proto_mqtt_init(const char *broker, int port);
@@ -191,8 +179,6 @@ esp_err_t proto_mqtt_send_command(const char *topic, const char *payload,
 esp_err_t proto_mqtt_subscribe_status(const char *topic, const char *prefix,
                                        const char *state_prefix);
 
-esp_err_t proto_mqtt_get_status(const char *value_key, const char *state_key,
-                                 int *out_value, bool *out_state);
 
 /**
  * State degisiklik bildirimi callback'i ayarla

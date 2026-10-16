@@ -704,9 +704,16 @@ esp_err_t device_driver_init(void)
     }
 
     // Profil dizinlerini olustur ve varsayilan profilleri yaz
-    ext_flash_write_file("/slot_a/profiles/dimmer/.keep", "", 0);
-    ext_flash_write_file("/slot_a/profiles/shutter/.keep", "", 0);
-    ext_flash_write_file("/slot_a/profiles/safe/.keep", "", 0);
+    /* Dizinleri garanti et; her acilista yeniden yazma (gereksiz flash asinmasi) */
+    {
+        static const char *keeps[] = {
+            "/slot_a/profiles/dimmer/.keep", "/slot_a/profiles/shutter/.keep",
+            "/slot_a/profiles/safe/.keep", NULL };
+        for (int i = 0; keeps[i]; i++) {
+            struct stat st;
+            if (stat(keeps[i], &st) != 0) ext_flash_write_file(keeps[i], "", 0);
+        }
+    }
 
     update_status_text();
 
