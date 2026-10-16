@@ -1,3 +1,79 @@
+/* ── Auth (cihaz parolasi) ───────────────────────── */
+/* Tum fetch'ler sarilir: 401 gelirse giris ekrani acilir. Oturum HttpOnly cerezde,
+ * JS'in token tutmasi gerekmez. */
+let authState={enabled:false,authed:true};
+(function(){
+    const _fetch=window.fetch.bind(window);
+    window.fetch=function(url,opts){
+        return _fetch(url,opts).then(r=>{
+            if(r.status===401 && String(url).indexOf('/api/')===0) showLogin();
+            return r;
+        });
+    };
+})();
+function showLogin(){
+    const el=document.getElementById('login');
+    if(el.classList.contains('open')) return;
+    el.classList.add('open');
+    setTimeout(()=>{const i=document.getElementById('login-pass');if(i){i.value='';i.focus();}},50);
+}
+function doLogin(){
+    const pass=document.getElementById('login-pass').value;
+    const btn=document.getElementById('login-btn');
+    const err=document.getElementById('login-err');
+    if(!pass) return;
+    btn.disabled=true;err.textContent='';
+    fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})})
+    .then(r=>r.json().then(d=>({ok:r.ok,d})))
+    .then(({ok,d})=>{
+        btn.disabled=false;
+        if(ok && d.status==='ok'){ location.reload(); }
+        else { err.textContent=(d&&d.message)||'Parola yanlis'; }
+    }).catch(()=>{btn.disabled=false;err.textContent='Baglanti hatasi';});
+}
+document.getElementById('login-pass').addEventListener('keydown',e=>{if(e.key==='Enter') doLogin();});
+function loadAuthStatus(){
+    fetch('/api/auth/status').then(r=>r.json()).then(d=>{
+        authState=d;
+        const sub=document.getElementById('auth-card-sub');
+        if(sub) sub.textContent=d.enabled?'Parola ayarli':'Parola yok (onerilir)';
+        const st=document.getElementById('auth-state');
+        if(st) st.textContent=d.enabled?'Korumali':'Acik';
+        const cw=document.getElementById('auth-cur-wrap');
+        if(cw) cw.style.display=d.enabled?'':'none';
+        const rb=document.getElementById('auth-remove-btn');
+        if(rb) rb.style.display=d.enabled?'':'none';
+        const lb=document.getElementById('auth-logout-btn');
+        if(lb) lb.style.display=d.enabled?'':'none';
+        if(d.enabled && !d.authed) showLogin();
+    }).catch(()=>{});
+}
+function setPassword(remove){
+    const cur=document.getElementById('auth-cur').value;
+    const p1=document.getElementById('auth-new').value;
+    const p2=document.getElementById('auth-new2').value;
+    const msg=document.getElementById('auth-msg');
+    msg.textContent='';
+    if(remove){
+        if(!confirm('Parola kaldirilacak, arayuz herkese acik olacak. Emin misiniz?')) return;
+    } else {
+        if(p1.length<4||p1.length>64){msg.textContent='Parola 4-64 karakter olmali';return;}
+        if(p1!==p2){msg.textContent='Parolalar eslesmiyor';return;}
+    }
+    fetch('/api/auth/set',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({current:cur,password:remove?'':p1})})
+    .then(r=>r.json()).then(d=>{
+        if(d.status==='ok'){
+            msg.textContent=remove?'Parola kaldirildi':'Parola kaydedildi';
+            ['auth-cur','auth-new','auth-new2'].forEach(id=>document.getElementById(id).value='');
+            loadAuthStatus();
+        } else msg.textContent=d.message||'Hata';
+    }).catch(()=>{msg.textContent='Baglanti hatasi';});
+}
+function doLogout(){
+    fetch('/api/auth/logout',{method:'POST'}).then(()=>location.reload()).catch(()=>{});
+}
+
 /* ── Theme ────────────────────────────────────────── */
 let currentTheme=localStorage.getItem('syndimm-theme')||'dark';
 function setTheme(theme){
@@ -745,6 +821,7 @@ function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'
 
 /* ── Init ─────────────────────────────────────────── */
 initTheme();
+loadAuthStatus();
 loadModeConfig();
 loadWifiConfig();
 loadFwOtaInfo();

@@ -29,6 +29,7 @@
 #include "fw_ota.h"
 #include "sys_log.h"
 #include "esp_timer.h"
+#include "mbedtls/sha256.h"
 #include <stdio.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -180,6 +181,317 @@ static size_t json_escape(const char *src, char *dst, size_t dst_size)
     }
     dst[di] = '\0';
     return di;
+}
+
+// ============================================================
+// Kimlik Dogrulama (cihaz parolasi + cerez oturumu)
+//
+// - Parola NVS "sd_auth"/"hash" icinde tuzlu SHA-256 (tuz = cihaz MAC) olarak durur.
+// - Parola YOKSA her sey eskisi gibi aciktir (GUI uyari gosterir).
+// - Parola VARSA /api/... (auth uclari haric) oturum cerezi "sd_sess" ister.
+//   Statik GUI dosyalari aciktir; GUI 401 alinca giris ekrani gosterir.
+// - Cerez SameSite=Strict + HttpOnly: baska sitelerden CSRF istekleri cerezsiz gider.
+// - 5 hatali giris -> 30 sn kilit; denemeler sys_log'a yazilir.
+// ============================================================
+#define AUTH_NVS_NS        "sd_auth"
+#define AUTH_MAX_SESSIONS  4
+#define AUTH_TOKEN_LEN     32                      /* hex karakter */
+#define AUTH_SESSION_TTL_S (30 * 24 * 3600)        /* bos oturum: 30 gun */
+#define AUTH_FAIL_MAX      5
+#define AUTH_LOCK_S        30
+
+typedef struct {
+    char token[AUTH_TOKEN_LEN + 1];
+    uint32_t last_seen_s;
+} auth_session_t;
+
+static bool s_auth_enabled = false;
+static char s_auth_hash[65] = {0};                 /* hex sha256 */
+static auth_session_t s_sessions[AUTH_MAX_SESSIONS];
+static int s_auth_fail = 0;
+static uint32_t s_auth_lock_until = 0;
+
+static uint32_t auth_now_s(void) { return (uint32_t)(esp_timer_get_time() / 1000000ULL); }
+
+/* Zamanlama sizintisi olmadan karsilastirma */
+static bool ct_equal(const char *a, const char *b, size_t n)
+{
+    unsigned char d = 0;
+    for (size_t i = 0; i < n; i++) d |= (unsigned char)(a[i] ^ b[i]);
+    return d == 0;
+}
+
+static void auth_hash_password(const char *pass, char out_hex[65])
+{
+    uint8_t mac[6];
+    esp_efuse_mac_get_default(mac);
+    char salted[160];
+    int n = snprintf(salted, sizeof(salted), "%02x%02x%02x%02x%02x%02x:%s",
+                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], pass);
+    uint8_t dig[32];
+    mbedtls_sha256((const unsigned char *)salted, (size_t)n, dig, 0);
+    for (int i = 0; i < 32; i++) sprintf(out_hex + i * 2, "%02x", dig[i]);
+    out_hex[64] = '\0';
+}
+
+static void auth_load(void)
+{
+    nvs_handle_t nvs;
+    s_auth_enabled = false;
+    if (nvs_open(AUTH_NVS_NS, NVS_READONLY, &nvs) == ESP_OK) {
+        size_t len = sizeof(s_auth_hash);
+        if (nvs_get_str(nvs, "hash", s_auth_hash, &len) == ESP_OK && strlen(s_auth_hash) == 64) {
+            s_auth_enabled = true;
+        }
+        nvs_close(nvs);
+    }
+    memset(s_sessions, 0, sizeof(s_sessions));
+    ESP_LOGI(TAG, "Kimlik dogrulama: %s", s_auth_enabled ? "ACIK (parola ayarli)" : "KAPALI (parola yok)");
+}
+
+static esp_err_t auth_store(const char *pass_or_null)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(AUTH_NVS_NS, NVS_READWRITE, &nvs);
+    if (err != ESP_OK) return err;
+    if (pass_or_null && *pass_or_null) {
+        auth_hash_password(pass_or_null, s_auth_hash);
+        err = nvs_set_str(nvs, "hash", s_auth_hash);
+        s_auth_enabled = (err == ESP_OK);
+    } else {
+        nvs_erase_key(nvs, "hash");
+        s_auth_enabled = false;
+        s_auth_hash[0] = '\0';
+    }
+    nvs_commit(nvs);
+    nvs_close(nvs);
+    memset(s_sessions, 0, sizeof(s_sessions));      /* tum oturumlar dusur */
+    return err;
+}
+
+static void auth_new_token(char out[AUTH_TOKEN_LEN + 1])
+{
+    uint8_t rnd[AUTH_TOKEN_LEN / 2];
+    esp_fill_random(rnd, sizeof(rnd));
+    for (size_t i = 0; i < sizeof(rnd); i++) sprintf(out + i * 2, "%02x", rnd[i]);
+    out[AUTH_TOKEN_LEN] = '\0';
+}
+
+static auth_session_t *auth_session_create(void)
+{
+    uint32_t now = auth_now_s();
+    auth_session_t *victim = &s_sessions[0];
+    for (int i = 0; i < AUTH_MAX_SESSIONS; i++) {
+        if (s_sessions[i].token[0] == '\0') { victim = &s_sessions[i]; break; }
+        if (s_sessions[i].last_seen_s < victim->last_seen_s) victim = &s_sessions[i];
+    }
+    auth_new_token(victim->token);
+    victim->last_seen_s = now;
+    return victim;
+}
+
+/* Istekte gecerli oturum var mi? Cerez "sd_sess" veya "X-Auth-Token" basligi */
+static bool auth_request_ok(httpd_req_t *req)
+{
+    char tok[AUTH_TOKEN_LEN + 1] = {0};
+    char hdr[256];
+    if (httpd_req_get_hdr_value_str(req, "X-Auth-Token", hdr, sizeof(hdr)) == ESP_OK) {
+        strncpy(tok, hdr, AUTH_TOKEN_LEN);
+    } else if (httpd_req_get_hdr_value_str(req, "Cookie", hdr, sizeof(hdr)) == ESP_OK) {
+        const char *c = strstr(hdr, "sd_sess=");
+        if (c) strncpy(tok, c + 8, AUTH_TOKEN_LEN);
+    }
+    if (strlen(tok) != AUTH_TOKEN_LEN) return false;
+
+    uint32_t now = auth_now_s();
+    for (int i = 0; i < AUTH_MAX_SESSIONS; i++) {
+        auth_session_t *se = &s_sessions[i];
+        if (se->token[0] == '\0') continue;
+        if (now - se->last_seen_s > AUTH_SESSION_TTL_S) { se->token[0] = '\0'; continue; }
+        if (ct_equal(se->token, tok, AUTH_TOKEN_LEN)) {
+            se->last_seen_s = now;
+            return true;
+        }
+    }
+    return false;
+}
+
+static esp_err_t auth_send_401(httpd_req_t *req)
+{
+    httpd_resp_set_status(req, "401 Unauthorized");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, "{\"status\":\"error\",\"code\":\"auth\",\"message\":\"Giris gerekli\"}",
+                           HTTPD_RESP_USE_STRLEN);
+}
+
+/* Tum /api/... kayitlari bu kapidan gecer; gercek handler user_ctx icindedir */
+static esp_err_t auth_gate_handler(httpd_req_t *req)
+{
+    esp_err_t (*real)(httpd_req_t *) = (esp_err_t (*)(httpd_req_t *))req->user_ctx;
+    if (s_auth_enabled && !auth_request_ok(req)) {
+        return auth_send_401(req);
+    }
+    return real(req);
+}
+
+static int read_body(httpd_req_t *req, char *buf, size_t size)
+{
+    if (req->content_len <= 0 || req->content_len >= size) return -1;
+    int total = 0;
+    while (total < (int)req->content_len) {
+        int r = httpd_req_recv(req, buf + total, req->content_len - total);
+        if (r <= 0) { if (r == HTTPD_SOCK_ERR_TIMEOUT) continue; return -1; }
+        total += r;
+    }
+    buf[total] = '\0';
+    return total;
+}
+
+// GET /api/auth/status - acik: {enabled, authed}
+static esp_err_t api_auth_status_handler(httpd_req_t *req)
+{
+    char resp[96];
+    snprintf(resp, sizeof(resp), "{\"enabled\":%s,\"authed\":%s}",
+             s_auth_enabled ? "true" : "false",
+             (!s_auth_enabled || auth_request_ok(req)) ? "true" : "false");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, resp, strlen(resp));
+}
+
+// POST /api/auth/login {"password":"..."} -> Set-Cookie sd_sess
+static esp_err_t api_auth_login_handler(httpd_req_t *req)
+{
+    if (!s_auth_enabled) {
+        httpd_resp_set_type(req, "application/json");
+        return httpd_resp_send(req, "{\"status\":\"ok\",\"enabled\":false}", HTTPD_RESP_USE_STRLEN);
+    }
+    uint32_t now = auth_now_s();
+    if (s_auth_lock_until && now < s_auth_lock_until) {
+        httpd_resp_set_status(req, "429 Too Many Requests");
+        httpd_resp_set_type(req, "application/json");
+        char resp[96];
+        snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Cok fazla deneme, %lu sn bekleyin\"}",
+                 (unsigned long)(s_auth_lock_until - now));
+        return httpd_resp_send(req, resp, strlen(resp));
+    }
+
+    char body[256];
+    if (read_body(req, body, sizeof(body)) <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
+        return ESP_FAIL;
+    }
+    char pass[128] = {0};
+    cJSON *root = cJSON_Parse(body);
+    if (root) {
+        cJSON *pj = cJSON_GetObjectItem(root, "password");
+        if (pj && cJSON_IsString(pj)) strncpy(pass, pj->valuestring, sizeof(pass) - 1);
+        cJSON_Delete(root);
+    }
+
+    char hex[65];
+    auth_hash_password(pass, hex);
+    if (!ct_equal(hex, s_auth_hash, 64)) {
+        s_auth_fail++;
+        sys_log_write("WARN", "auth", "Hatali parola denemesi (%d/%d)", s_auth_fail, AUTH_FAIL_MAX);
+        if (s_auth_fail >= AUTH_FAIL_MAX) {
+            s_auth_fail = 0;
+            s_auth_lock_until = now + AUTH_LOCK_S;
+            sys_log_write("WARN", "auth", "Giris %d sn kilitlendi", AUTH_LOCK_S);
+        }
+        vTaskDelay(pdMS_TO_TICKS(300));   /* kaba kuvvet yavaslatma */
+        return auth_send_401(req);
+    }
+
+    s_auth_fail = 0;
+    auth_session_t *se = auth_session_create();
+    char cookie[160];
+    snprintf(cookie, sizeof(cookie), "sd_sess=%s; Path=/; Max-Age=%d; HttpOnly; SameSite=Strict",
+             se->token, AUTH_SESSION_TTL_S);
+    httpd_resp_set_hdr(req, "Set-Cookie", cookie);
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_set_type(req, "application/json");
+    char resp[96];
+    snprintf(resp, sizeof(resp), "{\"status\":\"ok\",\"token\":\"%s\"}", se->token);
+    sys_log_write("INFO", "auth", "Giris basarili");
+    return httpd_resp_send(req, resp, strlen(resp));
+}
+
+// POST /api/auth/logout
+static esp_err_t api_auth_logout_handler(httpd_req_t *req)
+{
+    char hdr[256], tok[AUTH_TOKEN_LEN + 1] = {0};
+    if (httpd_req_get_hdr_value_str(req, "Cookie", hdr, sizeof(hdr)) == ESP_OK) {
+        const char *c = strstr(hdr, "sd_sess=");
+        if (c) strncpy(tok, c + 8, AUTH_TOKEN_LEN);
+    }
+    for (int i = 0; i < AUTH_MAX_SESSIONS; i++) {
+        if (s_sessions[i].token[0] && ct_equal(s_sessions[i].token, tok, AUTH_TOKEN_LEN)) {
+            s_sessions[i].token[0] = '\0';
+        }
+    }
+    httpd_resp_set_hdr(req, "Set-Cookie", "sd_sess=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict");
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+}
+
+// POST /api/auth/set {"current":"...","password":"..."}  (password bos = kaldir)
+// Parola ayarliyken mevcut oturum + mevcut parola gerekir.
+static esp_err_t api_auth_set_handler(httpd_req_t *req)
+{
+    if (s_auth_enabled && !auth_request_ok(req)) return auth_send_401(req);
+
+    char body[320];
+    if (read_body(req, body, sizeof(body)) <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
+        return ESP_FAIL;
+    }
+    char cur[128] = {0}, pass[128] = {0};
+    cJSON *root = cJSON_Parse(body);
+    if (root) {
+        cJSON *cj = cJSON_GetObjectItem(root, "current");
+        cJSON *pj = cJSON_GetObjectItem(root, "password");
+        if (cj && cJSON_IsString(cj)) strncpy(cur, cj->valuestring, sizeof(cur) - 1);
+        if (pj && cJSON_IsString(pj)) strncpy(pass, pj->valuestring, sizeof(pass) - 1);
+        cJSON_Delete(root);
+    }
+    httpd_resp_set_type(req, "application/json");
+
+    if (s_auth_enabled) {
+        char hex[65];
+        auth_hash_password(cur, hex);
+        if (!ct_equal(hex, s_auth_hash, 64)) {
+            httpd_resp_set_status(req, "403 Forbidden");
+            return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Mevcut parola yanlis\"}",
+                                   HTTPD_RESP_USE_STRLEN);
+        }
+    }
+    if (*pass && (strlen(pass) < 4 || strlen(pass) > 64)) {
+        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Parola 4-64 karakter olmali\"}",
+                               HTTPD_RESP_USE_STRLEN);
+    }
+
+    esp_err_t err = auth_store(*pass ? pass : NULL);
+    if (err != ESP_OK) {
+        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"NVS yazilamadi\"}",
+                               HTTPD_RESP_USE_STRLEN);
+    }
+    sys_log_write("WARN", "auth", *pass ? "Cihaz parolasi ayarlandi/degistirildi" : "Cihaz parolasi kaldirildi");
+
+    if (*pass) {
+        /* Yeni parola: cagirana hemen oturum ver (tekrar giris istemesin) */
+        auth_session_t *se = auth_session_create();
+        char cookie[160];
+        snprintf(cookie, sizeof(cookie), "sd_sess=%s; Path=/; Max-Age=%d; HttpOnly; SameSite=Strict",
+                 se->token, AUTH_SESSION_TTL_S);
+        httpd_resp_set_hdr(req, "Set-Cookie", cookie);
+    } else {
+        httpd_resp_set_hdr(req, "Set-Cookie", "sd_sess=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict");
+    }
+    char resp[64];
+    snprintf(resp, sizeof(resp), "{\"status\":\"ok\",\"enabled\":%s}", s_auth_enabled ? "true" : "false");
+    return httpd_resp_send(req, resp, strlen(resp));
 }
 
 // ============================================================
@@ -1923,13 +2235,15 @@ esp_err_t web_server_start(void)
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 52;
+    config.max_uri_handlers = 56;
     config.stack_size = 8192;
     /* Tarayici 6 paralel istek + 3 kalici SSE: 7 soket yetmiyordu, LRU temizligi
      * SSE'yi kesiyordu. LWIP_MAX_SOCKETS=16 -> httpd icin 12 (+3 dahili) uygun. */
     config.max_open_sockets = 12;
     config.lru_purge_enable = true;
     config.close_fn = sse_session_close;
+
+    auth_load();
 
     esp_err_t ret = httpd_start(&s_server, &config);
     if (ret != ESP_OK) {
@@ -1945,224 +2259,238 @@ esp_err_t web_server_start(void)
 
     // --- System API ---
     const httpd_uri_t api_info = {
-        .uri = "/api/system/info", .method = HTTP_GET, .handler = api_system_info_handler
+        .uri = "/api/system/info", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_system_info_handler
     };
     httpd_register_uri_handler(s_server, &api_info);
 
+    // --- Kimlik dogrulama (bu uclar kapisiz) ---
+    const httpd_uri_t api_auth_status = {
+        .uri = "/api/auth/status", .method = HTTP_GET, .handler = api_auth_status_handler };
+    httpd_register_uri_handler(s_server, &api_auth_status);
+    const httpd_uri_t api_auth_login = {
+        .uri = "/api/auth/login", .method = HTTP_POST, .handler = api_auth_login_handler };
+    httpd_register_uri_handler(s_server, &api_auth_login);
+    const httpd_uri_t api_auth_logout = {
+        .uri = "/api/auth/logout", .method = HTTP_POST, .handler = api_auth_logout_handler };
+    httpd_register_uri_handler(s_server, &api_auth_logout);
+    const httpd_uri_t api_auth_set = {
+        .uri = "/api/auth/set", .method = HTTP_POST, .handler = api_auth_set_handler };
+    httpd_register_uri_handler(s_server, &api_auth_set);
+
     const httpd_uri_t api_sys_detail = {
-        .uri = "/api/system/detail", .method = HTTP_GET, .handler = api_system_detail_handler
+        .uri = "/api/system/detail", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_system_detail_handler
     };
     httpd_register_uri_handler(s_server, &api_sys_detail);
 
     const httpd_uri_t api_logs = {
-        .uri = "/api/system/logs", .method = HTTP_GET, .handler = api_system_logs_handler
+        .uri = "/api/system/logs", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_system_logs_handler
     };
     httpd_register_uri_handler(s_server, &api_logs);
     const httpd_uri_t api_logs_clear = {
-        .uri = "/api/system/logs", .method = HTTP_DELETE, .handler = api_system_logs_clear_handler
+        .uri = "/api/system/logs", .method = HTTP_DELETE, .handler = auth_gate_handler, .user_ctx = (void *)api_system_logs_clear_handler
     };
     httpd_register_uri_handler(s_server, &api_logs_clear);
 
     // --- WiFi API ---
     const httpd_uri_t api_wifi = {
-        .uri = "/api/wifi/connect", .method = HTTP_POST, .handler = api_wifi_connect_handler
+        .uri = "/api/wifi/connect", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_wifi_connect_handler
     };
     httpd_register_uri_handler(s_server, &api_wifi);
 
     const httpd_uri_t api_wifi_backup = {
-        .uri = "/api/wifi/backup/save", .method = HTTP_POST, .handler = api_wifi_backup_save_handler
+        .uri = "/api/wifi/backup/save", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_wifi_backup_save_handler
     };
     httpd_register_uri_handler(s_server, &api_wifi_backup);
 
     const httpd_uri_t api_wifi_cfg = {
-        .uri = "/api/wifi/config", .method = HTTP_GET, .handler = api_wifi_config_handler
+        .uri = "/api/wifi/config", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_wifi_config_handler
     };
     httpd_register_uri_handler(s_server, &api_wifi_cfg);
 
     const httpd_uri_t api_wifi_ap = {
-        .uri = "/api/wifi/ap/set", .method = HTTP_POST, .handler = api_wifi_ap_set_handler
+        .uri = "/api/wifi/ap/set", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_wifi_ap_set_handler
     };
     httpd_register_uri_handler(s_server, &api_wifi_ap);
 
     const httpd_uri_t api_wifi_mdns = {
-        .uri = "/api/wifi/mdns", .method = HTTP_POST, .handler = api_wifi_mdns_handler
+        .uri = "/api/wifi/mdns", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_wifi_mdns_handler
     };
     const httpd_uri_t api_wifi_txpower = {
-        .uri = "/api/wifi/txpower", .method = HTTP_POST, .handler = api_wifi_txpower_handler
+        .uri = "/api/wifi/txpower", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_wifi_txpower_handler
     };
     httpd_register_uri_handler(s_server, &api_wifi_txpower);
     httpd_register_uri_handler(s_server, &api_wifi_mdns);
 
     // --- Modes API ---
     const httpd_uri_t api_modes_get = {
-        .uri = "/api/modes", .method = HTTP_GET, .handler = api_modes_get_handler
+        .uri = "/api/modes", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_modes_get_handler
     };
     httpd_register_uri_handler(s_server, &api_modes_get);
 
     const httpd_uri_t api_modes_post = {
-        .uri = "/api/modes", .method = HTTP_POST, .handler = api_modes_post_handler
+        .uri = "/api/modes", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_modes_post_handler
     };
     httpd_register_uri_handler(s_server, &api_modes_post);
 
     // --- Device Control API ---
     const httpd_uri_t api_restart = {
-        .uri = "/api/device/restart", .method = HTTP_POST, .handler = api_device_restart_handler
+        .uri = "/api/device/restart", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_device_restart_handler
     };
     httpd_register_uri_handler(s_server, &api_restart);
 
     const httpd_uri_t api_factory_reset = {
-        .uri = "/api/device/factory-reset", .method = HTTP_POST, .handler = api_device_factory_reset_handler
+        .uri = "/api/device/factory-reset", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_device_factory_reset_handler
     };
     httpd_register_uri_handler(s_server, &api_factory_reset);
 
     // --- Actions API ---
     const httpd_uri_t api_actions_get = {
-        .uri = "/api/actions/get", .method = HTTP_GET, .handler = api_actions_get_handler
+        .uri = "/api/actions/get", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_actions_get_handler
     };
     httpd_register_uri_handler(s_server, &api_actions_get);
 
     const httpd_uri_t api_actions_save = {
-        .uri = "/api/actions/save", .method = HTTP_POST, .handler = api_actions_save_handler
+        .uri = "/api/actions/save", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_actions_save_handler
     };
     httpd_register_uri_handler(s_server, &api_actions_save);
 
     // --- Reset API ---
     const httpd_uri_t api_reset_cfg_get = {
-        .uri = "/api/reset/config", .method = HTTP_GET, .handler = api_reset_config_get_handler
+        .uri = "/api/reset/config", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_reset_config_get_handler
     };
     httpd_register_uri_handler(s_server, &api_reset_cfg_get);
 
     const httpd_uri_t api_reset_cfg_save = {
-        .uri = "/api/reset/config", .method = HTTP_POST, .handler = api_reset_config_save_handler
+        .uri = "/api/reset/config", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_reset_config_save_handler
     };
     httpd_register_uri_handler(s_server, &api_reset_cfg_save);
 
     const httpd_uri_t api_reset_generate = {
-        .uri = "/api/reset/generate", .method = HTTP_POST, .handler = api_reset_generate_handler
+        .uri = "/api/reset/generate", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_reset_generate_handler
     };
     httpd_register_uri_handler(s_server, &api_reset_generate);
 
     const httpd_uri_t api_reset = {
-        .uri = "/api/reset", .method = HTTP_GET, .handler = api_reset_handler
+        .uri = "/api/reset", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_reset_handler
     };
     httpd_register_uri_handler(s_server, &api_reset);
 
     // --- GUI OTA API ---
     const httpd_uri_t api_gui_ota_info = {
-        .uri = "/api/gui-ota/info", .method = HTTP_GET, .handler = api_gui_ota_info_handler
+        .uri = "/api/gui-ota/info", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_gui_ota_info_handler
     };
     httpd_register_uri_handler(s_server, &api_gui_ota_info);
 
     const httpd_uri_t api_gui_ota_start = {
-        .uri = "/api/gui-ota/start", .method = HTTP_POST, .handler = api_gui_ota_start_handler
+        .uri = "/api/gui-ota/start", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_gui_ota_start_handler
     };
     httpd_register_uri_handler(s_server, &api_gui_ota_start);
 
     const httpd_uri_t api_gui_ota_status = {
-        .uri = "/api/gui-ota/status", .method = HTTP_GET, .handler = api_gui_ota_status_handler
+        .uri = "/api/gui-ota/status", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_gui_ota_status_handler
     };
     httpd_register_uri_handler(s_server, &api_gui_ota_status);
 
     const httpd_uri_t api_gui_ota_rollback = {
-        .uri = "/api/gui-ota/rollback", .method = HTTP_POST, .handler = api_gui_ota_rollback_handler
+        .uri = "/api/gui-ota/rollback", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_gui_ota_rollback_handler
     };
     httpd_register_uri_handler(s_server, &api_gui_ota_rollback);
 
     // --- Firmware OTA API ---
     const httpd_uri_t api_fw_ota_info = {
-        .uri = "/api/fw-ota/info", .method = HTTP_GET, .handler = api_fw_ota_info_handler
+        .uri = "/api/fw-ota/info", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_fw_ota_info_handler
     };
     httpd_register_uri_handler(s_server, &api_fw_ota_info);
 
     const httpd_uri_t api_fw_ota_check = {
-        .uri = "/api/fw-ota/check", .method = HTTP_POST, .handler = api_fw_ota_check_handler
+        .uri = "/api/fw-ota/check", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_fw_ota_check_handler
     };
     httpd_register_uri_handler(s_server, &api_fw_ota_check);
 
     const httpd_uri_t api_fw_ota_start = {
-        .uri = "/api/fw-ota/start", .method = HTTP_POST, .handler = api_fw_ota_start_handler
+        .uri = "/api/fw-ota/start", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_fw_ota_start_handler
     };
     httpd_register_uri_handler(s_server, &api_fw_ota_start);
 
     const httpd_uri_t api_fw_ota_status = {
-        .uri = "/api/fw-ota/status", .method = HTTP_GET, .handler = api_fw_ota_status_handler
+        .uri = "/api/fw-ota/status", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_fw_ota_status_handler
     };
     httpd_register_uri_handler(s_server, &api_fw_ota_status);
 
     const httpd_uri_t api_fw_ota_rollback = {
-        .uri = "/api/fw-ota/rollback", .method = HTTP_POST, .handler = api_fw_ota_rollback_handler
+        .uri = "/api/fw-ota/rollback", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_fw_ota_rollback_handler
     };
     httpd_register_uri_handler(s_server, &api_fw_ota_rollback);
 
     // --- Device Driver API ---
     const httpd_uri_t api_mode_get = {
-        .uri = "/api/mode", .method = HTTP_GET, .handler = api_mode_get_handler
+        .uri = "/api/mode", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_mode_get_handler
     };
     httpd_register_uri_handler(s_server, &api_mode_get);
 
     const httpd_uri_t api_mode_set = {
-        .uri = "/api/mode", .method = HTTP_POST, .handler = api_mode_set_handler
+        .uri = "/api/mode", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_mode_set_handler
     };
     httpd_register_uri_handler(s_server, &api_mode_set);
 
     const httpd_uri_t api_profiles = {
-        .uri = "/api/profiles", .method = HTTP_GET, .handler = api_profiles_list_handler
+        .uri = "/api/profiles", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_profiles_list_handler
     };
     httpd_register_uri_handler(s_server, &api_profiles);
 
     const httpd_uri_t api_profiles_active = {
-        .uri = "/api/profiles/active", .method = HTTP_GET, .handler = api_profiles_active_handler
+        .uri = "/api/profiles/active", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_profiles_active_handler
     };
     httpd_register_uri_handler(s_server, &api_profiles_active);
 
     const httpd_uri_t api_profiles_select = {
-        .uri = "/api/profiles/select", .method = HTTP_POST, .handler = api_profiles_select_handler
+        .uri = "/api/profiles/select", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_profiles_select_handler
     };
     httpd_register_uri_handler(s_server, &api_profiles_select);
 
     const httpd_uri_t api_profiles_upload = {
-        .uri = "/api/profiles/upload", .method = HTTP_POST, .handler = api_profiles_upload_handler
+        .uri = "/api/profiles/upload", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_profiles_upload_handler
     };
     httpd_register_uri_handler(s_server, &api_profiles_upload);
 
     const httpd_uri_t api_profiles_del = {
-        .uri = "/api/profiles", .method = HTTP_DELETE, .handler = api_profiles_delete_handler
+        .uri = "/api/profiles", .method = HTTP_DELETE, .handler = auth_gate_handler, .user_ctx = (void *)api_profiles_delete_handler
     };
     httpd_register_uri_handler(s_server, &api_profiles_del);
 
     const httpd_uri_t api_dev_status = {
-        .uri = "/api/status", .method = HTTP_GET, .handler = api_device_status_handler
+        .uri = "/api/status", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_device_status_handler
     };
     httpd_register_uri_handler(s_server, &api_dev_status);
 
     const httpd_uri_t api_safe_list = {
-        .uri = "/api/safe/list", .method = HTTP_GET, .handler = api_safe_list_handler
+        .uri = "/api/safe/list", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_safe_list_handler
     };
     httpd_register_uri_handler(s_server, &api_safe_list);
 
     const httpd_uri_t api_safe_add = {
-        .uri = "/api/safe/add", .method = HTTP_POST, .handler = api_safe_add_handler
+        .uri = "/api/safe/add", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_safe_add_handler
     };
     httpd_register_uri_handler(s_server, &api_safe_add);
 
     const httpd_uri_t api_safe_del = {
-        .uri = "/api/safe", .method = HTTP_DELETE, .handler = api_safe_delete_handler
+        .uri = "/api/safe", .method = HTTP_DELETE, .handler = auth_gate_handler, .user_ctx = (void *)api_safe_delete_handler
     };
     httpd_register_uri_handler(s_server, &api_safe_del);
 
     const httpd_uri_t api_catalog = {
-        .uri = "/api/catalog/list", .method = HTTP_GET, .handler = api_catalog_list_handler
+        .uri = "/api/catalog/list", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_catalog_list_handler
     };
     httpd_register_uri_handler(s_server, &api_catalog);
 
     const httpd_uri_t api_catalog_dl = {
-        .uri = "/api/catalog/download", .method = HTTP_POST, .handler = api_catalog_download_handler
+        .uri = "/api/catalog/download", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_catalog_download_handler
     };
     httpd_register_uri_handler(s_server, &api_catalog_dl);
 
     // --- SSE Events ---
     const httpd_uri_t api_events = {
-        .uri = "/api/events", .method = HTTP_GET, .handler = api_events_handler
+        .uri = "/api/events", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_events_handler
     };
     httpd_register_uri_handler(s_server, &api_events);
 
