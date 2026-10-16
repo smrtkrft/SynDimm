@@ -5,6 +5,7 @@
  */
 
 #include "fw_ota.h"
+#include "sd_util.h"
 #include "esp_https_ota.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
@@ -67,30 +68,6 @@ static void set_progress(int pct)
     if (s_mutex) xSemaphoreGive(s_mutex);
 }
 
-// Basit JSON string parser: "key":"value" veya "key" : "value" formatinda
-static int parse_json_str(const char *json, const char *key, char *out, size_t out_size)
-{
-    char search[64];
-    snprintf(search, sizeof(search), "\"%s\"", key);
-    const char *key_pos = strstr(json, search);
-    if (!key_pos) return -1;
-
-    const char *colon = strchr(key_pos + strlen(search), ':');
-    if (!colon) return -1;
-
-    const char *q1 = strchr(colon + 1, '"');
-    if (!q1) return -1;
-    q1++;
-
-    const char *q2 = strchr(q1, '"');
-    if (!q2) return -1;
-
-    size_t len = q2 - q1;
-    if (len >= out_size) len = out_size - 1;
-    memcpy(out, q1, len);
-    out[len] = '\0';
-    return (int)len;
-}
 
 // Versiyon karsilastirma: "v0.0.67" -> "0.0.67"
 static const char *strip_v_prefix(const char *ver)
@@ -210,7 +187,7 @@ static void fw_ota_check_task(void *arg)
 
         // tag_name parse et
         char tag_name[32] = {0};
-        if (parse_json_str(buf, "tag_name", tag_name, sizeof(tag_name)) < 0) {
+        if (sd_json_get_str(buf, "tag_name", tag_name, sizeof(tag_name)) < 0) {
             ESP_LOGE(TAG, "tag_name bulunamadi");
             set_status(FW_OTA_ERROR, "Release bilgisi okunamadi");
             free(buf);

@@ -5,6 +5,7 @@
  */
 
 #include "gui_ota.h"
+#include "sd_util.h"
 #include "ext_flash.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
@@ -77,33 +78,6 @@ static void set_progress(int file_index, int file_count, int pct)
     if (s_mutex) xSemaphoreGive(s_mutex);
 }
 
-// Basit JSON string parser: "key":"value" formatinda
-static int parse_json_value(const char *json, const char *key, char *out, size_t out_size)
-{
-    char search[64];
-    // Bosluklu format: "key" : "value"
-    snprintf(search, sizeof(search), "\"%s\"", key);
-    char *key_pos = strstr(json, search);
-    if (!key_pos) return -1;
-
-    // key'den sonra : isareti bul
-    char *colon = strchr(key_pos + strlen(search), ':');
-    if (!colon) return -1;
-
-    // " bul (bosluk atlayarak)
-    char *quote_start = strchr(colon + 1, '"');
-    if (!quote_start) return -1;
-    quote_start++;
-
-    char *quote_end = strchr(quote_start, '"');
-    if (!quote_end) return -1;
-
-    size_t len = quote_end - quote_start;
-    if (len >= out_size) len = out_size - 1;
-    memcpy(out, quote_start, len);
-    out[len] = '\0';
-    return (int)len;
-}
 
 // URL olustur: resmi veya custom kaynak
 static void build_url(char *url, size_t url_size, const char *file)
@@ -326,7 +300,7 @@ static esp_err_t check_remote_version(char *version_out, size_t version_size)
     esp_http_client_cleanup(client);
 
     // Version parse et
-    if (parse_json_value(buf, "version", version_out, version_size) < 0) {
+    if (sd_json_get_str(buf, "version", version_out, version_size) < 0) {
         ESP_LOGE(TAG, "Remote config.json'da version bulunamadi");
         return ESP_FAIL;
     }
@@ -351,7 +325,7 @@ static void read_current_version(char *version_out, size_t version_size)
     buf[len] = '\0';
     fclose(f);
 
-    parse_json_value(buf, "version", version_out, version_size);
+    sd_json_get_str(buf, "version", version_out, version_size);
 }
 
 // ============================================================

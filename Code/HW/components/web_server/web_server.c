@@ -28,6 +28,7 @@
 #include "gui_ota.h"
 #include "fw_ota.h"
 #include "sys_log.h"
+#include "sd_util.h"
 #include "esp_timer.h"
 #include "mbedtls/sha256.h"
 #include <stdio.h>
@@ -138,23 +139,8 @@ static const char *get_embedded_end(int idx) {
     }
 }
 
-// JSON string alani oku (cJSON ile: bosluk, escape ve ic ice anahtarlar dogru islenir;
-// eski strstr tabanli surum "id" ararken "device_id" ile eslesiyordu)
-static int parse_json_string(const char *json, const char *key, char *out, size_t out_size)
-{
-    cJSON *root = cJSON_Parse(json);
-    if (!root) return -1;
-    cJSON *v = cJSON_GetObjectItem(root, key);
-    int len = -1;
-    if (v && cJSON_IsString(v) && v->valuestring) {
-        len = (int)strlen(v->valuestring);
-        if ((size_t)len >= out_size) len = (int)out_size - 1;
-        memcpy(out, v->valuestring, len);
-        out[len] = '\0';
-    }
-    cJSON_Delete(root);
-    return len;
-}
+/* JSON string alani oku -> ortak sd_json_get_str (cJSON) */
+#define parse_json_string(json, key, out, size) sd_json_get_str((json), (key), (out), (size))
 
 /* JSON govde gonder (tek satir: tip + govde) */
 static esp_err_t send_json(httpd_req_t *req, const char *body)

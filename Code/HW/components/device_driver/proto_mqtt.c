@@ -6,6 +6,7 @@
 
 #include "device_driver.h"
 #include "sys_log.h"
+#include "sd_util.h"
 #include "esp_log.h"
 #include "mqtt_client.h"
 #include "cJSON.h"
@@ -23,75 +24,12 @@ static bool s_mqtt_connected = false;
 static char s_last_state_payload[512] = "";
 static bool s_state_received = false;
 
-/* snprintf kesilmis olsa bile "yazilacak" uzunlugu doner; ilerlemeyi kalan alana kirp.
- * Aksi halde oi > out_size olur ve out[oi]='\0' tampon disina yazar (yigin bozulmasi). */
-static inline size_t tmpl_advance(int n, size_t avail)
-{
-    if (n <= 0) return 0;
-    if ((size_t)n >= avail) return avail > 0 ? avail - 1 : 0;
-    return (size_t)n;
-}
 
 // ============================================================
 // Template genisleme
 // ============================================================
 
-static void expand_topic(const char *tmpl, char *out, size_t out_size,
-                          const char *prefix, const char *state_prefix)
-{
-    size_t oi = 0;
-    size_t ti = 0;
-    size_t tlen = strlen(tmpl);
 
-    while (ti < tlen && oi < out_size - 1) {
-        if (tmpl[ti] == '{') {
-            if (strncmp(tmpl + ti, "{prefix}", 8) == 0) {
-                int n = snprintf(out + oi, out_size - oi, "%s",
-                                 prefix ? prefix : "");
-                oi += tmpl_advance(n, out_size - oi);
-                ti += 8;
-                continue;
-            }
-            if (strncmp(tmpl + ti, "{state}", 7) == 0) {
-                int n = snprintf(out + oi, out_size - oi, "%s",
-                                 state_prefix ? state_prefix : "");
-                oi += tmpl_advance(n, out_size - oi);
-                ti += 7;
-                continue;
-            }
-        }
-        out[oi++] = tmpl[ti++];
-    }
-    out[oi] = '\0';
-}
-
-static void expand_payload(const char *tmpl, char *out, size_t out_size,
-                            int value, bool toggle_val)
-{
-    size_t oi = 0;
-    size_t ti = 0;
-    size_t tlen = strlen(tmpl);
-
-    while (ti < tlen && oi < out_size - 1) {
-        if (tmpl[ti] == '{') {
-            if (strncmp(tmpl + ti, "{value}", 7) == 0) {
-                int n = snprintf(out + oi, out_size - oi, "%d", value);
-                oi += tmpl_advance(n, out_size - oi);
-                ti += 7;
-                continue;
-            }
-            if (strncmp(tmpl + ti, "{toggle}", 8) == 0) {
-                int n = snprintf(out + oi, out_size - oi, "%s",
-                                 toggle_val ? "ON" : "OFF");
-                oi += tmpl_advance(n, out_size - oi);
-                ti += 8;
-                continue;
-            }
-        }
-        out[oi++] = tmpl[ti++];
-    }
-    out[oi] = '\0';
-}
 
 // ============================================================
 // MQTT event handler
@@ -222,13 +160,13 @@ esp_err_t proto_mqtt_send_command(const char *topic, const char *payload,
 
     // Topic genislet
     char expanded_topic[128];
-    expand_topic(topic, expanded_topic, sizeof(expanded_topic),
-                 prefix, state_prefix);
+    const sd_tmpl_vars_t tv = { .prefix = prefix, .state = state_prefix };
+    sd_template_expand(topic, expanded_topic, sizeof(expanded_topic), &tv);
 
     // Payload genislet
     char expanded_payload[256];
-    expand_payload(payload, expanded_payload, sizeof(expanded_payload),
-                   value, toggle_val);
+    const sd_tmpl_vars_t pv = { .value = value, .toggle_str = toggle_val ? "ON" : "OFF" };
+    sd_template_expand(payload, expanded_payload, sizeof(expanded_payload), &pv);
 
     ESP_LOGI(TAG, "MQTT publish: %s = %s", expanded_topic, expanded_payload);
 
@@ -246,7 +184,8 @@ esp_err_t proto_mqtt_subscribe_status(const char *topic, const char *prefix,
                                        const char *state_prefix)
 {
     if (!topic || !*topic) return ESP_ERR_INVALID_ARG;
-    expand_topic(topic, s_sub_topic, sizeof(s_sub_topic), prefix, state_prefix);
+    const sd_tmpl_vars_t tv = { .prefix = prefix, .state = state_prefix };
+    sd_template_expand(topic, s_sub_topic, sizeof(s_sub_topic), &tv);
     s_sub_pending = true;
 
     if (!s_mqtt_client || !s_mqtt_connected) {
