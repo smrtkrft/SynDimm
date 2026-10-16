@@ -128,13 +128,14 @@ function renderModeList(){
         const isFirst=i===0, isLast=i===modeConfig.modes.length-1;
         const card=document.createElement('div');
         card.className='mode-card';
+        // Mod id'si HTML/JS string'ine gomulmez (XSS): data-act + data-id ile delegasyon
         card.innerHTML=
             '<div class="mode-card-order">'+
-                '<button '+(isFirst?'disabled':'')+' onclick="moveMode(\''+m.id+'\',-1)">'+
+                '<button '+(isFirst?'disabled':'')+' data-act="up">'+
                     '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 15l-6-6-6 6"/></svg>'+
                 '</button>'+
                 '<span class="mode-card-num">'+(i+1)+'</span>'+
-                '<button '+(isLast?'disabled':'')+' onclick="moveMode(\''+m.id+'\',1)">'+
+                '<button '+(isLast?'disabled':'')+' data-act="down">'+
                     '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg>'+
                 '</button>'+
             '</div>'+
@@ -143,16 +144,30 @@ function renderModeList(){
                 '<span class="mode-badge">'+esc(m.type)+'</span>'+
             '</div>'+
             '<div class="mode-card-actions">'+
-                '<button title="Duzenle" onclick="renameMode(\''+m.id+'\')">'+
+                '<button title="Duzenle" data-act="rename">'+
                     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'+
                 '</button>'+
-                '<button class="del" title="Sil" onclick="deleteMode(\''+m.id+'\')">'+
+                '<button class="del" title="Sil" data-act="delete">'+
                     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>'+
                 '</button>'+
             '</div>';
+        card.dataset.id=m.id;
         list.appendChild(card);
     });
 }
+document.getElementById('mode-list').addEventListener('click',function(e){
+    const btn=e.target.closest('button[data-act]');
+    if(!btn||btn.disabled) return;
+    const card=btn.closest('.mode-card');
+    if(!card) return;
+    const id=card.dataset.id;
+    switch(btn.dataset.act){
+        case 'up': moveMode(id,-1); break;
+        case 'down': moveMode(id,1); break;
+        case 'rename': renameMode(id); break;
+        case 'delete': deleteMode(id); break;
+    }
+});
 
 function moveMode(id,dir){
     const idx=modeConfig.modes.findIndex(m=>m.id===id);
@@ -182,8 +197,7 @@ function addMode(){
     if(!name) return;
     const id='mode_'+Date.now();
     const params=type==='safe'?{}:{min:0,max:100,unit:'%'};
-    const endpoint=type==='safe'?'':'/api/value';
-    modeConfig.modes.push({id,name,type,endpoint,params});
+    modeConfig.modes.push({id,name,type,params});
     hideEmptyState();
     saveModeConfig();
     activateMode(id,true);
@@ -550,18 +564,23 @@ function fwOtaCheck(){
     const btn=document.getElementById('fw-check-btn');
     btn.disabled=true;btn.textContent='Kontrol ediliyor...';
     fetch('/api/fw-ota/check',{method:'POST'}).then(r=>r.json()).then(()=>{
-        // Poll status for result
-        setTimeout(()=>{
+        // GitHub TLS istegi birkac saniye surer: CHECKING (1) bitene kadar poll et
+        let tries=0;
+        const poll=()=>{
             fetch('/api/fw-ota/status').then(r=>r.json()).then(s=>{
+                if(s.state===1 && tries++<30){setTimeout(poll,700);return;}
                 btn.textContent='Kontrol Et';btn.disabled=false;
                 if(s.state===2){// UPDATE_AVAILABLE
                     document.getElementById('fw-start-btn').style.display='';
                     showOtaProgress('fw',s);
                 } else if(s.state===3){// NO_UPDATE
                     showOtaProgress('fw',{progress_pct:100,message:'Guncel surumdesiniz.'});
+                } else {
+                    showOtaProgress('fw',{progress_pct:0,message:s.message||'Kontrol tamamlanamadi'});
                 }
-            });
-        },500);
+            }).catch(()=>{btn.textContent='Kontrol Et';btn.disabled=false;});
+        };
+        setTimeout(poll,700);
     }).catch(()=>{btn.textContent='Kontrol Et';btn.disabled=false;});
 }
 function fwOtaStart(){
@@ -582,8 +601,13 @@ function fwOtaStart(){
 }
 function fwOtaRollback(){
     if(!confirm('Onceki firmware surumune donulecek. Emin misiniz?')) return;
-    fetch('/api/fw-ota/rollback',{method:'POST'}).then(()=>{
-        alert('Rollback basarili. Cihaz yeniden baslatilacak.');
+    fetch('/api/fw-ota/rollback',{method:'POST'}).then(r=>r.json()).then(d=>{
+        if(d&&d.status==='ok'){
+            alert('Rollback hazir. Cihaz yeniden baslatiliyor.');
+            fetch('/api/device/restart',{method:'POST'}).catch(()=>{});
+        } else {
+            alert('Rollback basarisiz: '+((d&&d.message)||'bilinmeyen hata'));
+        }
     }).catch(()=>{});
 }
 
@@ -717,7 +741,7 @@ function footerSave(){
 }
 
 /* ── Helpers ──────────────────────────────────────── */
-function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 /* ── Init ─────────────────────────────────────────── */
 initTheme();
