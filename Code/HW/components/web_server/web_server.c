@@ -138,21 +138,29 @@ static const char *get_embedded_end(int idx) {
     }
 }
 
-// Basit JSON string parse helper
+// JSON string alani oku (cJSON ile: bosluk, escape ve ic ice anahtarlar dogru islenir;
+// eski strstr tabanli surum "id" ararken "device_id" ile eslesiyordu)
 static int parse_json_string(const char *json, const char *key, char *out, size_t out_size)
 {
-    char search[64];
-    snprintf(search, sizeof(search), "\"%s\":\"", key);
-    char *start = strstr(json, search);
-    if (!start) return -1;
-    start += strlen(search);
-    char *end = strchr(start, '"');
-    if (!end) return -1;
-    size_t len = end - start;
-    if (len >= out_size) len = out_size - 1;
-    strncpy(out, start, len);
-    out[len] = '\0';
-    return (int)len;
+    cJSON *root = cJSON_Parse(json);
+    if (!root) return -1;
+    cJSON *v = cJSON_GetObjectItem(root, key);
+    int len = -1;
+    if (v && cJSON_IsString(v) && v->valuestring) {
+        len = (int)strlen(v->valuestring);
+        if ((size_t)len >= out_size) len = (int)out_size - 1;
+        memcpy(out, v->valuestring, len);
+        out[len] = '\0';
+    }
+    cJSON_Delete(root);
+    return len;
+}
+
+/* JSON govde gonder (tek satir: tip + govde) */
+static esp_err_t send_json(httpd_req_t *req, const char *body)
+{
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, body, HTTPD_RESP_USE_STRLEN);
 }
 
 /* JSON string icindeki ozel karakterleri escape'le (" \ \n \r \t) */
@@ -364,8 +372,7 @@ static esp_err_t api_auth_status_handler(httpd_req_t *req)
 static esp_err_t api_auth_login_handler(httpd_req_t *req)
 {
     if (!s_auth_enabled) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"ok\",\"enabled\":false}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"ok\",\"enabled\":false}");
     }
     uint32_t now = auth_now_s();
     if (s_auth_lock_until && now < s_auth_lock_until) {
@@ -432,8 +439,7 @@ static esp_err_t api_auth_logout_handler(httpd_req_t *req)
         }
     }
     httpd_resp_set_hdr(req, "Set-Cookie", "sd_sess=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict");
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    return send_json(req, "{\"status\":\"ok\"}");
 }
 
 // POST /api/auth/set {"current":"...","password":"..."}  (password bos = kaldir)
@@ -704,8 +710,7 @@ static esp_err_t api_system_info_handler(httpd_req_t *req)
              user_total / 1024,
              user_free / 1024);
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/wifi/connect - WiFi baglanti (ssid, password, static_ip)
@@ -732,8 +737,7 @@ static esp_err_t api_wifi_connect_handler(httpd_req_t *req)
 
     if (strlen(ssid) == 0) {
         wifi_manager_clear_primary();
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"ok\",\"message\":\"WiFi ayarlari silindi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"ok\",\"message\":\"WiFi ayarlari silindi\"}");
     }
 
     esp_err_t err = wifi_manager_connect_sta(ssid, password, static_ip);
@@ -746,8 +750,7 @@ static esp_err_t api_wifi_connect_handler(httpd_req_t *req)
                  "{\"status\":\"error\",\"message\":\"Hata: %s\"}", esp_err_to_name(err));
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/wifi/backup/save - Yedek WiFi kaydet
@@ -774,8 +777,7 @@ static esp_err_t api_wifi_backup_save_handler(httpd_req_t *req)
 
     if (strlen(ssid) == 0) {
         wifi_manager_clear_backup();
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"ok\",\"message\":\"Yedek WiFi ayarlari silindi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"ok\",\"message\":\"Yedek WiFi ayarlari silindi\"}");
     }
 
     esp_err_t err = wifi_manager_save_backup(ssid, password, static_ip);
@@ -788,8 +790,7 @@ static esp_err_t api_wifi_backup_save_handler(httpd_req_t *req)
                  "{\"status\":\"error\",\"message\":\"Hata: %s\"}", esp_err_to_name(err));
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/wifi/config - WiFi ayarlarini getir (primary + backup)
@@ -837,8 +838,7 @@ static esp_err_t api_wifi_config_handler(httpd_req_t *req)
              wifi_manager_get_tx_adaptive() ? "true" : "false",
              wifi_manager_get_ap_client_count());
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/wifi/txpower - TX gucu tavani + uyarlanabilir mod {"max":17,"adaptive":true}
@@ -870,8 +870,7 @@ static esp_err_t api_wifi_txpower_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp),
                  "{\"status\":\"error\",\"message\":\"Gecersiz deger (8-20 dBm)\"}");
     }
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/wifi/ap/set - AP modunu ac/kapat
@@ -910,8 +909,7 @@ static esp_err_t api_wifi_ap_set_handler(httpd_req_t *req)
                  "{\"status\":\"error\",\"message\":\"%s\"}", esp_err_to_name(err));
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/wifi/mdns - mDNS hostname ayarla
@@ -937,8 +935,7 @@ static esp_err_t api_wifi_mdns_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp),
                  "{\"ok\":false,\"error\":\"%s\"}", esp_err_to_name(ret));
     }
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/modes - Mod yapilandirmasini oku
@@ -1092,8 +1089,7 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
              (unsigned long)sys_log_boot_count(),
              (unsigned long)sys_log_short_boots());
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/device/restart - Cihazi yeniden baslat
@@ -1276,8 +1272,7 @@ static esp_err_t api_actions_get_handler(httpd_req_t *req)
         "{\"trigger_api\":%s}",
         trig_api ? "true" : "false");
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/actions/save
@@ -1294,8 +1289,7 @@ static esp_err_t api_actions_save_handler(httpd_req_t *req)
     nvs_handle_t nvs;
     esp_err_t err = nvs_open("sd_actions", NVS_READWRITE, &nvs);
     if (err != ESP_OK) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}");
     }
 
     char val[8] = {0};
@@ -1307,8 +1301,7 @@ static esp_err_t api_actions_save_handler(httpd_req_t *req)
     nvs_close(nvs);
 
     ESP_LOGI(TAG, "Action durumlar kaydedildi");
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    return send_json(req, "{\"status\":\"ok\"}");
 }
 
 // ============================================================
@@ -1349,8 +1342,7 @@ static esp_err_t api_reset_config_get_handler(httpd_req_t *req)
              has_key ? "true" : "false",
              masked);
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/reset/config
@@ -1378,8 +1370,7 @@ static esp_err_t api_reset_config_save_handler(httpd_req_t *req)
 
     char resp[64];
     snprintf(resp, sizeof(resp), "{\"status\":\"ok\",\"enabled\":%s}", enabled ? "true" : "false");
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/reset/generate - Yeni API key uret
@@ -1393,8 +1384,7 @@ static esp_err_t api_reset_generate_handler(httpd_req_t *req)
     nvs_handle_t nvs;
     esp_err_t err = nvs_open("sd_reset", NVS_READWRITE, &nvs);
     if (err != ESP_OK) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}");
     }
 
     nvs_set_str(nvs, "api_key", api_key);
@@ -1404,8 +1394,7 @@ static esp_err_t api_reset_generate_handler(httpd_req_t *req)
 
     char resp[64];
     snprintf(resp, sizeof(resp), "{\"status\":\"ok\",\"api_key\":\"%s\"}", api_key);
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/reset?key=xxx - API tetiklemesi (dis erisim)
@@ -1424,8 +1413,7 @@ static esp_err_t api_reset_handler(httpd_req_t *req)
 
     if (!enabled) {
         httpd_resp_set_status(req, "403 Forbidden");
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Uzaktan sifirlama devre disi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Uzaktan sifirlama devre disi\"}");
     }
 
     // Query param: key
@@ -1437,12 +1425,10 @@ static esp_err_t api_reset_handler(httpd_req_t *req)
 
     if (strlen(key_param) == 0 || strcmp(key_param, stored_key) != 0) {
         httpd_resp_set_status(req, "401 Unauthorized");
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Gecersiz API anahtari\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Gecersiz API anahtari\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, "{\"status\":\"ok\",\"message\":\"API triggered\"}", HTTPD_RESP_USE_STRLEN);
+    return send_json(req, "{\"status\":\"ok\",\"message\":\"API triggered\"}");
 }
 
 // ============================================================
@@ -1501,8 +1487,7 @@ static esp_err_t api_gui_ota_info_handler(httpd_req_t *req)
              ext_flash_is_slot_b_mounted() ? "true" : "false",
              gui_ota_is_busy() ? "true" : "false");
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/gui-ota/start
@@ -1511,8 +1496,7 @@ static esp_err_t api_gui_ota_start_handler(httpd_req_t *req)
     sys_log_mark_event(SL_EV_OTA_GUI, 0);
     sys_log_write("INFO", "ota", "GUI guncellemesi baslatildi");
     if (gui_ota_is_busy()) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"OTA zaten calisiyor\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"OTA zaten calisiyor\"}");
     }
 
     gui_ota_params_t params;
@@ -1539,8 +1523,7 @@ static esp_err_t api_gui_ota_start_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"OTA baslatilamadi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/gui-ota/status
@@ -1569,8 +1552,7 @@ static esp_err_t api_gui_ota_status_handler(httpd_req_t *req)
              st.remote_version,
              st.current_version);
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/gui-ota/rollback
@@ -1593,8 +1575,7 @@ static esp_err_t api_gui_ota_rollback_handler(httpd_req_t *req)
                  "{\"status\":\"error\",\"message\":\"Rollback basarisiz\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // ============================================================
@@ -1625,8 +1606,7 @@ static esp_err_t api_fw_ota_info_handler(httpd_req_t *req)
              rollback_ver ? rollback_ver : "",
              busy ? "true" : "false");
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/fw-ota/check
@@ -1634,8 +1614,7 @@ static esp_err_t api_fw_ota_check_handler(httpd_req_t *req)
 {
     if (fw_ota_is_busy()) {
         const char *resp = "{\"status\":\"error\",\"message\":\"OTA zaten calisiyor\"}";
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, resp, strlen(resp));
+        return send_json(req, resp);
     }
 
     char body[512] = {0};
@@ -1663,8 +1642,7 @@ static esp_err_t api_fw_ota_check_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Baslatilamadi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/fw-ota/start
@@ -1684,8 +1662,7 @@ static esp_err_t api_fw_ota_start_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Baslatilamadi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/fw-ota/status
@@ -1710,8 +1687,7 @@ static esp_err_t api_fw_ota_status_handler(httpd_req_t *req)
              st.remote_version,
              st.current_version);
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/fw-ota/rollback
@@ -1730,8 +1706,7 @@ static esp_err_t api_fw_ota_rollback_handler(httpd_req_t *req)
                  "{\"status\":\"error\",\"message\":\"Rollback hatasi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // ============================================================
@@ -1743,8 +1718,7 @@ static esp_err_t api_mode_get_handler(httpd_req_t *req)
 {
     char resp[64];
     snprintf(resp, sizeof(resp), "{\"mode\":\"%s\"}", device_driver_get_mode());
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/mode
@@ -1773,8 +1747,7 @@ static esp_err_t api_mode_set_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Mod degistirilemedi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/profiles?mode=dimmer
@@ -1819,8 +1792,7 @@ static esp_err_t api_profiles_active_handler(httpd_req_t *req)
              st.profile_id, st.device_name, st.mode_str,
              st.connected ? "true" : "false");
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/profiles/select
@@ -1860,8 +1832,7 @@ static esp_err_t api_profiles_select_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Profil yuklenemedi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/profiles/upload
@@ -1933,8 +1904,7 @@ static esp_err_t api_profiles_upload_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Yazma hatasi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // DELETE /api/profiles?id=xxx
@@ -1960,8 +1930,7 @@ static esp_err_t api_profiles_delete_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Profil bulunamadi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/status (device status)
@@ -1982,8 +1951,7 @@ static esp_err_t api_device_status_handler(httpd_req_t *req)
              st.connected ? "true" : "false",
              esc_name, st.profile_id);
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/safe/list
@@ -2022,8 +1990,7 @@ static esp_err_t api_safe_add_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Kayit basarisiz\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // DELETE /api/safe?id=xxx
@@ -2052,8 +2019,7 @@ static esp_err_t api_safe_delete_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Profil bulunamadi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/catalog/list
@@ -2079,8 +2045,7 @@ static esp_err_t api_catalog_list_handler(httpd_req_t *req)
 
     // Onbellek bos - bos dizi dondur
     const char *empty = "{\"profiles\":[]}";
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, empty, strlen(empty));
+    return send_json(req, empty);
 }
 
 // POST /api/catalog/download  ← {"id":"hue_bulb","mode":"dimmer"}
@@ -2132,8 +2097,7 @@ static esp_err_t api_catalog_download_handler(httpd_req_t *req)
         esp_http_client_cleanup(client);
         char resp[128];
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Baglanti hatasi\"}");
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, resp, strlen(resp));
+        return send_json(req, resp);
     }
 
     esp_http_client_fetch_headers(client);
@@ -2154,8 +2118,7 @@ static esp_err_t api_catalog_download_handler(httpd_req_t *req)
         free(dl_buf);
         char resp[128];
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Indirme basarisiz (HTTP %d)\"}", status_code);
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, resp, strlen(resp));
+        return send_json(req, resp);
     }
     dl_buf[dl_len] = '\0';
 
@@ -2177,8 +2140,7 @@ static esp_err_t api_catalog_download_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Dosya yazma hatasi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // ============================================================
@@ -2226,6 +2188,72 @@ static esp_err_t api_system_logs_clear_handler(httpd_req_t *req)
 // Server Yonetim
 // ============================================================
 
+// ============================================================
+// Rota tablosu
+// Sira onemli: "/ext/*" ve "/*" joker kayitlari EN SONDA olmali.
+// gated=true olanlar auth_gate_handler uzerinden gecer (parola ayarliysa 401).
+// ============================================================
+typedef struct {
+    const char *uri;
+    httpd_method_t method;
+    esp_err_t (*handler)(httpd_req_t *req);
+    bool gated;
+} route_t;
+
+static const route_t s_routes[] = {
+    { "/", HTTP_GET, root_handler, false },
+    { "/api/system/info", HTTP_GET, api_system_info_handler, true },
+    { "/api/auth/status", HTTP_GET, api_auth_status_handler, false },
+    { "/api/auth/login", HTTP_POST, api_auth_login_handler, false },
+    { "/api/auth/logout", HTTP_POST, api_auth_logout_handler, false },
+    { "/api/auth/set", HTTP_POST, api_auth_set_handler, false },
+    { "/api/system/detail", HTTP_GET, api_system_detail_handler, true },
+    { "/api/system/logs", HTTP_GET, api_system_logs_handler, true },
+    { "/api/system/logs", HTTP_DELETE, api_system_logs_clear_handler, true },
+    { "/api/wifi/connect", HTTP_POST, api_wifi_connect_handler, true },
+    { "/api/wifi/backup/save", HTTP_POST, api_wifi_backup_save_handler, true },
+    { "/api/wifi/config", HTTP_GET, api_wifi_config_handler, true },
+    { "/api/wifi/ap/set", HTTP_POST, api_wifi_ap_set_handler, true },
+    { "/api/wifi/mdns", HTTP_POST, api_wifi_mdns_handler, true },
+    { "/api/wifi/txpower", HTTP_POST, api_wifi_txpower_handler, true },
+    { "/api/modes", HTTP_GET, api_modes_get_handler, true },
+    { "/api/modes", HTTP_POST, api_modes_post_handler, true },
+    { "/api/device/restart", HTTP_POST, api_device_restart_handler, true },
+    { "/api/device/factory-reset", HTTP_POST, api_device_factory_reset_handler, true },
+    { "/api/actions/get", HTTP_GET, api_actions_get_handler, true },
+    { "/api/actions/save", HTTP_POST, api_actions_save_handler, true },
+    { "/api/reset/config", HTTP_GET, api_reset_config_get_handler, true },
+    { "/api/reset/config", HTTP_POST, api_reset_config_save_handler, true },
+    { "/api/reset/generate", HTTP_POST, api_reset_generate_handler, true },
+    { "/api/reset", HTTP_GET, api_reset_handler, true },
+    { "/api/gui-ota/info", HTTP_GET, api_gui_ota_info_handler, true },
+    { "/api/gui-ota/start", HTTP_POST, api_gui_ota_start_handler, true },
+    { "/api/gui-ota/status", HTTP_GET, api_gui_ota_status_handler, true },
+    { "/api/gui-ota/rollback", HTTP_POST, api_gui_ota_rollback_handler, true },
+    { "/api/fw-ota/info", HTTP_GET, api_fw_ota_info_handler, true },
+    { "/api/fw-ota/check", HTTP_POST, api_fw_ota_check_handler, true },
+    { "/api/fw-ota/start", HTTP_POST, api_fw_ota_start_handler, true },
+    { "/api/fw-ota/status", HTTP_GET, api_fw_ota_status_handler, true },
+    { "/api/fw-ota/rollback", HTTP_POST, api_fw_ota_rollback_handler, true },
+    { "/api/mode", HTTP_GET, api_mode_get_handler, true },
+    { "/api/mode", HTTP_POST, api_mode_set_handler, true },
+    { "/api/profiles", HTTP_GET, api_profiles_list_handler, true },
+    { "/api/profiles/active", HTTP_GET, api_profiles_active_handler, true },
+    { "/api/profiles/select", HTTP_POST, api_profiles_select_handler, true },
+    { "/api/profiles/upload", HTTP_POST, api_profiles_upload_handler, true },
+    { "/api/profiles", HTTP_DELETE, api_profiles_delete_handler, true },
+    { "/api/status", HTTP_GET, api_device_status_handler, true },
+    { "/api/safe/list", HTTP_GET, api_safe_list_handler, true },
+    { "/api/safe/add", HTTP_POST, api_safe_add_handler, true },
+    { "/api/safe", HTTP_DELETE, api_safe_delete_handler, true },
+    { "/api/catalog/list", HTTP_GET, api_catalog_list_handler, true },
+    { "/api/catalog/download", HTTP_POST, api_catalog_download_handler, true },
+    { "/api/events", HTTP_GET, api_events_handler, true },
+    { "/ext/*", HTTP_GET, ext_file_handler, false },
+    { "/*", HTTP_GET, static_file_handler, false },
+};
+#define ROUTE_COUNT (sizeof(s_routes) / sizeof(s_routes[0]))
+
 esp_err_t web_server_start(void)
 {
     if (s_server) {
@@ -2235,7 +2263,7 @@ esp_err_t web_server_start(void)
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 56;
+    config.max_uri_handlers = ROUTE_COUNT + 4;
     config.stack_size = 8192;
     /* Tarayici 6 paralel istek + 3 kalici SSE: 7 soket yetmiyordu, LRU temizligi
      * SSE'yi kesiyordu. LWIP_MAX_SOCKETS=16 -> httpd icin 12 (+3 dahili) uygun. */
@@ -2251,261 +2279,22 @@ esp_err_t web_server_start(void)
         return ret;
     }
 
-    // --- Ana sayfa ---
-    const httpd_uri_t root = {
-        .uri = "/", .method = HTTP_GET, .handler = root_handler
-    };
-    httpd_register_uri_handler(s_server, &root);
-
-    // --- System API ---
-    const httpd_uri_t api_info = {
-        .uri = "/api/system/info", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_system_info_handler
-    };
-    httpd_register_uri_handler(s_server, &api_info);
-
-    // --- Kimlik dogrulama (bu uclar kapisiz) ---
-    const httpd_uri_t api_auth_status = {
-        .uri = "/api/auth/status", .method = HTTP_GET, .handler = api_auth_status_handler };
-    httpd_register_uri_handler(s_server, &api_auth_status);
-    const httpd_uri_t api_auth_login = {
-        .uri = "/api/auth/login", .method = HTTP_POST, .handler = api_auth_login_handler };
-    httpd_register_uri_handler(s_server, &api_auth_login);
-    const httpd_uri_t api_auth_logout = {
-        .uri = "/api/auth/logout", .method = HTTP_POST, .handler = api_auth_logout_handler };
-    httpd_register_uri_handler(s_server, &api_auth_logout);
-    const httpd_uri_t api_auth_set = {
-        .uri = "/api/auth/set", .method = HTTP_POST, .handler = api_auth_set_handler };
-    httpd_register_uri_handler(s_server, &api_auth_set);
-
-    const httpd_uri_t api_sys_detail = {
-        .uri = "/api/system/detail", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_system_detail_handler
-    };
-    httpd_register_uri_handler(s_server, &api_sys_detail);
-
-    const httpd_uri_t api_logs = {
-        .uri = "/api/system/logs", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_system_logs_handler
-    };
-    httpd_register_uri_handler(s_server, &api_logs);
-    const httpd_uri_t api_logs_clear = {
-        .uri = "/api/system/logs", .method = HTTP_DELETE, .handler = auth_gate_handler, .user_ctx = (void *)api_system_logs_clear_handler
-    };
-    httpd_register_uri_handler(s_server, &api_logs_clear);
-
-    // --- WiFi API ---
-    const httpd_uri_t api_wifi = {
-        .uri = "/api/wifi/connect", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_wifi_connect_handler
-    };
-    httpd_register_uri_handler(s_server, &api_wifi);
-
-    const httpd_uri_t api_wifi_backup = {
-        .uri = "/api/wifi/backup/save", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_wifi_backup_save_handler
-    };
-    httpd_register_uri_handler(s_server, &api_wifi_backup);
-
-    const httpd_uri_t api_wifi_cfg = {
-        .uri = "/api/wifi/config", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_wifi_config_handler
-    };
-    httpd_register_uri_handler(s_server, &api_wifi_cfg);
-
-    const httpd_uri_t api_wifi_ap = {
-        .uri = "/api/wifi/ap/set", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_wifi_ap_set_handler
-    };
-    httpd_register_uri_handler(s_server, &api_wifi_ap);
-
-    const httpd_uri_t api_wifi_mdns = {
-        .uri = "/api/wifi/mdns", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_wifi_mdns_handler
-    };
-    const httpd_uri_t api_wifi_txpower = {
-        .uri = "/api/wifi/txpower", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_wifi_txpower_handler
-    };
-    httpd_register_uri_handler(s_server, &api_wifi_txpower);
-    httpd_register_uri_handler(s_server, &api_wifi_mdns);
-
-    // --- Modes API ---
-    const httpd_uri_t api_modes_get = {
-        .uri = "/api/modes", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_modes_get_handler
-    };
-    httpd_register_uri_handler(s_server, &api_modes_get);
-
-    const httpd_uri_t api_modes_post = {
-        .uri = "/api/modes", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_modes_post_handler
-    };
-    httpd_register_uri_handler(s_server, &api_modes_post);
-
-    // --- Device Control API ---
-    const httpd_uri_t api_restart = {
-        .uri = "/api/device/restart", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_device_restart_handler
-    };
-    httpd_register_uri_handler(s_server, &api_restart);
-
-    const httpd_uri_t api_factory_reset = {
-        .uri = "/api/device/factory-reset", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_device_factory_reset_handler
-    };
-    httpd_register_uri_handler(s_server, &api_factory_reset);
-
-    // --- Actions API ---
-    const httpd_uri_t api_actions_get = {
-        .uri = "/api/actions/get", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_actions_get_handler
-    };
-    httpd_register_uri_handler(s_server, &api_actions_get);
-
-    const httpd_uri_t api_actions_save = {
-        .uri = "/api/actions/save", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_actions_save_handler
-    };
-    httpd_register_uri_handler(s_server, &api_actions_save);
-
-    // --- Reset API ---
-    const httpd_uri_t api_reset_cfg_get = {
-        .uri = "/api/reset/config", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_reset_config_get_handler
-    };
-    httpd_register_uri_handler(s_server, &api_reset_cfg_get);
-
-    const httpd_uri_t api_reset_cfg_save = {
-        .uri = "/api/reset/config", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_reset_config_save_handler
-    };
-    httpd_register_uri_handler(s_server, &api_reset_cfg_save);
-
-    const httpd_uri_t api_reset_generate = {
-        .uri = "/api/reset/generate", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_reset_generate_handler
-    };
-    httpd_register_uri_handler(s_server, &api_reset_generate);
-
-    const httpd_uri_t api_reset = {
-        .uri = "/api/reset", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_reset_handler
-    };
-    httpd_register_uri_handler(s_server, &api_reset);
-
-    // --- GUI OTA API ---
-    const httpd_uri_t api_gui_ota_info = {
-        .uri = "/api/gui-ota/info", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_gui_ota_info_handler
-    };
-    httpd_register_uri_handler(s_server, &api_gui_ota_info);
-
-    const httpd_uri_t api_gui_ota_start = {
-        .uri = "/api/gui-ota/start", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_gui_ota_start_handler
-    };
-    httpd_register_uri_handler(s_server, &api_gui_ota_start);
-
-    const httpd_uri_t api_gui_ota_status = {
-        .uri = "/api/gui-ota/status", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_gui_ota_status_handler
-    };
-    httpd_register_uri_handler(s_server, &api_gui_ota_status);
-
-    const httpd_uri_t api_gui_ota_rollback = {
-        .uri = "/api/gui-ota/rollback", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_gui_ota_rollback_handler
-    };
-    httpd_register_uri_handler(s_server, &api_gui_ota_rollback);
-
-    // --- Firmware OTA API ---
-    const httpd_uri_t api_fw_ota_info = {
-        .uri = "/api/fw-ota/info", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_fw_ota_info_handler
-    };
-    httpd_register_uri_handler(s_server, &api_fw_ota_info);
-
-    const httpd_uri_t api_fw_ota_check = {
-        .uri = "/api/fw-ota/check", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_fw_ota_check_handler
-    };
-    httpd_register_uri_handler(s_server, &api_fw_ota_check);
-
-    const httpd_uri_t api_fw_ota_start = {
-        .uri = "/api/fw-ota/start", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_fw_ota_start_handler
-    };
-    httpd_register_uri_handler(s_server, &api_fw_ota_start);
-
-    const httpd_uri_t api_fw_ota_status = {
-        .uri = "/api/fw-ota/status", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_fw_ota_status_handler
-    };
-    httpd_register_uri_handler(s_server, &api_fw_ota_status);
-
-    const httpd_uri_t api_fw_ota_rollback = {
-        .uri = "/api/fw-ota/rollback", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_fw_ota_rollback_handler
-    };
-    httpd_register_uri_handler(s_server, &api_fw_ota_rollback);
-
-    // --- Device Driver API ---
-    const httpd_uri_t api_mode_get = {
-        .uri = "/api/mode", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_mode_get_handler
-    };
-    httpd_register_uri_handler(s_server, &api_mode_get);
-
-    const httpd_uri_t api_mode_set = {
-        .uri = "/api/mode", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_mode_set_handler
-    };
-    httpd_register_uri_handler(s_server, &api_mode_set);
-
-    const httpd_uri_t api_profiles = {
-        .uri = "/api/profiles", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_profiles_list_handler
-    };
-    httpd_register_uri_handler(s_server, &api_profiles);
-
-    const httpd_uri_t api_profiles_active = {
-        .uri = "/api/profiles/active", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_profiles_active_handler
-    };
-    httpd_register_uri_handler(s_server, &api_profiles_active);
-
-    const httpd_uri_t api_profiles_select = {
-        .uri = "/api/profiles/select", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_profiles_select_handler
-    };
-    httpd_register_uri_handler(s_server, &api_profiles_select);
-
-    const httpd_uri_t api_profiles_upload = {
-        .uri = "/api/profiles/upload", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_profiles_upload_handler
-    };
-    httpd_register_uri_handler(s_server, &api_profiles_upload);
-
-    const httpd_uri_t api_profiles_del = {
-        .uri = "/api/profiles", .method = HTTP_DELETE, .handler = auth_gate_handler, .user_ctx = (void *)api_profiles_delete_handler
-    };
-    httpd_register_uri_handler(s_server, &api_profiles_del);
-
-    const httpd_uri_t api_dev_status = {
-        .uri = "/api/status", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_device_status_handler
-    };
-    httpd_register_uri_handler(s_server, &api_dev_status);
-
-    const httpd_uri_t api_safe_list = {
-        .uri = "/api/safe/list", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_safe_list_handler
-    };
-    httpd_register_uri_handler(s_server, &api_safe_list);
-
-    const httpd_uri_t api_safe_add = {
-        .uri = "/api/safe/add", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_safe_add_handler
-    };
-    httpd_register_uri_handler(s_server, &api_safe_add);
-
-    const httpd_uri_t api_safe_del = {
-        .uri = "/api/safe", .method = HTTP_DELETE, .handler = auth_gate_handler, .user_ctx = (void *)api_safe_delete_handler
-    };
-    httpd_register_uri_handler(s_server, &api_safe_del);
-
-    const httpd_uri_t api_catalog = {
-        .uri = "/api/catalog/list", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_catalog_list_handler
-    };
-    httpd_register_uri_handler(s_server, &api_catalog);
-
-    const httpd_uri_t api_catalog_dl = {
-        .uri = "/api/catalog/download", .method = HTTP_POST, .handler = auth_gate_handler, .user_ctx = (void *)api_catalog_download_handler
-    };
-    httpd_register_uri_handler(s_server, &api_catalog_dl);
-
-    // --- SSE Events ---
-    const httpd_uri_t api_events = {
-        .uri = "/api/events", .method = HTTP_GET, .handler = auth_gate_handler, .user_ctx = (void *)api_events_handler
-    };
-    httpd_register_uri_handler(s_server, &api_events);
-
-    // --- Statik dosyalar (harici flash + gomulu fallback) ---
-    const httpd_uri_t ext_files = {
-        .uri = "/ext/*", .method = HTTP_GET, .handler = ext_file_handler
-    };
-    httpd_register_uri_handler(s_server, &ext_files);
-
-    // --- Root-level statik dosyalar (style.css, app.js, pic/*, lang/*) ---
-    // EN SON kayit edilmeli - wildcard catch-all, API handler'larindan sonra
-    const httpd_uri_t static_files = {
-        .uri = "/*", .method = HTTP_GET, .handler = static_file_handler
-    };
-    httpd_register_uri_handler(s_server, &static_files);
+    // --- Rotalar (tablo) ---
+    for (size_t i = 0; i < ROUTE_COUNT; i++) {
+        const route_t *r = &s_routes[i];
+        httpd_uri_t u = {
+            .uri = r->uri,
+            .method = r->method,
+            .handler = r->gated ? auth_gate_handler : r->handler,
+            .user_ctx = r->gated ? (void *)r->handler : NULL,
+        };
+        esp_err_t rr = httpd_register_uri_handler(s_server, &u);
+        if (rr != ESP_OK) {
+            ESP_LOGE(TAG, "Rota kaydi basarisiz: %s %s (%s)", r->uri,
+                     r->method == HTTP_GET ? "GET" : r->method == HTTP_POST ? "POST" : "DELETE",
+                     esp_err_to_name(rr));
+        }
+    }
 
     // SSE gonderim task'i
     if (!s_sse_task_handle) {
