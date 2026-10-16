@@ -630,31 +630,65 @@ static esp_err_t api_wifi_mdns_handler(httpd_req_t *req)
 }
 
 // GET /api/modes - Mod yapilandirmasini oku
+#define MODES_JSON_MAX  8192   /* modes.json ust siniri (onceden 1024B sabit tampon: kesilip bozuluyordu) */
+
 static esp_err_t api_modes_get_handler(httpd_req_t *req)
 {
-    char buf[1024];
-    int len = ext_flash_read_file("/slot_a/modes.json", buf, sizeof(buf) - 1);
-    if (len <= 0) {
-        const char *empty = "{\"multiMode\":true,\"modes\":[]}";
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, empty, HTTPD_RESP_USE_STRLEN);
+    char *buf = malloc(MODES_JSON_MAX);
+    if (!buf) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Bellek yetersiz");
+        return ESP_FAIL;
     }
-    buf[len] = '\0';
+    int len = ext_flash_read_file("/slot_a/modes.json", buf, MODES_JSON_MAX);
     httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, buf, len);
+    esp_err_t r;
+    if (len <= 0) {
+        r = httpd_resp_send(req, "{\"multiMode\":true,\"modes\":[]}", HTTPD_RESP_USE_STRLEN);
+    } else {
+        r = httpd_resp_send(req, buf, len);
+    }
+    free(buf);
+    return r;
 }
 
 // POST /api/modes - Mod yapilandirmasini kaydet
 static esp_err_t api_modes_post_handler(httpd_req_t *req)
 {
-    char buf[1024];
-    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    if (len <= 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
+    /* Govde tek recv'de gelmeyebilir; kesik JSON yazilirsa GUI "bos durum"a duser
+     * ve kullanici modlari kaybolur. content_len kadar dongude oku, JSON dogrula. */
+    if (req->content_len <= 0 || req->content_len >= MODES_JSON_MAX) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Gecersiz boyut");
         return ESP_FAIL;
     }
-    buf[len] = '\0';
-    esp_err_t ret = ext_flash_write_file("/slot_a/modes.json", buf, len);
+    char *buf = malloc(req->content_len + 1);
+    if (!buf) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Bellek yetersiz");
+        return ESP_FAIL;
+    }
+    int total = 0;
+    while (total < (int)req->content_len) {
+        int r = httpd_req_recv(req, buf + total, req->content_len - total);
+        if (r <= 0) {
+            if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
+            free(buf);
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Govde alinamadi");
+            return ESP_FAIL;
+        }
+        total += r;
+    }
+    buf[total] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root || !cJSON_IsObject(root) || !cJSON_IsArray(cJSON_GetObjectItem(root, "modes"))) {
+        if (root) cJSON_Delete(root);
+        free(buf);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Gecersiz modes JSON");
+        return ESP_FAIL;
+    }
+    cJSON_Delete(root);
+
+    esp_err_t ret = ext_flash_write_file("/slot_a/modes.json", buf, total);
+    free(buf);
     httpd_resp_set_type(req, "application/json");
     if (ret == ESP_OK) {
         return httpd_resp_send(req, "{\"ok\":true}", HTTPD_RESP_USE_STRLEN);

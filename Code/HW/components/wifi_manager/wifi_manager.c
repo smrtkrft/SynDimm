@@ -74,6 +74,7 @@ static int  s_tx_lower_streak = 0;
 static int  s_ap_clients = 0;
 static esp_timer_handle_t s_tx_timer = NULL;     // periyodik
 static esp_timer_handle_t s_tx_kick_timer = NULL; // tek seferlik
+static esp_timer_handle_t s_retry_timer = NULL;   // STA retry gecikmesi (event task'i bloklamadan)
 static bool s_sntp_started = false;
 
 /* ========== Forward Declarations ========== */
@@ -83,7 +84,8 @@ static void apply_static_ip(const char *static_ip);
 static void start_reconnect_task(void);
 static void stop_reconnect_task(void);
 static void tx_power_apply(int dbm);
-static void tx_power_evaluate(void);
+static void tx_power_evaluate(void *arg);
+static void sta_retry_cb(void *arg);
 static void tx_power_kick(void);
 static void update_log_ctx(void);
 static void start_sntp(void);
@@ -323,19 +325,24 @@ static void scan_and_connect(void)
 
 /* ========== Reconnect Task ========== */
 
+/* Reconnect gorevi KENDI kendini sonlandirir (bayrakla). Disaridan vTaskDelete,
+ * gorev bloklayici esp_wifi_scan_start icindeyken WiFi surucusunun kilit/semafor
+ * durumunu tutarsiz birakabiliyordu. */
 static void reconnect_task_fn(void *arg)
 {
     ESP_LOGI(TAG, "Reconnect gorevi baslatildi (%d sn aralik)", RECONNECT_INTERVAL_MS / 1000);
     int attempt = 0;
 
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(RECONNECT_INTERVAL_MS));
+    while (s_reconnect_needed) {
+        /* 1 sn adimlarla bekle: durdurma istegi hizli algilansin */
+        for (int i = 0; i < RECONNECT_INTERVAL_MS / 1000 && s_reconnect_needed; i++) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+        if (!s_reconnect_needed) break;
 
         if (s_is_connected) {
             ESP_LOGI(TAG, "Baglanti var, reconnect gorevi sonlaniyor");
-            s_reconnect_task = NULL;
-            vTaskDelete(NULL);
-            return;
+            break;
         }
 
         // Retry devam ediyorsa atlama
@@ -345,23 +352,21 @@ static void reconnect_task_fn(void *arg)
         ESP_LOGI(TAG, "--- Periyodik ag taramasi (#%d) ---", attempt);
         scan_and_connect();
     }
+    s_reconnect_task = NULL;
+    vTaskDelete(NULL);
 }
 
 static void start_reconnect_task(void)
 {
-    if (s_reconnect_task != NULL) return;
+    if (s_reconnect_task != NULL) { s_reconnect_needed = true; return; }
     s_reconnect_needed = true;
     xTaskCreate(reconnect_task_fn, "wifi_reconn", 4096, NULL, 2, &s_reconnect_task);
 }
 
 static void stop_reconnect_task(void)
 {
+    /* Sadece bayrak: gorev dongu basinda kendini siler */
     s_reconnect_needed = false;
-    if (s_reconnect_task) {
-        TaskHandle_t t = s_reconnect_task;
-        s_reconnect_task = NULL;
-        vTaskDelete(t);
-    }
 }
 
 /* ========== mDNS ========== */
@@ -463,10 +468,21 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
             if (s_retry_count < RETRY_MAX) {
                 s_retry_count++;
                 int delay_ms = RETRY_BASE_MS * s_retry_count;  // 1s, 2s, 3s, 4s, 5s
-                ESP_LOGW(TAG, "Retry %d/%d (%d ms bekleniyor)...",
+                ESP_LOGW(TAG, "Retry %d/%d (%d ms sonra)...",
                          s_retry_count, RETRY_MAX, delay_ms);
-                vTaskDelay(pdMS_TO_TICKS(delay_ms));
-                esp_wifi_connect();
+                /* Event task'ini bloklamak AP/IP/mDNS olaylarini 5 sn'ye kadar
+                 * geciktiriyordu; gecikme zamanlayiciya tasindi. */
+                if (!s_retry_timer) {
+                    const esp_timer_create_args_t ra = {
+                        .callback = sta_retry_cb, .name = "sta_retry" };
+                    esp_timer_create(&ra, &s_retry_timer);
+                }
+                if (s_retry_timer) {
+                    esp_timer_stop(s_retry_timer);
+                    esp_timer_start_once(s_retry_timer, (uint64_t)delay_ms * 1000ULL);
+                } else {
+                    esp_wifi_connect();
+                }
             } else if (!s_trying_backup && strlen(s_backup.ssid) > 0) {
                 // Primary tukendi, backup dene
                 ESP_LOGW(TAG, "Primary basarisiz. Backup deneniyor: '%s'", s_backup.ssid);
@@ -607,13 +623,13 @@ esp_err_t wifi_manager_start_ap(void)
 
     if (!s_tx_timer) {
         const esp_timer_create_args_t pa = {
-            .callback = (esp_timer_cb_t)tx_power_evaluate, .name = "tx_eval" };
+            .callback = tx_power_evaluate, .name = "tx_eval" };
         esp_timer_create(&pa, &s_tx_timer);
         esp_timer_start_periodic(s_tx_timer, (uint64_t)TX_EVAL_PERIOD_MS * 1000ULL);
     }
     if (!s_tx_kick_timer) {
         const esp_timer_create_args_t ka = {
-            .callback = (esp_timer_cb_t)tx_power_evaluate, .name = "tx_kick" };
+            .callback = tx_power_evaluate, .name = "tx_kick" };
         esp_timer_create(&ka, &s_tx_kick_timer);
     }
     tx_power_kick();
@@ -661,8 +677,9 @@ static void tx_power_apply(int dbm)
     update_log_ctx();
 }
 
-static void tx_power_evaluate(void)
+static void tx_power_evaluate(void *arg)
 {
+    (void)arg;
     int target = s_tx_max_dbm;
 
     if (s_tx_adaptive) {
@@ -720,7 +737,7 @@ esp_err_t wifi_manager_set_tx_power(int max_dbm, bool adaptive)
     s_tx_max_dbm = max_dbm;
     s_tx_adaptive = adaptive;
     s_tx_lower_streak = TX_LOWER_STREAK;    // yeni tavan hemen uygulansin
-    tx_power_evaluate();
+    tx_power_evaluate(NULL);
     sys_log_write("INFO", "wifi", "TX gucu ayari: tavan %d dBm, uyarlanabilir %s",
                   max_dbm, adaptive ? "acik" : "kapali");
 
@@ -738,6 +755,12 @@ int  wifi_manager_get_tx_power_max(void)     { return s_tx_max_dbm; }
 int  wifi_manager_get_tx_power_now(void)     { return s_tx_now_dbm; }
 bool wifi_manager_get_tx_adaptive(void)      { return s_tx_adaptive; }
 int  wifi_manager_get_ap_client_count(void)  { return s_ap_clients; }
+
+static void sta_retry_cb(void *arg)
+{
+    (void)arg;
+    esp_wifi_connect();
+}
 
 /* ========== sys_log baglami ========== */
 

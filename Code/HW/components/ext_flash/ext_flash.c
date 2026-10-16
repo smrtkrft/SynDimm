@@ -698,7 +698,7 @@ extern const char gui_lang_it_json_end[]    asm("_binary_it_json_end");
 extern const char gui_lang_tr_json_start[]  asm("_binary_tr_json_start");
 extern const char gui_lang_tr_json_end[]    asm("_binary_tr_json_end");
 
-#define WEB_FILES_VERSION "0.0.16"
+#define WEB_FILES_VERSION "0.0.17"
 
 static bool file_exists(const char *path)
 {

@@ -37,7 +37,11 @@ function loadModeConfig(){
         renderModeList();
         if(cfg.modes.length>0){
             hideEmptyState();
-            activateMode(cfg.modes[0].id);
+            // Acilista donanimin mevcut modunu sec; yoksa ilk mod (donanima yazmadan)
+            fetch('/api/mode').then(r=>r.json()).then(h=>{
+                const hw=(h&&h.mode)?cfg.modes.find(m=>m.type===h.mode):null;
+                activateMode(hw?hw.id:cfg.modes[0].id,false);
+            }).catch(()=>activateMode(cfg.modes[0].id,false));
         } else {
             showEmptyState();
         }
@@ -61,7 +65,7 @@ function renderModeNav(){
             btn.className='mode-tab';
             btn.textContent=m.name;
             btn.dataset.modeId=m.id;
-            btn.onclick=()=>activateMode(m.id);
+            btn.onclick=()=>activateMode(m.id,true);
             nav.insertBefore(btn,gear);
         });
     }
@@ -78,7 +82,10 @@ function renderModeNav(){
     }
 }
 
-function activateMode(modeId){
+/* syncHw=true: kullanici secti, donanima bildir. false: sayfa acilisi / SSE'den gelen
+ * senkron — donanima POST edilmez. Eskiden her acilista modes[0] donanima yazilip
+ * encoder'la secilmis mod ve aktif profil sifirlaniyordu. */
+function activateMode(modeId,syncHw){
     const mode=modeConfig.modes.find(m=>m.id===modeId);
     if(!mode) return;
     activeMode=modeId;
@@ -105,9 +112,11 @@ function activateMode(modeId){
     } else {
         infoEl.style.display='none';
     }
-    // GUI → HW mod senkronizasyonu
-    fetch('/api/mode',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({mode:mode.type})}).catch(()=>{});
+    // GUI → HW mod senkronizasyonu (sadece kullanici secimi)
+    if(syncHw){
+        fetch('/api/mode',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({mode:mode.type})}).catch(()=>{});
+    }
 }
 
 /* ── Mode Management (Modlar tab) ─────────────────── */
@@ -177,7 +186,7 @@ function addMode(){
     modeConfig.modes.push({id,name,type,endpoint,params});
     hideEmptyState();
     saveModeConfig();
-    activateMode(id);
+    activateMode(id,true);
     hideAddMode();
 }
 
@@ -188,7 +197,7 @@ function deleteMode(id){
     if(modeConfig.modes.length===0){
         showEmptyState();
     } else if(activeMode===id){
-        activateMode(modeConfig.modes[0].id);
+        activateMode(modeConfig.modes[0].id,true);
     }
 }
 
@@ -205,7 +214,7 @@ function toggleMultiMode(){
     modeConfig.multiMode=!modeConfig.multiMode;
     document.getElementById('multi-mode-toggle').classList.toggle('on',modeConfig.multiMode);
     if(!modeConfig.multiMode && modeConfig.modes.length>0){
-        activateMode(modeConfig.modes[0].id);
+        activateMode(modeConfig.modes[0].id,true);
     }
     saveModeConfig();
 }
@@ -647,7 +656,7 @@ function connectSSE(){
                 if(d.mode && modeConfig.modes.length>0){
                     const matchMode=modeConfig.modes.find(m=>m.type===d.mode);
                     if(matchMode && matchMode.id!==activeMode){
-                        activateMode(matchMode.id);
+                        activateMode(matchMode.id,false);
                     }
                 }
                 // Update value display from server

@@ -64,6 +64,7 @@ typedef struct {
 static QueueHandle_t     s_cmd_queue     = NULL;
 static TaskHandle_t      s_cmd_task      = NULL;
 static SemaphoreHandle_t s_mutex         = NULL;
+static SemaphoreHandle_t s_profile_mutex = NULL;   /* s_profile / s_cmd_* omru (recursive) */
 static TimerHandle_t     s_nvs_timer     = NULL;
 static bool              s_nvs_dirty     = false;  // NVS yazilmasi gereken deger var mi
 
@@ -118,6 +119,20 @@ static inline void state_lock(void)
 static inline void state_unlock(void)
 {
     if (s_mutex) xSemaphoreGive(s_mutex);
+}
+
+/* Profil kilidi: command_task s_cmd_* dugumlerini okurken set_mode/load_profile
+ * cJSON_Delete cagirirsa use-after-free olurdu. Komut calistirma ve profil
+ * degisimi bu kilit altinda; profil yukleme icinde clear_profile cagrildigi
+ * icin recursive. */
+static inline void profile_lock(void)
+{
+    if (s_profile_mutex) xSemaphoreTakeRecursive(s_profile_mutex, portMAX_DELAY);
+}
+
+static inline void profile_unlock(void)
+{
+    if (s_profile_mutex) xSemaphoreGiveRecursive(s_profile_mutex);
 }
 
 // ============================================================
@@ -225,6 +240,7 @@ static dd_proto_t proto_from_str(const char *s)
 
 static void clear_profile(void)
 {
+    profile_lock();
     if (s_profile) {
         cJSON_Delete(s_profile);
         s_profile = NULL;
@@ -241,6 +257,7 @@ static void clear_profile(void)
     s_val_step      = 1;
     s_port          = 80;
     s_connected     = false;
+    profile_unlock();
 }
 
 static esp_err_t parse_profile(cJSON *root)
@@ -471,7 +488,9 @@ static void command_task(void *arg)
                     cmd = peek;
                 } else {
                     // Farkli komut tipi - once SET_VALUE'yu gonder, sonra bunu isle
+                    profile_lock();
                     execute_set_value_network(cmd.value);
+                    profile_unlock();
                     if (s_notify_cb) s_notify_cb();
                     cmd = peek;
                     break;
@@ -479,16 +498,22 @@ static void command_task(void *arg)
             }
         }
 
-        // Komutu calistir
+        // Komutu calistir (profil dugumleri kilit altinda okunur)
         switch (cmd.type) {
             case CMD_SET_VALUE:
+                profile_lock();
                 execute_set_value_network(cmd.value);
+                profile_unlock();
                 break;
             case CMD_TOGGLE:
+                profile_lock();
                 execute_toggle_network(cmd.toggle_val);
+                profile_unlock();
                 break;
             case CMD_STOP:
+                profile_lock();
                 execute_stop_network();
+                profile_unlock();
                 break;
             case CMD_SAFE_EVENT:
                 safe_lock_handle_event(cmd.safe_event);
@@ -620,6 +645,7 @@ esp_err_t device_driver_init(void)
 
     // Mutex olustur
     s_mutex = xSemaphoreCreateMutex();
+    s_profile_mutex = xSemaphoreCreateRecursiveMutex();
     if (!s_mutex) {
         ESP_LOGE(TAG, "Mutex olusturulamadi!");
         return ESP_ERR_NO_MEM;
@@ -753,9 +779,19 @@ bool device_driver_valid_name(const char *s)
     return true;
 }
 
+static esp_err_t load_profile_unlocked(const char *profile_id);
+
 esp_err_t device_driver_load_profile(const char *profile_id)
 {
     if (!device_driver_valid_name(profile_id)) return ESP_ERR_INVALID_ARG;
+    profile_lock();
+    esp_err_t r = load_profile_unlocked(profile_id);
+    profile_unlock();
+    return r;
+}
+
+static esp_err_t load_profile_unlocked(const char *profile_id)
+{
 
     char path[128];
     snprintf(path, sizeof(path), "/slot_a/profiles/%s/%s.json",
