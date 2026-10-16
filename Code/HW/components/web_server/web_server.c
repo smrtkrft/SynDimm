@@ -674,20 +674,22 @@ static esp_err_t root_handler(httpd_req_t *req)
         }
     }
 
-    // 2. Harici flash'ta GUI YOK → setup.html goster (embedded fallback)
-    size_t setup_len = gui_setup_html_end - gui_setup_html_start;
-    if (setup_len > 0) {
-        ESP_LOGI(TAG, "setup.html gomulu veriden sunuluyor (%zu byte)", setup_len);
-        httpd_resp_set_type(req, "text/html");
-        httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-        return httpd_resp_send(req, gui_setup_html_start, setup_len);
+    // 2. Harici flash'ta GUI YOK → gomulu TAM arayuz (gzip). Tarayici gzip kabul
+    //    ediyorsa (hepsi eder) tam GUI; eski kurulum sayfasi (setup.html) yalnizca
+    //    gzip desteklemeyen istemciler icin son care.
+    if (client_accepts_gzip(req)) {
+        size_t len = gui_index_html_end - gui_index_html_start;
+        ESP_LOGI(TAG, "index.html gomulu veriden sunuluyor (%zu byte, gzip)", len);
+        set_static_headers(req, "/index.html", true);
+        return httpd_resp_send(req, gui_index_html_start, len);
     }
 
-    // 3. Son care: embedded index.html (gzip'li)
-    size_t len = gui_index_html_end - gui_index_html_start;
-    ESP_LOGI(TAG, "index.html gomulu veriden sunuluyor (%zu byte, gzip)", len);
-    set_static_headers(req, "/index.html", true);
-    return httpd_resp_send(req, gui_index_html_start, len);
+    // 3. Son care: setup.html (duz, gzip'siz)
+    size_t setup_len = gui_setup_html_end - gui_setup_html_start;
+    ESP_LOGI(TAG, "setup.html gomulu veriden sunuluyor (%zu byte)", setup_len);
+    httpd_resp_set_type(req, "text/html");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    return httpd_resp_send(req, gui_setup_html_start, setup_len);
 }
 
 // GET /api/system/info - Sistem bilgisi (cihaz adi, AP, STA, mDNS, flash)
