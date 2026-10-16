@@ -18,6 +18,7 @@
 #include "esp_log.h"
 #include "esp_littlefs.h"
 #include "driver/spi_common.h"
+#include "driver/spi_master.h"
 #include "esp_flash.h"
 #include "esp_flash_spi_init.h"
 #include "nvs_flash.h"
@@ -180,9 +181,35 @@ esp_err_t ext_flash_init(void)
         return ret;
     }
 
-    ret = esp_flash_init(s_ext_flash);
+    /* Cip kimligi ilk denemede okunamayabilir (guc oturmamis, cip onceki
+     * calismadan tuhaf bir durumda kalmis). 3 deneme, aralarda kisa bekleme. */
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        ret = esp_flash_init(s_ext_flash);
+        if (ret == ESP_OK) break;
+        ESP_LOGW(TAG, "Flash init denemesi %d/3 basarisiz: %s", attempt, esp_err_to_name(ret));
+        vTaskDelay(pdMS_TO_TICKS(150));
+    }
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Flash init hatasi: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Flash init hatasi: %s (cip yanit vermiyor: baglanti/besleme/cip kontrol edin)",
+                 esp_err_to_name(ret));
+        /* Tani: ham JEDEC ID (0x9F). FF FF FF = MISO bosta/cip yok, 00 00 00 = besleme/kisa devre */
+        spi_bus_remove_flash_device(s_ext_flash);
+        s_ext_flash = NULL;
+        spi_device_interface_config_t dcfg = {
+            .clock_speed_hz = 1 * 1000 * 1000,
+            .mode = 0,
+            .spics_io_num = PIN_CS,
+            .queue_size = 1,
+        };
+        spi_device_handle_t dev = NULL;
+        if (spi_bus_add_device(EXT_FLASH_SPI_HOST, &dcfg, &dev) == ESP_OK) {
+            uint8_t tx[4] = { 0x9F, 0, 0, 0 }, rx[4] = { 0 };
+            spi_transaction_t tr = { .length = 32, .tx_buffer = tx, .rx_buffer = rx };
+            if (spi_device_polling_transmit(dev, &tr) == ESP_OK) {
+                ESP_LOGE(TAG, "Tani JEDEC ID (1 MHz, 0x9F): %02X %02X %02X", rx[1], rx[2], rx[3]);
+            }
+            spi_bus_remove_device(dev);
+        }
         return ret;
     }
 

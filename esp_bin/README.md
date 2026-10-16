@@ -14,11 +14,14 @@ Tüm ESP-IDF build çıktıları burada oluşur. `Code/` klasörüne hiçbir ür
 ## Kullanım
 
 ```sh
-./esp_bin/build.sh                 # build
-./esp_bin/build.sh flash monitor   # yükle ve seri izle
+./esp_bin/build.sh                                   # build
+./esp_bin/build.sh -p /dev/cu.usbmodem1101 flash     # yükle (port: ls /dev/cu.usbmodem*)
+./esp_bin/build.sh -p /dev/cu.usbmodem1101 monitor   # seri izle (çıkış: Ctrl+])
 ./esp_bin/build.sh menuconfig
 ./esp_bin/build.sh fullclean
 ```
+
+Not: ESP32-C6 USB-Serial/JTAG üzerinden görünür; port adı makineye göre değişir.
 
 ESP-IDF varsayılan yolu `~/esp/esp-idf-v5.5.2`. Farklıysa `IDF_DIR=/yol ./esp_bin/build.sh`.
 
