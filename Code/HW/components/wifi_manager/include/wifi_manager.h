@@ -4,7 +4,13 @@
 #include <stdbool.h>
 
 #define WIFI_AP_CHANNEL     0   // Auto - APSTA modda STA kanalina uyum saglar
-#define WIFI_AP_MAX_CONN    4
+#define WIFI_AP_MAX_CONN    2   // Guc: az istemci = az es zamanli TX
+
+/* TX gucu sinirlari (dBm). ESP32-C6 donanim araligi 2..20 dBm. */
+#define WIFI_TX_DBM_MIN         8
+#define WIFI_TX_DBM_MAX         20
+#define WIFI_TX_DBM_DEFAULT     17  // Varsayilan tavan (20 yerine; pik akimi dusurur)
+#define WIFI_TX_DBM_BOOT        8   // Acilista yumusak baslangic
 
 /**
  * WiFi manager baslatma - cihaz adini alir (SD-XXXX)
@@ -110,3 +116,26 @@ esp_err_t wifi_manager_set_mdns_hostname(const char *hostname);
  * Aktif mDNS hostname getir
  */
 const char *wifi_manager_get_mdns_hostname(void);
+
+/* ========== TX Gucu Yonetimi ==========
+ * Pik akim = anlik TX gucu. Karsi tarafin telefon mu lamba mi oldugu fark etmez.
+ * Strateji: sabit tavan (NVS) + bagli linklerin RSSI'sine gore uyarlanabilir dusurme.
+ */
+
+/**
+ * TX gucu tavanini ve uyarlanabilir modu ayarla (NVS'ye kaydeder, hemen uygular).
+ * max_dbm: 8..20. adaptive: true ise RSSI'ye gore tavanin altina inilir.
+ */
+esp_err_t wifi_manager_set_tx_power(int max_dbm, bool adaptive);
+
+/** Ayarli tavan (dBm) */
+int wifi_manager_get_tx_power_max(void);
+
+/** Su an uygulanan TX gucu (dBm) */
+int wifi_manager_get_tx_power_now(void);
+
+/** Uyarlanabilir mod acik mi */
+bool wifi_manager_get_tx_adaptive(void);
+
+/** AP'ye bagli istemci sayisi */
+int wifi_manager_get_ap_client_count(void);

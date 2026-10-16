@@ -20,6 +20,10 @@
 #include "nvs_flash.h"
 #include "mdns.h"
 #include "lwip/inet.h"
+#include "esp_netif_sntp.h"
+#include "esp_sntp.h"
+#include "esp_timer.h"
+#include "sys_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
@@ -56,6 +60,21 @@ static int s_retry_count = 0;
 static bool s_trying_backup = false;
 static TaskHandle_t s_reconnect_task = NULL;
 static bool s_reconnect_needed = false;     // Reconnect task'e sinyal
+static bool s_retry_exhausted_logged = false;
+
+/* ========== TX Gucu / Guc Yonetimi ========== */
+#define TX_EVAL_PERIOD_MS       10000   // Uyarlanabilir degerlendirme araligi
+#define TX_KICK_DELAY_MS        2500    // Olay sonrasi hizli degerlendirme
+#define TX_LOWER_STREAK         2       // Dusurmek icin ardisik ornek (histerezis)
+
+static int  s_tx_max_dbm = WIFI_TX_DBM_DEFAULT;
+static bool s_tx_adaptive = true;
+static int  s_tx_now_dbm = 0;
+static int  s_tx_lower_streak = 0;
+static int  s_ap_clients = 0;
+static esp_timer_handle_t s_tx_timer = NULL;     // periyodik
+static esp_timer_handle_t s_tx_kick_timer = NULL; // tek seferlik
+static bool s_sntp_started = false;
 
 /* ========== Forward Declarations ========== */
 static void wifi_event_handler(void *arg, esp_event_base_t base,
@@ -63,6 +82,11 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
 static void apply_static_ip(const char *static_ip);
 static void start_reconnect_task(void);
 static void stop_reconnect_task(void);
+static void tx_power_apply(int dbm);
+static void tx_power_evaluate(void);
+static void tx_power_kick(void);
+static void update_log_ctx(void);
+static void start_sntp(void);
 
 /* ========== Yardimci Fonksiyonlar ========== */
 
@@ -212,6 +236,7 @@ static void do_connect(const wifi_cred_t *cred)
 
     ESP_LOGI(TAG, "Baglaniliyor: '%s' (IP:%s)",
              cred->ssid, strlen(cred->ip) > 0 ? cred->ip : "DHCP");
+    sys_log_mark_event(SL_EV_STA_CONNECTING, 0);
     esp_wifi_connect();
 }
 
@@ -385,19 +410,40 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
         switch (id) {
         case WIFI_EVENT_AP_STACONNECTED: {
             wifi_event_ap_staconnected_t *e = data;
-            ESP_LOGI(TAG, "AP: cihaz baglandi (AID=%d)", e->aid);
+            s_ap_clients++;
+            ESP_LOGI(TAG, "AP: cihaz baglandi (AID=%d, toplam %d)", e->aid, s_ap_clients);
+            /* Brownout analizi icin kritik baglam: istemci baglandi -> GUI yuklenecek */
+            sys_log_mark_event(SL_EV_AP_CLIENT_JOIN, e->aid);
+            update_log_ctx();
+            sys_log_write("INFO", "wifi", "AP: istemci baglandi (AID %d, toplam %d, tx %d dBm)",
+                          e->aid, s_ap_clients, s_tx_now_dbm);
+            /* On tedbir: AP'ye baglanan istemci (telefon) hemen hemen her zaman
+             * yakindadir ve ardindan GUI yuklenir (yogun TX). RSSI olculene kadar
+             * beklemeden gucu makul bir seviyeye cek; RSSI degerlendirmesi sonra
+             * gerekirse yukseltir. Kritik 15 sn penceresini bu kapatir. */
+            if (s_tx_adaptive && s_tx_now_dbm > 14) {
+                tx_power_apply(14);
+            }
+            tx_power_kick();
             break;
         }
         case WIFI_EVENT_AP_STADISCONNECTED: {
             wifi_event_ap_stadisconnected_t *e = data;
-            ESP_LOGI(TAG, "AP: cihaz ayrildi (AID=%d)", e->aid);
+            if (s_ap_clients > 0) s_ap_clients--;
+            ESP_LOGI(TAG, "AP: cihaz ayrildi (AID=%d, kalan %d)", e->aid, s_ap_clients);
+            sys_log_mark_event(SL_EV_AP_CLIENT_LEAVE, e->aid);
+            update_log_ctx();
+            tx_power_kick();
             break;
         }
         case WIFI_EVENT_STA_DISCONNECTED: {
             wifi_event_sta_disconnected_t *dis = data;
+            bool was_connected = s_is_connected;
             s_is_connected = false;
 
             ESP_LOGW(TAG, "DISCONNECT '%s' reason:%d", dis->ssid, dis->reason);
+            sys_log_mark_event(SL_EV_STA_LOST, dis->reason);
+            update_log_ctx();
 
             // reason:201 = NO_AP_FOUND, reason:210 = CONNECTION_FAIL
             // reason:2/8 = normal ayrilma (biz disconnect cagirdik)
@@ -405,6 +451,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
                 dis->reason == WIFI_REASON_AUTH_LEAVE) {
                 // Biz disconnect cagirdik, retry yapma
                 break;
+            }
+
+            /* Gercek kopma (bagliyken dustu): tek satir kaydet, retry spam'i yok */
+            if (was_connected) {
+                s_retry_exhausted_logged = false;
+                sys_log_write("WARN", "wifi", "WiFi koptu: '%s' (reason %d, rssi %d, tx %d dBm)",
+                              (const char *)dis->ssid, dis->reason, dis->rssi, s_tx_now_dbm);
             }
 
             if (s_retry_count < RETRY_MAX) {
@@ -423,6 +476,11 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
                 // Hepsi basarisiz - periyodik tarama baslat
                 ESP_LOGE(TAG, "Tum denemeler basarisiz. %d sn sonra tekrar taranacak.",
                          RECONNECT_INTERVAL_MS / 1000);
+                if (!s_retry_exhausted_logged) {
+                    s_retry_exhausted_logged = true;
+                    sys_log_write("WARN", "wifi", "WiFi baglanamadi: '%s' (son reason %d), %d sn'de bir taranacak",
+                                  (const char *)dis->ssid, dis->reason, RECONNECT_INTERVAL_MS / 1000);
+                }
                 s_retry_count = 0;
                 s_trying_backup = false;
                 start_reconnect_task();
@@ -440,10 +498,25 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
         s_is_connected = true;
         s_retry_count = 0;
         s_trying_backup = false;
+        s_retry_exhausted_logged = false;
         stop_reconnect_task();
 
-        /* Power save kapat - zayif sinyalde stabilite icin */
+        /* Power save kapat - zayif sinyalde stabilite icin.
+         * Not: modem-sleep ortalama akimi dusurur ama pik akimi degistirmez;
+         * pik icin TX gucu yonetimi (tx_power_*) kullanilir. */
         esp_wifi_set_ps(WIFI_PS_NONE);
+
+        {
+            int rssi = 0;
+            wifi_ap_record_t ap;
+            if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) rssi = ap.rssi;
+            sys_log_mark_event(SL_EV_STA_GOT_IP, rssi);
+            update_log_ctx();
+            sys_log_write("INFO", "wifi", "WiFi baglandi: '%s' IP %s (rssi %d, tx %d dBm)",
+                          s_sta_ssid, s_ip_addr, rssi, s_tx_now_dbm);
+        }
+        tx_power_kick();
+        start_sntp();
 
         /* STA IP alindi - mDNS'i bu arayuzde yeniden duyur */
         if (strlen(s_mdns_hostname) > 0) {
@@ -470,6 +543,21 @@ esp_err_t wifi_manager_init(const char *device_name)
         nvs_close(nvs);
     }
     ESP_LOGI(TAG, "AP modu: %s", s_ap_enabled ? "ACIK" : "KAPALI");
+
+    // NVS'den TX gucu ayarlarini yukle
+    if (nvs_open("wifi_cfg", NVS_READONLY, &nvs) == ESP_OK) {
+        uint8_t v = WIFI_TX_DBM_DEFAULT;
+        if (nvs_get_u8(nvs, "tx_max", &v) == ESP_OK &&
+            v >= WIFI_TX_DBM_MIN && v <= WIFI_TX_DBM_MAX) {
+            s_tx_max_dbm = v;
+        }
+        uint8_t a = 1;
+        nvs_get_u8(nvs, "tx_adapt", &a);
+        s_tx_adaptive = (a != 0);
+        nvs_close(nvs);
+    }
+    ESP_LOGI(TAG, "TX gucu: tavan %d dBm, uyarlanabilir %s",
+             s_tx_max_dbm, s_tx_adaptive ? "ACIK" : "KAPALI");
 
     // NVS'den WiFi bilgilerini yukle
     load_credentials_from_nvs();
@@ -513,9 +601,179 @@ esp_err_t wifi_manager_start_ap(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    /* Yumusak baslangic: radyo dusuk gucte acilir, kondansatorler dolduktan
+     * sonra (TX_KICK_DELAY_MS) hedef guce cikilir. */
+    tx_power_apply(WIFI_TX_DBM_BOOT);
+
+    if (!s_tx_timer) {
+        const esp_timer_create_args_t pa = {
+            .callback = (esp_timer_cb_t)tx_power_evaluate, .name = "tx_eval" };
+        esp_timer_create(&pa, &s_tx_timer);
+        esp_timer_start_periodic(s_tx_timer, (uint64_t)TX_EVAL_PERIOD_MS * 1000ULL);
+    }
+    if (!s_tx_kick_timer) {
+        const esp_timer_create_args_t ka = {
+            .callback = (esp_timer_cb_t)tx_power_evaluate, .name = "tx_kick" };
+        esp_timer_create(&ka, &s_tx_kick_timer);
+    }
+    tx_power_kick();
+
     snprintf(s_ip_addr, sizeof(s_ip_addr), "192.168.4.1");
-    ESP_LOGI(TAG, "AP baslatildi - SSID: %s (Sifresiz)", s_device_name);
+    update_log_ctx();
+    ESP_LOGI(TAG, "AP baslatildi - SSID: %s (Sifresiz, max %d istemci)", s_device_name, WIFI_AP_MAX_CONN);
     return ESP_OK;
+}
+
+/* ========== TX Gucu Yonetimi ==========
+ *
+ * Neden: WiFi TX aninda cekilen pik akim karsi cihazdan bagimsizdir; TX gucune
+ * (dBm) baglidir. Telefon baglandiginda GUI yuklenirken saniyeler boyunca
+ * yuksek doluluklu TX olur ve zayif beslemede brownout'a yol acar.
+ *
+ * Kriter: "kac cihaz bagli" degil, "linkin ihtiyac duydugu guc".
+ *   - Hic link yok  -> tavan (kesif/beacon icin menzil korunur)
+ *   - Link var       -> en zayif linkin RSSI'sine gore gerekli guc, tavanla sinirli
+ *   - Yukselme aninda, dusurme 2 ardisik ornekten sonra (histerezis)
+ */
+
+static int rssi_to_dbm(int rssi)
+{
+    if (rssi >= -55) return 8;    // cok yakin (telefon 1-2 m)
+    if (rssi >= -62) return 11;
+    if (rssi >= -70) return 14;
+    if (rssi >= -76) return 17;
+    return WIFI_TX_DBM_MAX;
+}
+
+static void tx_power_apply(int dbm)
+{
+    if (dbm < WIFI_TX_DBM_MIN) dbm = WIFI_TX_DBM_MIN;
+    if (dbm > WIFI_TX_DBM_MAX) dbm = WIFI_TX_DBM_MAX;
+    if (dbm == s_tx_now_dbm) return;
+
+    esp_err_t err = esp_wifi_set_max_tx_power((int8_t)(dbm * 4));  // birim 0.25 dBm
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "TX gucu ayarlanamadi (%d dBm): %s", dbm, esp_err_to_name(err));
+        return;
+    }
+    ESP_LOGI(TAG, "TX gucu: %d -> %d dBm", s_tx_now_dbm, dbm);
+    s_tx_now_dbm = dbm;
+    update_log_ctx();
+}
+
+static void tx_power_evaluate(void)
+{
+    int target = s_tx_max_dbm;
+
+    if (s_tx_adaptive) {
+        int worst = 0;          // 0 = link yok
+        bool any = false;
+
+        /* AP istemcileri */
+        wifi_sta_list_t list;
+        if (esp_wifi_ap_get_sta_list(&list) == ESP_OK) {
+            s_ap_clients = list.num;
+            for (int i = 0; i < list.num; i++) {
+                int r = list.sta[i].rssi;
+                if (r == 0) continue;           // henuz olculmedi
+                if (!any || r < worst) worst = r;
+                any = true;
+            }
+        }
+        /* STA (router) linki */
+        wifi_ap_record_t ap;
+        if (s_is_connected && esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
+            if (!any || ap.rssi < worst) worst = ap.rssi;
+            any = true;
+        }
+
+        if (any) {
+            int need = rssi_to_dbm(worst);
+            if (need < target) target = need;
+        }
+    }
+
+    if (target > s_tx_now_dbm) {
+        s_tx_lower_streak = 0;
+        tx_power_apply(target);             // yukselme: hemen
+    } else if (target < s_tx_now_dbm) {
+        if (++s_tx_lower_streak >= TX_LOWER_STREAK) {
+            s_tx_lower_streak = 0;
+            tx_power_apply(target);         // dusurme: histerezisli
+        }
+    } else {
+        s_tx_lower_streak = 0;
+    }
+}
+
+static void tx_power_kick(void)
+{
+    if (!s_tx_kick_timer) return;
+    s_tx_lower_streak = TX_LOWER_STREAK - 1;    /* olay tetikli degerlendirme: histerezis tek adim */
+    esp_timer_stop(s_tx_kick_timer);
+    esp_timer_start_once(s_tx_kick_timer, (uint64_t)TX_KICK_DELAY_MS * 1000ULL);
+}
+
+esp_err_t wifi_manager_set_tx_power(int max_dbm, bool adaptive)
+{
+    if (max_dbm < WIFI_TX_DBM_MIN || max_dbm > WIFI_TX_DBM_MAX) return ESP_ERR_INVALID_ARG;
+    s_tx_max_dbm = max_dbm;
+    s_tx_adaptive = adaptive;
+    s_tx_lower_streak = TX_LOWER_STREAK;    // yeni tavan hemen uygulansin
+    tx_power_evaluate();
+    sys_log_write("INFO", "wifi", "TX gucu ayari: tavan %d dBm, uyarlanabilir %s",
+                  max_dbm, adaptive ? "acik" : "kapali");
+
+    nvs_handle_t nvs;
+    if (nvs_open("wifi_cfg", NVS_READWRITE, &nvs) == ESP_OK) {
+        nvs_set_u8(nvs, "tx_max", (uint8_t)max_dbm);
+        nvs_set_u8(nvs, "tx_adapt", adaptive ? 1 : 0);
+        nvs_commit(nvs);
+        nvs_close(nvs);
+    }
+    return ESP_OK;
+}
+
+int  wifi_manager_get_tx_power_max(void)     { return s_tx_max_dbm; }
+int  wifi_manager_get_tx_power_now(void)     { return s_tx_now_dbm; }
+bool wifi_manager_get_tx_adaptive(void)      { return s_tx_adaptive; }
+int  wifi_manager_get_ap_client_count(void)  { return s_ap_clients; }
+
+/* ========== sys_log baglami ========== */
+
+static void update_log_ctx(void)
+{
+    wifi_mode_t m = WIFI_MODE_NULL;
+    esp_wifi_get_mode(&m);
+    sys_log_wifi_mode_t code = SL_WIFI_OFF;
+    if (m == WIFI_MODE_AP) code = SL_WIFI_AP;
+    else if (m == WIFI_MODE_STA) code = SL_WIFI_STA;
+    else if (m == WIFI_MODE_APSTA) code = SL_WIFI_APSTA;
+
+    int rssi = 0;
+    wifi_ap_record_t ap;
+    if (s_is_connected && esp_wifi_sta_get_ap_info(&ap) == ESP_OK) rssi = ap.rssi;
+
+    sys_log_set_wifi_ctx(code, (uint8_t)s_ap_clients, (int8_t)rssi, (int8_t)s_tx_now_dbm);
+}
+
+/* ========== SNTP (log zaman damgasi icin) ========== */
+
+static void sntp_sync_cb(struct timeval *tv)
+{
+    (void)tv;
+    sys_log_time_synced();
+}
+
+static void start_sntp(void)
+{
+    if (s_sntp_started) return;
+    esp_sntp_config_t cfg = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+    cfg.sync_cb = sntp_sync_cb;
+    if (esp_netif_sntp_init(&cfg) == ESP_OK) {
+        s_sntp_started = true;
+        ESP_LOGI(TAG, "SNTP baslatildi (pool.ntp.org)");
+    }
 }
 
 esp_err_t wifi_manager_connect_sta(const char *ssid, const char *password,
@@ -719,8 +977,10 @@ esp_err_t wifi_manager_set_ap_enabled(bool enabled)
         ESP_LOGI(TAG, "AP ACILDI (APSTA)");
     } else if (!enabled && mode == WIFI_MODE_APSTA) {
         esp_wifi_set_mode(WIFI_MODE_STA);
+        s_ap_clients = 0;
         ESP_LOGI(TAG, "AP KAPATILDI (STA)");
     }
+    update_log_ctx();
 
     // NVS'ye kaydet
     nvs_handle_t nvs;

@@ -82,7 +82,6 @@ static esp_err_t execute_unlock_api(const cJSON *on_unlock)
 {
     if (!on_unlock) return ESP_ERR_INVALID_ARG;
 
-    cJSON *protocol = cJSON_GetObjectItem(on_unlock, "protocol");
     cJSON *method   = cJSON_GetObjectItem(on_unlock, "method");
     cJSON *url      = cJSON_GetObjectItem(on_unlock, "url");
     cJSON *body     = cJSON_GetObjectItem(on_unlock, "body");

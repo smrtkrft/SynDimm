@@ -5,6 +5,7 @@
  */
 
 #include "device_driver.h"
+#include "sys_log.h"
 #include "esp_log.h"
 #include "mqtt_client.h"
 #include "cJSON.h"
@@ -187,6 +188,7 @@ esp_err_t proto_mqtt_send_command(const char *topic, const char *payload,
                                    const char *prefix, const char *state_prefix,
                                    int value, bool toggle_val)
 {
+    sys_log_mark_event(SL_EV_HTTP_CMD, 0);   /* hedef cihaza komut: TX piki baglami */
     if (!s_mqtt_client || !s_mqtt_connected) {
         ESP_LOGW(TAG, "MQTT bagli degil");
         return ESP_ERR_INVALID_STATE;

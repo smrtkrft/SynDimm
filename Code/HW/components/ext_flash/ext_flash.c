@@ -1,11 +1,11 @@
 /**
  * SynDimm - Harici Flash Modulu
- * Macronix MX25L25645G (32MB) SPI Flash - 2 Partition Yapisi
+ * Macronix MX25L SPI Flash (16 MB veya 32 MB) - 3 Partition Yapisi
  *
- * Partition Haritasi (8 MB aktif / 24 MB yedek):
+ * Partition Haritasi (8 MB aktif / kalan yedek):
  *   Slot A    : 0x000000 - 0x3FFFFF  (4 MB)  - GUI + Kullanici verileri (LittleFS)
  *   Slot B    : 0x400000 - 0x7FFFFF  (4 MB)  - GUI OTA slot (LittleFS)
- *   Yedek     : 0x800000 - 0x1FFFFFF (24 MB) - Ileride genisleme icin
+ *   Yedek     : 0x800000 - cip sonu           - Loglar, yedekler (16MB: 8MB, 32MB: 24MB)
  *
  * Pin Baglantilari:
  *   CS   = D3 = GPIO21
@@ -40,14 +40,13 @@ static const char *TAG = "EXT_FLASH";
 #define PIN_SCLK             16   // D6 = GPIO16
 
 // ============================================================
-// Partition Haritasi (32MB flash, 8MB aktif, 24MB yedek)
+// Partition Haritasi (8MB aktif + kalan yedek; cip boyutu calisma zamaninda okunur)
 //
 // Aktif alan (0x000000 - 0x7FFFFF = 8 MB):
 //   Slot A    : 4 MB  - GUI Web + Kullanici verileri
 //   Slot B    : 4 MB  - GUI OTA + Kullanici verileri yedek
 //
-// Yedek alan (0x800000 - 0x1FFFFFF = 24 MB):
-//   Ileride genisleme icin ayrilmis
+// Yedek alan (0x800000 - cip sonu): /reserve/logs, /reserve/backup ...
 // ============================================================
 #define SLOT_A_OFFSET        0x000000
 #define SLOT_A_SIZE          (4 * 1024 * 1024)    // 4 MB
@@ -59,12 +58,15 @@ static const char *TAG = "EXT_FLASH";
 #define SLOT_B_LABEL         "slot_b"
 #define SLOT_B_MOUNT         "/slot_b"
 
-#define RESERVE_AREA_START   0x800000              // 24 MB yedek
-
+// Yedek alan: 0x800000'den cipin sonuna kadar. Boyut calisma zamaninda
+// cip kapasitesinden hesaplanir (16 MB cip -> 8 MB, 32 MB cip -> 24 MB).
 #define RESERVE_OFFSET       0x800000
-#define RESERVE_SIZE         (24 * 1024 * 1024)   // 24 MB
+#define RESERVE_MIN_SIZE     (1 * 1024 * 1024)    // Bundan kucukse mount edilmez
 #define RESERVE_LABEL        "reserve"
 #define RESERVE_MOUNT        "/reserve"
+
+static uint32_t s_ext_flash_size = 0;   // esp_flash_get_size() sonucu (byte)
+static uint32_t s_reserve_size = 0;     // Hesaplanan yedek alan boyutu (byte)
 
 static esp_flash_t *s_ext_flash = NULL;
 static bool s_reserve_mounted = false;
@@ -145,6 +147,16 @@ esp_err_t ext_flash_init(void)
         return ret;
     }
     ESP_LOGI(TAG, "Harici flash boyutu: %lu MB", (unsigned long)(flash_size / (1024 * 1024)));
+    s_ext_flash_size = flash_size;
+
+    // Slot A + Slot B icin en az 8 MB gerekir
+    if (flash_size < (uint32_t)(SLOT_B_OFFSET + SLOT_B_SIZE)) {
+        ESP_LOGE(TAG, "Harici flash cok kucuk (%lu MB), en az 8 MB gerekli",
+                 (unsigned long)(flash_size / (1024 * 1024)));
+        return ESP_ERR_INVALID_SIZE;
+    }
+    // Yedek alan = cipin geri kalani (16 MB cipte 8 MB, 32 MB cipte 24 MB)
+    s_reserve_size = (flash_size > RESERVE_OFFSET) ? (flash_size - RESERVE_OFFSET) : 0;
 
     // Yazma korumasi devre disi birak (MX25L25645G WP pini / status register)
     bool wp = false;
@@ -159,9 +171,10 @@ esp_err_t ext_flash_init(void)
         }
     }
 
-    // 2 Partition: Slot A (4MB GUI+Data) + Slot B (4MB OTA), 24MB yedek
-    ESP_LOGI(TAG, "Partition: Slot A %dMB + Slot B %dMB + 24MB yedek",
-             SLOT_A_SIZE / (1024 * 1024), SLOT_B_SIZE / (1024 * 1024));
+    // 2 Partition: Slot A (4MB GUI+Data) + Slot B (4MB OTA) + yedek (kalan)
+    ESP_LOGI(TAG, "Partition: Slot A %dMB + Slot B %dMB + %luMB yedek",
+             SLOT_A_SIZE / (1024 * 1024), SLOT_B_SIZE / (1024 * 1024),
+             (unsigned long)(s_reserve_size / (1024 * 1024)));
 
     // Slot A partition (GUI + Kullanici verileri)
     const esp_partition_t *slot_a_part;
@@ -225,12 +238,18 @@ esp_err_t ext_flash_init(void)
     }
 
     // ============================================================
-    // LittleFS Mount - Reserve (24MB)
+    // LittleFS Mount - Reserve (cipin kalani: 16MB cipte 8MB, 32MB cipte 24MB)
     // ============================================================
     const esp_partition_t *reserve_part;
-    ret = esp_partition_register_external(s_ext_flash, RESERVE_OFFSET, RESERVE_SIZE,
-                                          RESERVE_LABEL, ESP_PARTITION_TYPE_DATA,
-                                          ESP_PARTITION_SUBTYPE_ANY, &reserve_part);
+    if (s_reserve_size < RESERVE_MIN_SIZE) {
+        ESP_LOGW(TAG, "Yedek alan icin yer yok (%lu KB), atlaniyor",
+                 (unsigned long)(s_reserve_size / 1024));
+        ret = ESP_ERR_INVALID_SIZE;
+    } else {
+        ret = esp_partition_register_external(s_ext_flash, RESERVE_OFFSET, s_reserve_size,
+                                              RESERVE_LABEL, ESP_PARTITION_TYPE_DATA,
+                                              ESP_PARTITION_SUBTYPE_ANY, &reserve_part);
+    }
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Reserve partition kaydi hatasi: %s", esp_err_to_name(ret));
     } else {
@@ -245,7 +264,8 @@ esp_err_t ext_flash_init(void)
             ESP_LOGE(TAG, "Reserve LittleFS mount hatasi: %s", esp_err_to_name(ret));
         } else {
             s_reserve_mounted = true;
-            ESP_LOGI(TAG, "Reserve mount edildi: %s (LittleFS, 24MB)", RESERVE_MOUNT);
+            ESP_LOGI(TAG, "Reserve mount edildi: %s (LittleFS, %luMB)", RESERVE_MOUNT,
+                     (unsigned long)(s_reserve_size / (1024 * 1024)));
             // Dizin yapisi olustur
             mkdir(RESERVE_MOUNT "/logs", 0755);
             mkdir(RESERVE_MOUNT "/backup", 0755);
@@ -651,12 +671,14 @@ esp_err_t ext_flash_get_slot_b_info(size_t *total, size_t *free_space)
 // Slot A'ya yazilir
 // ============================================================
 
-extern const char gui_index_html_start[] asm("_binary_index_html_start");
-extern const char gui_index_html_end[]   asm("_binary_index_html_end");
-extern const char gui_style_css_start[]  asm("_binary_style_css_start");
-extern const char gui_style_css_end[]    asm("_binary_style_css_end");
-extern const char gui_app_js_start[]     asm("_binary_app_js_start");
-extern const char gui_app_js_end[]       asm("_binary_app_js_end");
+/* index/style/app derleme aninda gzip'lenir (bkz. CMakeLists.txt + gzip_gui.py).
+ * Slot A'ya .gz olarak yazilir; web_server once .gz'yi arar, Content-Encoding: gzip ile sunar. */
+extern const char gui_index_html_gz_start[] asm("_binary_index_html_gz_start");
+extern const char gui_index_html_gz_end[]   asm("_binary_index_html_gz_end");
+extern const char gui_style_css_gz_start[]  asm("_binary_style_css_gz_start");
+extern const char gui_style_css_gz_end[]    asm("_binary_style_css_gz_end");
+extern const char gui_app_js_gz_start[]     asm("_binary_app_js_gz_start");
+extern const char gui_app_js_gz_end[]       asm("_binary_app_js_gz_end");
 extern const char gui_config_json_start[] asm("_binary_config_json_start");
 extern const char gui_config_json_end[]   asm("_binary_config_json_end");
 extern const char gui_logo_png_start[]      asm("_binary_logo_png_start");
@@ -676,7 +698,7 @@ extern const char gui_lang_it_json_end[]    asm("_binary_it_json_end");
 extern const char gui_lang_tr_json_start[]  asm("_binary_tr_json_start");
 extern const char gui_lang_tr_json_end[]    asm("_binary_tr_json_end");
 
-#define WEB_FILES_VERSION "0.0.15"
+#define WEB_FILES_VERSION "0.0.16"
 
 static bool file_exists(const char *path)
 {
@@ -836,7 +858,8 @@ esp_err_t ext_flash_create_default_files(void)
     ESP_LOGI(TAG, "Slot A eski GUI dosyalari siliniyor (kullanici verileri korunuyor)...");
     {
         static const char *gui_files_to_delete[] = {
-            "index.html", "style.css", "app.js", "config.json", NULL
+            "index.html", "style.css", "app.js", "config.json",
+            "index.html.gz", "style.css.gz", "app.js.gz", NULL
         };
         for (int i = 0; gui_files_to_delete[i]; i++) {
             char path[320];
@@ -853,10 +876,10 @@ esp_err_t ext_flash_create_default_files(void)
         rmdir(lang_path);
     }
 
-    // Yeni dosyalari Slot A'ya yaz
-    write_file_to_slot_a("index.html", gui_index_html_start, strlen(gui_index_html_start));
-    write_file_to_slot_a("style.css",  gui_style_css_start,  strlen(gui_style_css_start));
-    write_file_to_slot_a("app.js",     gui_app_js_start,     strlen(gui_app_js_start));
+    // Yeni dosyalari Slot A'ya yaz (metin dosyalari gzip'li; binary -> end-start)
+    write_file_to_slot_a("index.html.gz", gui_index_html_gz_start, gui_index_html_gz_end - gui_index_html_gz_start);
+    write_file_to_slot_a("style.css.gz",  gui_style_css_gz_start,  gui_style_css_gz_end - gui_style_css_gz_start);
+    write_file_to_slot_a("app.js.gz",     gui_app_js_gz_start,     gui_app_js_gz_end - gui_app_js_gz_start);
     write_file_to_slot_a("config.json", gui_config_json_start, strlen(gui_config_json_start));
 
     // EMBED_FILES (binary) - null terminator yok, end-start dogru
@@ -898,116 +921,4 @@ esp_err_t ext_flash_get_reserve_info(size_t *total, size_t *free_space) {
     if (total) *total = total_bytes;
     if (free_space) *free_space = total_bytes - used_bytes;
     return ESP_OK;
-}
-
-// ============================================================
-// Hata Log Sistemi (dairesel tampon, deferred write)
-// ============================================================
-#define ERROR_LOG_MAX_ENTRIES  10
-#define ERROR_LOG_PATH         RESERVE_MOUNT "/logs/error.log"
-#define ERROR_LOG_SAVE_DELAY   5000  // 5sn
-
-typedef struct {
-    char timestamp[20];   // "YYYY-MM-DD HH:MM:SS"
-    char level[8];        // "ERROR", "WARN", "INFO"
-    char message[128];
-} error_log_entry_t;
-
-static error_log_entry_t s_error_log[ERROR_LOG_MAX_ENTRIES];
-static int s_error_log_count = 0;
-static int s_error_log_head = 0;
-static bool s_error_log_dirty = false;
-static TimerHandle_t s_error_log_timer = NULL;
-
-static void error_log_save_cb(TimerHandle_t t) {
-    (void)t;
-    if (!s_reserve_mounted || !s_error_log_dirty) return;
-    // JSON olarak yaz
-    char *buf = malloc(4096);
-    if (!buf) return;
-    int pos = 0;
-    pos += snprintf(buf + pos, 4096 - pos, "[");
-    for (int i = 0; i < s_error_log_count; i++) {
-        int idx = (s_error_log_head + i) % ERROR_LOG_MAX_ENTRIES;
-        if (i > 0) pos += snprintf(buf + pos, 4096 - pos, ",");
-        pos += snprintf(buf + pos, 4096 - pos,
-            "{\"ts\":\"%s\",\"lvl\":\"%s\",\"msg\":\"%s\"}",
-            s_error_log[idx].timestamp,
-            s_error_log[idx].level,
-            s_error_log[idx].message);
-    }
-    pos += snprintf(buf + pos, 4096 - pos, "]");
-    ext_flash_write_file(ERROR_LOG_PATH, buf, pos);
-    s_error_log_dirty = false;
-    free(buf);
-}
-
-void error_log_init(void) {
-    s_error_log_timer = xTimerCreate("err_log", pdMS_TO_TICKS(ERROR_LOG_SAVE_DELAY),
-                                      pdFALSE, NULL, error_log_save_cb);
-    // Mevcut logu yukle
-    if (!s_reserve_mounted) return;
-    char *buf = malloc(4096);
-    if (!buf) return;
-    int len = ext_flash_read_file(ERROR_LOG_PATH, buf, 4096);
-    if (len > 0) {
-        cJSON *arr = cJSON_Parse(buf);
-        if (arr && cJSON_IsArray(arr)) {
-            int count = cJSON_GetArraySize(arr);
-            for (int i = 0; i < count && i < ERROR_LOG_MAX_ENTRIES; i++) {
-                cJSON *item = cJSON_GetArrayItem(arr, i);
-                cJSON *ts = cJSON_GetObjectItem(item, "ts");
-                cJSON *lvl = cJSON_GetObjectItem(item, "lvl");
-                cJSON *msg = cJSON_GetObjectItem(item, "msg");
-                if (ts && lvl && msg) {
-                    strncpy(s_error_log[i].timestamp, ts->valuestring, 19);
-                    strncpy(s_error_log[i].level, lvl->valuestring, 7);
-                    strncpy(s_error_log[i].message, msg->valuestring, 127);
-                    s_error_log_count++;
-                }
-            }
-        }
-        cJSON_Delete(arr);
-    }
-    free(buf);
-}
-
-void error_log_append(const char *level, const char *message) {
-    if (!level || !message) return;
-    int idx;
-    if (s_error_log_count < ERROR_LOG_MAX_ENTRIES) {
-        idx = s_error_log_count++;
-    } else {
-        idx = s_error_log_head;
-        s_error_log_head = (s_error_log_head + 1) % ERROR_LOG_MAX_ENTRIES;
-    }
-    // Basit timestamp (uptime saniye)
-    snprintf(s_error_log[idx].timestamp, 20, "%lu", (unsigned long)(esp_log_timestamp() / 1000));
-    strncpy(s_error_log[idx].level, level, 7);
-    strncpy(s_error_log[idx].message, message, 127);
-    s_error_log_dirty = true;
-    if (s_error_log_timer) xTimerReset(s_error_log_timer, 0);
-}
-
-int error_log_get_recent(char *out_buf, size_t buf_size) {
-    int pos = 0;
-    pos += snprintf(out_buf + pos, buf_size - pos, "[");
-    for (int i = 0; i < s_error_log_count; i++) {
-        int idx = (s_error_log_head + i) % ERROR_LOG_MAX_ENTRIES;
-        if (i > 0) pos += snprintf(out_buf + pos, buf_size - pos, ",");
-        pos += snprintf(out_buf + pos, buf_size - pos,
-            "{\"ts\":\"%s\",\"lvl\":\"%s\",\"msg\":\"%s\"}",
-            s_error_log[idx].timestamp,
-            s_error_log[idx].level,
-            s_error_log[idx].message);
-    }
-    pos += snprintf(out_buf + pos, buf_size - pos, "]");
-    return pos;
-}
-
-void error_log_clear(void) {
-    s_error_log_count = 0;
-    s_error_log_head = 0;
-    s_error_log_dirty = false;
-    if (s_reserve_mounted) remove(ERROR_LOG_PATH);
 }

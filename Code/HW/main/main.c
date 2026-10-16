@@ -1,6 +1,6 @@
 /**
  * SynDimm - Ana Program
- * ESP32-C6 | Dahili 4MB Flash + Harici 32MB Flash
+ * ESP32-C6 | Dahili 4MB Flash + Harici 16/32MB SPI Flash
  */
 
 #include <stdio.h>
@@ -25,6 +25,8 @@
 #include "encoder.h"
 #include "buzzer.h"
 #include "device_driver.h"
+#include "sys_log.h"
+#include "esp_task_wdt.h"
 
 static const char *TAG = "MAIN";
 static char device_name[20] = {0};
@@ -35,7 +37,11 @@ static bool s_mode_change_active = false;
 static void input_task(void *arg)
 {
     ESP_LOGI(TAG, "Input task baslatildi");
+    /* Task watchdog: bu gorev donarsa TWDT (PANIC=y) cihazi resetler ve
+     * sys_log bir sonraki acilista "task_wdt" olarak kaydeder. */
+    esp_task_wdt_add(NULL);
     while (1) {
+        esp_task_wdt_reset();
         while (encoder_available()) {
             char evt = encoder_read();
 
@@ -155,10 +161,13 @@ void app_main(void)
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Harici flash baslatilamadi! Hata: %s", esp_err_to_name(ret));
     } else {
-        ESP_LOGI(TAG, "Harici flash baslatildi (32MB)");
+        ESP_LOGI(TAG, "Harici flash baslatildi");
         ext_flash_create_default_files();
-        error_log_init();
     }
+
+    // Sistem olay kaydi: onceki calismayi analiz et (reset nedeni, sure, baglam)
+    // Reserve bolumu mount degilse sadece RTC'de tutar.
+    sys_log_init();
 
     // Flash senkronizasyon baslatma
     ret = flash_sync_init();
@@ -184,7 +193,12 @@ void app_main(void)
         ESP_LOGI(TAG, "FW OTA hazir (partition: %s)", fw_ota_get_running_label());
     }
 
-    // WiFi AP modda baslat (cihaz adi ile)
+    // Guc: WiFi radyosu acilmadan once beslemenin/kondansatorlerin oturmasi icin
+    // kisa bekleme. Acilis akim pikini flash init + WiFi init ust uste bindirmez.
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    // WiFi AP modda baslat (cihaz adi ile) - radyo dusuk TX gucuyle acilir,
+    // hedef guce birkac saniye sonra cikar (wifi_manager tx_power_*).
     ret = wifi_manager_init(device_name);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "WiFi baslatilamadi! Hata: %s", esp_err_to_name(ret));
@@ -242,9 +256,11 @@ void app_main(void)
                  sa_free / 1024, rv_free / 1024);
     }
 
-    ESP_LOGI(TAG, "=== SynDimm Hazir ===");
+    ESP_LOGI(TAG, "=== SynDimm Hazir === (acilis #%lu, kisa acilis %lu)",
+             (unsigned long)sys_log_boot_count(), (unsigned long)sys_log_short_boots());
     ESP_LOGI(TAG, "Cihaz: %s | AP: %s | mDNS: %s.local",
              device_name, device_name, device_name);
+    sys_log_mark_event(SL_EV_BOOT, 0);
 
     // Kayitli WiFi varsa otomatik baglan
     wifi_manager_auto_connect();

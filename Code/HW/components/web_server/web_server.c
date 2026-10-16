@@ -27,6 +27,8 @@
 #include "esp_mac.h"
 #include "gui_ota.h"
 #include "fw_ota.h"
+#include "sys_log.h"
+#include "esp_timer.h"
 #include <stdio.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -45,12 +47,13 @@ static TaskHandle_t s_sse_task_handle = NULL;
 // ============================================================
 // Gomulu (embedded) GUI dosyalari - firmware icinden
 // ============================================================
-extern const char gui_index_html_start[] asm("_binary_index_html_start");
-extern const char gui_index_html_end[]   asm("_binary_index_html_end");
-extern const char gui_style_css_start[]  asm("_binary_style_css_start");
-extern const char gui_style_css_end[]    asm("_binary_style_css_end");
-extern const char gui_app_js_start[]     asm("_binary_app_js_start");
-extern const char gui_app_js_end[]       asm("_binary_app_js_end");
+/* index/style/app gomulu olarak gzip'li tutulur (Content-Encoding: gzip ile sunulur) */
+extern const char gui_index_html_start[] asm("_binary_index_html_gz_start");
+extern const char gui_index_html_end[]   asm("_binary_index_html_gz_end");
+extern const char gui_style_css_start[]  asm("_binary_style_css_gz_start");
+extern const char gui_style_css_end[]    asm("_binary_style_css_gz_end");
+extern const char gui_app_js_start[]     asm("_binary_app_js_gz_start");
+extern const char gui_app_js_end[]       asm("_binary_app_js_gz_end");
 extern const char gui_config_json_start[] asm("_binary_config_json_start");
 extern const char gui_config_json_end[]   asm("_binary_config_json_end");
 extern const char gui_logo_png_start[]      asm("_binary_logo_png_start");
@@ -78,21 +81,22 @@ typedef struct {
     const char *start;
     const char *end;
     const char *content_type;
+    bool gzip;              /* icerik gzip'li: Content-Encoding: gzip basligi gerekir */
 } embedded_file_t;
 
 static const embedded_file_t s_embedded_files[] = {
-    { "/index.html",   NULL, NULL, "text/html" },
-    { "/style.css",    NULL, NULL, "text/css" },
-    { "/app.js",       NULL, NULL, "application/javascript" },
-    { "/config.json",  NULL, NULL, "application/json" },
-    { "/pic/logo.png",     NULL, NULL, "image/png" },
-    { "/pic/darklogo.png", NULL, NULL, "image/png" },
-    { "/lang/en.json",    NULL, NULL, "application/json" },
-    { "/lang/de.json",    NULL, NULL, "application/json" },
-    { "/lang/es.json",    NULL, NULL, "application/json" },
-    { "/lang/fr.json",    NULL, NULL, "application/json" },
-    { "/lang/it.json",    NULL, NULL, "application/json" },
-    { "/lang/tr.json",    NULL, NULL, "application/json" },
+    { "/index.html",   NULL, NULL, "text/html",              true  },
+    { "/style.css",    NULL, NULL, "text/css",               true  },
+    { "/app.js",       NULL, NULL, "application/javascript", true  },
+    { "/config.json",  NULL, NULL, "application/json",       false },
+    { "/pic/logo.png",     NULL, NULL, "image/png",          false },
+    { "/pic/darklogo.png", NULL, NULL, "image/png",          false },
+    { "/lang/en.json",    NULL, NULL, "application/json",    false },
+    { "/lang/de.json",    NULL, NULL, "application/json",    false },
+    { "/lang/es.json",    NULL, NULL, "application/json",    false },
+    { "/lang/fr.json",    NULL, NULL, "application/json",    false },
+    { "/lang/it.json",    NULL, NULL, "application/json",    false },
+    { "/lang/tr.json",    NULL, NULL, "application/json",    false },
 };
 #define EMBEDDED_FILES_COUNT (sizeof(s_embedded_files) / sizeof(s_embedded_files[0]))
 
@@ -199,6 +203,10 @@ static esp_err_t send_active_slot_file_chunked(httpd_req_t *req, const char *pat
     }
 
     ESP_LOGI(TAG, "%s aktif slot'tan sunuluyor (%ld byte, chunked)", path, file_size);
+    if (file_size >= 8192) {
+        /* Yogun TX penceresi: brownout bu sirada olursa "GUI_SERVE" olarak gorunur */
+        sys_log_mark_event(SL_EV_GUI_SERVE, (int32_t)file_size);
+    }
 
     esp_err_t result = ESP_OK;
     int read_len;
@@ -219,39 +227,45 @@ static esp_err_t send_active_slot_file_chunked(httpd_req_t *req, const char *pat
     return result;
 }
 
-// Root-level statik dosya handler (style.css, app.js, pic/*, lang/* vb.)
-// /ext/* handler'indan farki: URI'yi oldugu gibi dosya yolu olarak kullanir
-static esp_err_t static_file_handler(httpd_req_t *req)
+/* Uzantiya gore Content-Type ve cache politikasi. clean_path uzantisi .gz OLMAMALI. */
+static void set_static_headers(httpd_req_t *req, const char *clean_path, bool gzip)
 {
-    const char *uri = req->uri;
+    const char *ext = strrchr(clean_path, '.');
+    bool cacheable = false;
+    if (ext) {
+        if (strcmp(ext, ".html") == 0) httpd_resp_set_type(req, "text/html");
+        else if (strcmp(ext, ".css") == 0)  { httpd_resp_set_type(req, "text/css"); cacheable = true; }
+        else if (strcmp(ext, ".js") == 0)   { httpd_resp_set_type(req, "application/javascript"); cacheable = true; }
+        else if (strcmp(ext, ".json") == 0) httpd_resp_set_type(req, "application/json");
+        else if (strcmp(ext, ".png") == 0)  { httpd_resp_set_type(req, "image/png"); cacheable = true; }
+        else if (strcmp(ext, ".ico") == 0)  { httpd_resp_set_type(req, "image/x-icon"); cacheable = true; }
+        else httpd_resp_set_type(req, "text/plain");
+    }
+    httpd_resp_set_hdr(req, "Cache-Control",
+                       cacheable ? "public, max-age=31536000, immutable" : "no-cache");
+    if (gzip) {
+        httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+        httpd_resp_set_hdr(req, "Vary", "Accept-Encoding");
+    }
+}
 
-    // Query string'i ayir
-    char clean_path[128];
-    strncpy(clean_path, uri, sizeof(clean_path) - 1);
-    clean_path[sizeof(clean_path) - 1] = '\0';
-    char *qmark = strchr(clean_path, '?');
-    if (qmark) *qmark = '\0';
-
-    // Once aktif slot'tan dene
+/*
+ * Statik dosya sun: once aktif slot'ta "<yol>.gz", sonra "<yol>", en son gomulu.
+ * Gzip: TX suresini ~3x kisaltir (guc). GUI OTA ile indirilen duz dosyalar da
+ * (gz yoksa) aynen sunulur; gui_ota hedef slotu tamamen temizledigi icin eski
+ * .gz dosyalari yeni duz dosyalari golgeleyemez.
+ */
+static esp_err_t serve_static_path(httpd_req_t *req, const char *clean_path)
+{
     if (ext_flash_is_slot_a_mounted() || ext_flash_is_slot_b_mounted()) {
-        long fsize = ext_flash_active_get_file_size(clean_path);
-        if (fsize > 0) {
-            const char *ext = strrchr(clean_path, '.');
-            bool cacheable = false;
-            if (ext) {
-                if (strcmp(ext, ".html") == 0) httpd_resp_set_type(req, "text/html");
-                else if (strcmp(ext, ".css") == 0)  { httpd_resp_set_type(req, "text/css"); cacheable = true; }
-                else if (strcmp(ext, ".js") == 0)   { httpd_resp_set_type(req, "application/javascript"); cacheable = true; }
-                else if (strcmp(ext, ".json") == 0) httpd_resp_set_type(req, "application/json");
-                else if (strcmp(ext, ".png") == 0)  { httpd_resp_set_type(req, "image/png"); cacheable = true; }
-                else if (strcmp(ext, ".ico") == 0)  { httpd_resp_set_type(req, "image/x-icon"); cacheable = true; }
-                else httpd_resp_set_type(req, "text/plain");
-            }
-            if (cacheable) {
-                httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=31536000, immutable");
-            } else {
-                httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-            }
+        char gz_path[140];
+        snprintf(gz_path, sizeof(gz_path), "%s.gz", clean_path);
+        if (ext_flash_active_get_file_size(gz_path) > 0) {
+            set_static_headers(req, clean_path, true);
+            return send_active_slot_file_chunked(req, gz_path);
+        }
+        if (ext_flash_active_get_file_size(clean_path) > 0) {
+            set_static_headers(req, clean_path, false);
             return send_active_slot_file_chunked(req, clean_path);
         }
     }
@@ -262,7 +276,9 @@ static esp_err_t static_file_handler(httpd_req_t *req)
             const char *start = get_embedded_start(i);
             const char *end = get_embedded_end(i);
             size_t len = end - start;
-            ESP_LOGI(TAG, "%s gomulu veriden sunuluyor (%zu byte)", clean_path, len);
+            ESP_LOGI(TAG, "%s gomulu veriden sunuluyor (%zu byte%s)", clean_path, len,
+                     s_embedded_files[i].gzip ? ", gzip" : "");
+            set_static_headers(req, clean_path, s_embedded_files[i].gzip);
             httpd_resp_set_type(req, s_embedded_files[i].content_type);
             return httpd_resp_send(req, start, len);
         }
@@ -272,15 +288,30 @@ static esp_err_t static_file_handler(httpd_req_t *req)
     return ESP_FAIL;
 }
 
+// Root-level statik dosya handler (style.css, app.js, pic/*, lang/* vb.)
+// /ext/* handler'indan farki: URI'yi oldugu gibi dosya yolu olarak kullanir
+static esp_err_t static_file_handler(httpd_req_t *req)
+{
+    // Query string'i ayir
+    char clean_path[128];
+    strncpy(clean_path, req->uri, sizeof(clean_path) - 1);
+    clean_path[sizeof(clean_path) - 1] = '\0';
+    char *qmark = strchr(clean_path, '?');
+    if (qmark) *qmark = '\0';
+    return serve_static_path(req, clean_path);
+}
+
 // GET / - Ana sayfa (aktif slot veya gomulu)
 static esp_err_t root_handler(httpd_req_t *req)
 {
-    // 1. Harici flash aktif slot'tan index.html dene
+    // 1. Harici flash aktif slot'tan index.html dene (once gzip'li, sonra duz)
     if (ext_flash_is_slot_a_mounted() || ext_flash_is_slot_b_mounted()) {
-        httpd_resp_set_type(req, "text/html");
-        httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-        if (send_active_slot_file_chunked(req, "/index.html") == ESP_OK) {
-            return ESP_OK;  // Harici flash'ta GUI var → normal arayuz
+        if (ext_flash_active_get_file_size("/index.html.gz") > 0) {
+            set_static_headers(req, "/index.html", true);
+            if (send_active_slot_file_chunked(req, "/index.html.gz") == ESP_OK) return ESP_OK;
+        } else if (ext_flash_active_get_file_size("/index.html") > 0) {
+            set_static_headers(req, "/index.html", false);
+            if (send_active_slot_file_chunked(req, "/index.html") == ESP_OK) return ESP_OK;
         }
     }
 
@@ -293,11 +324,10 @@ static esp_err_t root_handler(httpd_req_t *req)
         return httpd_resp_send(req, gui_setup_html_start, setup_len);
     }
 
-    // 3. Son care: embedded index.html
+    // 3. Son care: embedded index.html (gzip'li)
     size_t len = gui_index_html_end - gui_index_html_start;
-    ESP_LOGI(TAG, "index.html gomulu veriden sunuluyor (%zu byte)", len);
-    httpd_resp_set_type(req, "text/html");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    ESP_LOGI(TAG, "index.html gomulu veriden sunuluyor (%zu byte, gzip)", len);
+    set_static_headers(req, "/index.html", true);
     return httpd_resp_send(req, gui_index_html_start, len);
 }
 
@@ -453,7 +483,11 @@ static esp_err_t api_wifi_config_handler(httpd_req_t *req)
              "\"ap_enabled\":%s,"
              "\"ap_ssid\":\"%s\","
              "\"mdns\":\"%s\","
-             "\"rssi\":%d"
+             "\"rssi\":%d,"
+             "\"tx_max\":%d,"
+             "\"tx_now\":%d,"
+             "\"tx_adapt\":%s,"
+             "\"ap_clients\":%d"
              "}",
              wifi_manager_is_connected() ? "true" : "false",
              wifi_manager_get_ip(),
@@ -465,8 +499,45 @@ static esp_err_t api_wifi_config_handler(httpd_req_t *req)
              wifi_manager_is_ap_enabled() ? "true" : "false",
              wifi_manager_get_ap_ssid(),
              wifi_manager_get_mdns_hostname(),
-             rssi);
+             rssi,
+             wifi_manager_get_tx_power_max(),
+             wifi_manager_get_tx_power_now(),
+             wifi_manager_get_tx_adaptive() ? "true" : "false",
+             wifi_manager_get_ap_client_count());
 
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, resp, strlen(resp));
+}
+
+// POST /api/wifi/txpower - TX gucu tavani + uyarlanabilir mod {"max":17,"adaptive":true}
+static esp_err_t api_wifi_txpower_handler(httpd_req_t *req)
+{
+    char buf[96];
+    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (ret <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
+        return ESP_FAIL;
+    }
+    buf[ret] = '\0';
+
+    int max_dbm = wifi_manager_get_tx_power_max();
+    bool adaptive = wifi_manager_get_tx_adaptive();
+    const char *p = strstr(buf, "\"max\":");
+    if (p) max_dbm = atoi(p + 6);
+    if (strstr(buf, "\"adaptive\":true"))  adaptive = true;
+    if (strstr(buf, "\"adaptive\":false")) adaptive = false;
+
+    esp_err_t err = wifi_manager_set_tx_power(max_dbm, adaptive);
+    char resp[160];
+    if (err == ESP_OK) {
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"ok\",\"tx_max\":%d,\"tx_now\":%d,\"tx_adapt\":%s}",
+                 wifi_manager_get_tx_power_max(), wifi_manager_get_tx_power_now(),
+                 wifi_manager_get_tx_adaptive() ? "true" : "false");
+    } else {
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"error\",\"message\":\"Gecersiz deger (8-20 dBm)\"}");
+    }
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, resp, strlen(resp));
 }
@@ -600,7 +671,7 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
     snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    char resp[1024];
+    char resp[1152];
     snprintf(resp, sizeof(resp),
              "{"
              "\"chip\":\"%s\","
@@ -625,7 +696,9 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
              "\"reserve_total\":%zu,"
              "\"reserve_free\":%zu,"
              "\"user_total\":%zu,"
-             "\"user_free\":%zu"
+             "\"user_free\":%zu,"
+             "\"boot_count\":%lu,"
+             "\"short_boots\":%lu"
              "}",
              info.chip_model,
              (unsigned)info.cores,
@@ -649,7 +722,9 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
              reserve_total / 1024,
              reserve_free / 1024,
              user_total / 1024,
-             user_free / 1024);
+             user_free / 1024,
+             (unsigned long)sys_log_boot_count(),
+             (unsigned long)sys_log_short_boots());
 
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, resp, strlen(resp));
@@ -659,6 +734,8 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
 static esp_err_t api_device_restart_handler(httpd_req_t *req)
 {
     ESP_LOGW(TAG, "Yeniden baslatma istegi alindi (web)");
+    sys_log_mark_event(SL_EV_USER_RESTART, 0);
+    sys_log_set_restart_reason(SL_RST_USER_WEB);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
     vTaskDelay(pdMS_TO_TICKS(500));
@@ -670,6 +747,8 @@ static esp_err_t api_device_restart_handler(httpd_req_t *req)
 static esp_err_t api_device_factory_reset_handler(httpd_req_t *req)
 {
     ESP_LOGW(TAG, "Factory Reset istegi alindi (web)");
+    sys_log_set_restart_reason(SL_RST_FACTORY);
+    sys_log_write("WARN", "sys", "Fabrika sifirlama (web)");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
 
@@ -781,45 +860,7 @@ static esp_err_t ext_file_handler(httpd_req_t *req)
     clean_path[sizeof(clean_path) - 1] = '\0';
     char *qmark = strchr(clean_path, '?');
     if (qmark) *qmark = '\0';
-
-    // Once aktif slot'tan dene
-    if (ext_flash_is_slot_a_mounted() || ext_flash_is_slot_b_mounted()) {
-        long fsize = ext_flash_active_get_file_size(clean_path);
-        if (fsize > 0) {
-            const char *ext = strrchr(clean_path, '.');
-            bool cacheable = false;
-            if (ext) {
-                if (strcmp(ext, ".html") == 0) httpd_resp_set_type(req, "text/html");
-                else if (strcmp(ext, ".css") == 0)  { httpd_resp_set_type(req, "text/css"); cacheable = true; }
-                else if (strcmp(ext, ".js") == 0)   { httpd_resp_set_type(req, "application/javascript"); cacheable = true; }
-                else if (strcmp(ext, ".json") == 0) httpd_resp_set_type(req, "application/json");
-                else if (strcmp(ext, ".png") == 0)  { httpd_resp_set_type(req, "image/png"); cacheable = true; }
-                else if (strcmp(ext, ".ico") == 0)  { httpd_resp_set_type(req, "image/x-icon"); cacheable = true; }
-                else httpd_resp_set_type(req, "text/plain");
-            }
-            if (cacheable) {
-                httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=31536000, immutable");
-            } else {
-                httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-            }
-            return send_active_slot_file_chunked(req, clean_path);
-        }
-    }
-
-    // Gomulu dosyalardan ara
-    for (int i = 0; i < (int)EMBEDDED_FILES_COUNT; i++) {
-        if (strcmp(clean_path, s_embedded_files[i].path) == 0) {
-            const char *start = get_embedded_start(i);
-            const char *end = get_embedded_end(i);
-            size_t len = end - start;
-            ESP_LOGI(TAG, "%s gomulu veriden sunuluyor (%zu byte)", file_path, len);
-            httpd_resp_set_type(req, s_embedded_files[i].content_type);
-            return httpd_resp_send(req, start, len);
-        }
-    }
-
-    httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Dosya bulunamadi");
-    return ESP_FAIL;
+    return serve_static_path(req, clean_path);
 }
 
 // ============================================================
@@ -1074,6 +1115,8 @@ static esp_err_t api_gui_ota_info_handler(httpd_req_t *req)
 // POST /api/gui-ota/start
 static esp_err_t api_gui_ota_start_handler(httpd_req_t *req)
 {
+    sys_log_mark_event(SL_EV_OTA_GUI, 0);
+    sys_log_write("INFO", "ota", "GUI guncellemesi baslatildi");
     if (gui_ota_is_busy()) {
         httpd_resp_set_type(req, "application/json");
         return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"OTA zaten calisiyor\"}", HTTPD_RESP_USE_STRLEN);
@@ -1234,6 +1277,9 @@ static esp_err_t api_fw_ota_check_handler(httpd_req_t *req)
 // POST /api/fw-ota/start
 static esp_err_t api_fw_ota_start_handler(httpd_req_t *req)
 {
+    sys_log_mark_event(SL_EV_OTA_FW, 0);
+    sys_log_set_restart_reason(SL_RST_OTA_FW);   // OTA sonrasi restart bu nedenle etiketlenir
+    sys_log_write("INFO", "ota", "Firmware guncellemesi baslatildi");
     esp_err_t err = fw_ota_start();
     char resp[128];
     if (err == ESP_OK) {
@@ -1735,17 +1781,41 @@ static esp_err_t api_catalog_download_handler(httpd_req_t *req)
 // System Logs API
 // ============================================================
 
-static esp_err_t api_system_logs_handler(httpd_req_t *req) {
-    char *buf = malloc(4096);
-    if (!buf) {
+// GET /api/system/logs - Olay kayitlari (en yeni once) + ozet
+static esp_err_t api_system_logs_handler(httpd_req_t *req)
+{
+    char *entries = sys_log_read_tail_json(150);
+    if (!entries) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Bellek yetersiz");
         return ESP_FAIL;
     }
-    int len = error_log_get_recent(buf, 4096);
+    char head[160];
+    int hl = snprintf(head, sizeof(head),
+                      "{\"boot\":%lu,\"short\":%lu,\"epoch\":%lu,\"uptime\":%lld,\"entries\":",
+                      (unsigned long)sys_log_boot_count(), (unsigned long)sys_log_short_boots(),
+                      (unsigned long)sys_log_boot_epoch(),
+                      (long long)(esp_timer_get_time() / 1000000));
+
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, buf, len);
-    free(buf);
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    httpd_resp_send_chunk(req, head, hl);
+    httpd_resp_send_chunk(req, entries, strlen(entries));
+    httpd_resp_send_chunk(req, "}", 1);
+    httpd_resp_send_chunk(req, NULL, 0);
+    free(entries);
     return ESP_OK;
+}
+
+// DELETE /api/system/logs - Kayitlari temizle
+static esp_err_t api_system_logs_clear_handler(httpd_req_t *req)
+{
+    esp_err_t err = sys_log_clear();
+    httpd_resp_set_type(req, "application/json");
+    if (err == ESP_OK) {
+        return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    }
+    return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Log deposu hazir degil\"}",
+                           HTTPD_RESP_USE_STRLEN);
 }
 
 // ============================================================
@@ -1761,7 +1831,7 @@ esp_err_t web_server_start(void)
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 47;
+    config.max_uri_handlers = 52;
     config.stack_size = 8192;
     config.max_open_sockets = 7;
     config.lru_purge_enable = true;
@@ -1793,6 +1863,10 @@ esp_err_t web_server_start(void)
         .uri = "/api/system/logs", .method = HTTP_GET, .handler = api_system_logs_handler
     };
     httpd_register_uri_handler(s_server, &api_logs);
+    const httpd_uri_t api_logs_clear = {
+        .uri = "/api/system/logs", .method = HTTP_DELETE, .handler = api_system_logs_clear_handler
+    };
+    httpd_register_uri_handler(s_server, &api_logs_clear);
 
     // --- WiFi API ---
     const httpd_uri_t api_wifi = {
@@ -1818,6 +1892,10 @@ esp_err_t web_server_start(void)
     const httpd_uri_t api_wifi_mdns = {
         .uri = "/api/wifi/mdns", .method = HTTP_POST, .handler = api_wifi_mdns_handler
     };
+    const httpd_uri_t api_wifi_txpower = {
+        .uri = "/api/wifi/txpower", .method = HTTP_POST, .handler = api_wifi_txpower_handler
+    };
+    httpd_register_uri_handler(s_server, &api_wifi_txpower);
     httpd_register_uri_handler(s_server, &api_wifi_mdns);
 
     // --- Modes API ---

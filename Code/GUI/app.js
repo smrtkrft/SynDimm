@@ -284,7 +284,29 @@ function loadWifiConfig(){
         if(mdnsEl && d.mdns) mdnsEl.textContent=d.mdns+'.local';
         const mdnsInp=document.getElementById('mdns-hostname');
         if(mdnsInp && d.mdns) mdnsInp.value=d.mdns;
+        // TX gucu / guc yonetimi
+        const txNow=document.getElementById('tx-now');
+        if(txNow) txNow.textContent=(d.tx_now!=null)?d.tx_now+' dBm':'--';
+        const txMax=document.getElementById('tx-max');
+        if(txMax && d.tx_max!=null) txMax.value=String(d.tx_max);
+        const txAd=document.getElementById('tx-adapt');
+        if(txAd) txAd.classList.toggle('on',!!d.tx_adapt);
+        const apCl=document.getElementById('ap-clients');
+        if(apCl) apCl.textContent=(d.ap_clients!=null)?d.ap_clients:'--';
     }).catch(()=>{});
+}
+function saveTxPower(){
+    const max=parseInt(document.getElementById('tx-max').value,10);
+    const adaptive=document.getElementById('tx-adapt').classList.contains('on');
+    fetch('/api/wifi/txpower',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({max,adaptive})})
+    .then(r=>r.json()).then(()=>{setTimeout(loadWifiConfig,3000);})
+    .catch(()=>{});
+}
+function toggleTxAdapt(){
+    const tog=document.getElementById('tx-adapt');
+    tog.classList.toggle('on');
+    saveTxPower();
 }
 function saveMdns(){
     const hostname=document.getElementById('mdns-hostname').value.trim();
@@ -336,6 +358,7 @@ function showInfoDetail(name){
     document.getElementById('info-main').style.display='none';
     document.getElementById('info-detail-'+name).style.display='block';
     if(name==='sysinfo') loadSystemInfo();
+    if(name==='logs') loadLogs();
     subpageActive=true;updateFooterBtn();
 }
 function hideInfoDetail(){
@@ -399,7 +422,93 @@ function loadSystemInfo(){
             const h=Math.floor(d.uptime/3600),m=Math.floor((d.uptime%3600)/60);
             document.getElementById('sys-uptime').textContent=h+'s '+m+'dk';
         }
+        const boots=document.getElementById('sys-boots');
+        if(boots) boots.textContent=(d.boot_count!=null)?('#'+d.boot_count+(d.short_boots?' ('+d.short_boots+' kisa)':'')):'--';
     }).catch(()=>{});
+}
+
+/* ── Olay Kayitlari (sys_log) ─────────────────────── */
+let logData=null, logFilter='all';
+const LOG_EV_TR={BOOT:'Acilis tamamlandi',AP_CLIENT_JOIN:'AP istemci baglandi',AP_CLIENT_LEAVE:'AP istemci ayrildi',
+    STA_CONNECTING:'Router\'a baglaniliyor',STA_GOT_IP:'Router\'a baglandi',STA_LOST:'Router baglantisi koptu',
+    GUI_SERVE:'GUI dosyasi sunuluyor',HTTP_CMD:'Cihaza komut gonderildi',OTA_FW:'Firmware OTA',OTA_GUI:'GUI OTA',
+    TX_POWER:'TX gucu degisti',USER_RESTART:'Kullanici yeniden baslatma',NONE:'--'};
+const LOG_CAT_TR={power:'GUC',software:'YAZILIM',user:'KULLANICI',other:'DIGER',unknown:'BILINMIYOR'};
+function fmtDur(sec){
+    sec=Math.max(0,sec|0);
+    const d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60),s=sec%60;
+    if(d>0) return d+'g '+h+'s '+m+'dk';
+    if(h>0) return h+'s '+m+'dk';
+    if(m>0) return m+'dk '+s+'sn';
+    return s+'sn';
+}
+function fmtTs(ts){
+    if(!ts) return '';
+    const dt=new Date(ts*1000);
+    const p=n=>String(n).padStart(2,'0');
+    return p(dt.getDate())+'.'+p(dt.getMonth()+1)+'.'+dt.getFullYear()+' '+p(dt.getHours())+':'+p(dt.getMinutes());
+}
+function loadLogs(){
+    const list=document.getElementById('log-list');
+    fetch('/api/system/logs').then(r=>r.json()).then(d=>{
+        logData=d;
+        const sum=document.getElementById('log-summary');
+        if(sum){
+            let t='Bu acilis: <strong>#'+d.boot+'</strong> &middot; calisma '+fmtDur(d.uptime);
+            if(d.short) t+=' &middot; '+d.short+' kisa acilis atlandi';
+            t+=d.epoch?' &middot; saat senkron':' &middot; saat yok (sure bazli)';
+            sum.innerHTML=t;
+        }
+        renderLogs();
+    }).catch(()=>{list.innerHTML='<div class="log-empty">Kayitlar alinamadi</div>';});
+}
+function setLogFilter(f,btn){
+    logFilter=f;
+    document.querySelectorAll('.log-filter').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    renderLogs();
+}
+function renderLogs(){
+    const list=document.getElementById('log-list');
+    if(!logData||!logData.entries){list.innerHTML='<div class="log-empty">Log kaydi yok</div>';return;}
+    const items=logData.entries.filter(e=>{
+        if(logFilter==='all') return true;
+        if(logFilter==='boot') return e.type==='boot';
+        if(logFilter==='power') return e.cat==='power';
+        if(logFilter==='wifi') return e.cat==='wifi';
+        return true;
+    });
+    if(items.length===0){list.innerHTML='<div class="log-empty">Bu filtrede kayit yok</div>';return;}
+    list.innerHTML=items.map(e=>{
+        if(e.type==='boot'){
+            const cat=e.cat||'unknown';
+            const chips=[];
+            chips.push('calisma '+(e.approx?'~':'')+fmtDur(e.up));
+            if(e.ev&&e.ev!=='NONE') chips.push('son olay: '+(LOG_EV_TR[e.ev]||e.ev)+(e.ev_dt>=0?' ('+fmtDur(e.ev_dt)+' once)':''));
+            if(e.wifi&&e.wifi!=='?') chips.push('wifi '+e.wifi+(e.cl?' / '+e.cl+' istemci':''));
+            if(e.rssi) chips.push('rssi '+e.rssi);
+            if(e.tx) chips.push('tx '+e.tx+' dBm');
+            if(e.heap_min) chips.push('heap min '+Math.round(e.heap_min/1024)+' KB');
+            if(e.short) chips.push(e.short+' kisa acilis');
+            return '<div class="log-item cat-'+cat+'">'+
+                '<div class="log-head"><span class="log-title">'+(LOG_CAT_TR[cat]||cat)+' &middot; Acilis #'+e.n+' sonu</span>'+
+                '<span class="log-time">'+(fmtTs(e.ts)||('boot #'+e.n))+'</span></div>'+
+                '<div class="log-msg">'+esc(e.msg||e.cause||'')+'</div>'+
+                (e.hint?'<div class="log-hint">'+esc(e.hint)+'</div>':'')+
+                '<div class="log-chips">'+chips.map(c=>'<span class="log-chip">'+esc(c)+'</span>').join('')+'</div>'+
+                '</div>';
+        }
+        const lvl=e.lvl||'INFO';
+        return '<div class="log-item cat-'+(e.cat||'sys')+' lvl-'+lvl+'">'+
+            '<div class="log-head"><span class="log-title">'+esc((e.cat||'sys').toUpperCase())+' &middot; '+esc(lvl)+'</span>'+
+            '<span class="log-time">'+(fmtTs(e.ts)||('#'+e.n+' +'+fmtDur(e.up)))+'</span></div>'+
+            '<div class="log-msg">'+esc(e.msg||'')+'</div>'+
+            '</div>';
+    }).join('');
+}
+function clearLogs(){
+    if(!confirm('Tum olay kayitlari silinecek. Emin misiniz?')) return;
+    fetch('/api/system/logs',{method:'DELETE'}).then(()=>loadLogs()).catch(()=>{});
 }
 
 /* ── Dev Detail Navigation ────────────────────────── */

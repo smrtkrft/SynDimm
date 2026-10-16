@@ -239,6 +239,22 @@
                 <div class="s-label">Access Point</div>
                 <div class="s-row"><span>AP Modu</span><div class="s-toggle" id="ap-toggle" onclick="toggleAP()"></div></div>
                 <div class="s-row"><span>AP SSID</span><span class="s-val" id="ap-ssid">--</span></div>
+                <div class="s-row"><span>Bagli Istemci</span><span class="s-val" id="ap-clients">--</span></div>
+
+                <div class="s-label">WiFi Guc Yonetimi</div>
+                <p class="s-hint">Pik akim TX gucune baglidir, karsi cihaza degil. Tavan dusurulurse zayif beslemede brownout riski azalir. Uyarlanabilir mod, yakin cihazlarda gucu otomatik dusurur, uzakta tavana cikar.</p>
+                <div class="s-row"><span>Anlik TX Gucu</span><span class="s-val" id="tx-now">--</span></div>
+                <div class="s-row">
+                    <span>TX Tavani</span>
+                    <select class="s-input s-select" id="tx-max" style="width:120px" onchange="saveTxPower()">
+                        <option value="8">8 dBm</option>
+                        <option value="11">11 dBm</option>
+                        <option value="14">14 dBm</option>
+                        <option value="17">17 dBm (onerilen)</option>
+                        <option value="20">20 dBm (maks)</option>
+                    </select>
+                </div>
+                <div class="s-row"><span>Uyarlanabilir (RSSI'ye gore)</span><div class="s-toggle" id="tx-adapt" onclick="toggleTxAdapt()"></div></div>
             </div>
 
             <!-- FW OTA Detay -->
@@ -434,6 +450,7 @@
                 <div class="s-row"><span>Firmware</span><span class="s-val" id="sys-fw">--</span></div>
                 <div class="s-row"><span>IDF Surumu</span><span class="s-val" id="sys-idf">--</span></div>
                 <div class="s-row"><span>Calisma Suresi</span><span class="s-val" id="sys-uptime">--</span></div>
+                <div class="s-row"><span>Acilis Sayisi</span><span class="s-val" id="sys-boots">--</span></div>
             </div>
 
             <!-- Loglar detay -->
@@ -442,10 +459,21 @@
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
                     Geri
                 </button>
-                <div class="s-label">Sistem Loglari</div>
-                <p class="s-hint">Son 10 hata ve baglanti kopma kaydi burada listelenecek. Backend log deposu henuz mevcut degil &mdash; NVS tabanli hata kayit sistemi eklenecek.</p>
+                <div class="s-label">Olay Kayitlari</div>
+                <div class="log-summary" id="log-summary">--</div>
+                <p class="s-hint">Her yeniden baslatma, nedeniyle birlikte kaydedilir: guc (brownout / kesinti), yazilim (panic / watchdog) veya kullanici. 5 saniyeden kisa calismalar listelenmez, sayilir. Kayitlar harici flash'ta tutulur.</p>
+                <div class="log-filters">
+                    <button class="log-filter active" data-f="all" onclick="setLogFilter('all',this)">Tumu</button>
+                    <button class="log-filter" data-f="boot" onclick="setLogFilter('boot',this)">Acilis</button>
+                    <button class="log-filter" data-f="power" onclick="setLogFilter('power',this)">Guc</button>
+                    <button class="log-filter" data-f="wifi" onclick="setLogFilter('wifi',this)">WiFi</button>
+                </div>
                 <div id="log-list">
-                    <div class="log-empty">Log kaydi yok</div>
+                    <div class="log-empty">Yukleniyor...</div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:12px">
+                    <button class="s-btn s-btn-secondary" onclick="loadLogs()" style="flex:1">Yenile</button>
+                    <button class="s-btn s-btn-warn" onclick="clearLogs()" style="flex:1">Temizle</button>
                 </div>
             </div>
         </div>

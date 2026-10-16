@@ -5,6 +5,7 @@
  */
 
 #include "encoder.h"
+#include "sys_log.h"
 #include <string.h>
 #include "driver/gpio.h"
 #include "esp_log.h"
@@ -113,6 +114,7 @@ static void perform_factory_reset(void)
     }
 
     ESP_LOGW(TAG, "Cihaz yeniden baslatiliyor...");
+    sys_log_set_restart_reason(SL_RST_FACTORY);
     vTaskDelay(pdMS_TO_TICKS(500));
     esp_restart();
 }
@@ -238,6 +240,7 @@ bool encoder_available(void)
                 }
                 else if (dur >= REBOOT_PRESS_MS) {
                     ESP_LOGW(TAG, "REBOOT baslatiliyor...");
+                    sys_log_set_restart_reason(SL_RST_USER_ENCODER);
                     vTaskDelay(pdMS_TO_TICKS(100));
                     esp_restart();
                 }

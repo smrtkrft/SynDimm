@@ -5,6 +5,7 @@
  */
 
 #include "device_driver.h"
+#include "sys_log.h"
 #include "esp_log.h"
 #include "cJSON.h"
 #include "lwip/sockets.h"
@@ -125,6 +126,7 @@ esp_err_t proto_udp_send_command(const char *host, int port,
                                   const char *packet_template,
                                   int value, bool toggle_val)
 {
+    sys_log_mark_event(SL_EV_HTTP_CMD, 0);   /* hedef cihaza komut: TX piki baglami */
     if (!host || !packet_template) return ESP_ERR_INVALID_ARG;
     if (strlen(host) == 0) {
         ESP_LOGW(TAG, "Host ayarlanmamis");

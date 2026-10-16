@@ -5,11 +5,10 @@
 #include <stdbool.h>
 
 /**
- * Harici SPI flash baslatma (MX25L25645G - 32MB, 8MB aktif / 24MB yedek)
- * 2 Partition Yapisi:
+ * Harici SPI flash baslatma (MX25L, 16 veya 32 MB; 8MB aktif / kalan yedek)
  *   Slot A    : 0x000000 (4 MB)  - GUI + Kullanici verileri (LittleFS, /slot_a)
  *   Slot B    : 0x400000 (4 MB)  - GUI OTA slot (LittleFS, /slot_b)
- *   Yedek     : 0x800000 (24 MB) - Ileride genisleme icin
+ *   Yedek     : 0x800000 - son   - Loglar/yedek (LittleFS, /reserve)
  */
 esp_err_t ext_flash_init(void);
 
@@ -60,9 +59,3 @@ esp_err_t ext_flash_create_default_files(void);
 // Reserve partition
 bool ext_flash_is_reserve_mounted(void);
 esp_err_t ext_flash_get_reserve_info(size_t *total, size_t *free_space);
-
-// Hata log sistemi
-void error_log_init(void);
-void error_log_append(const char *level, const char *message);
-int error_log_get_recent(char *out_buf, size_t buf_size);
-void error_log_clear(void);
