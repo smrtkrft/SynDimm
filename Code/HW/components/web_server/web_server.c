@@ -31,6 +31,7 @@
 #include "sd_util.h"
 #include "esp_timer.h"
 #include "mbedtls/sha256.h"
+#include "esp_crt_bundle.h"
 #include <stdio.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -2070,6 +2071,7 @@ static esp_err_t api_catalog_download_handler(httpd_req_t *req)
     esp_http_client_config_t cfg = {
         .url = url,
         .timeout_ms = 10000,
+        .crt_bundle_attach = esp_crt_bundle_attach,   /* HTTPS: sertifika paketi olmadan TLS her zaman basarisizdi */
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
@@ -2250,7 +2252,8 @@ esp_err_t web_server_start(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = ROUTE_COUNT + 4;
-    config.stack_size = 8192;
+    /* Katalog indirme bu gorevde TLS el sikismasi yapar; 8 KB yetersiz kalabiliyordu */
+    config.stack_size = 12288;
     /* Tarayici 6 paralel istek + 3 kalici SSE: 7 soket yetmiyordu, LRU temizligi
      * SSE'yi kesiyordu. LWIP_MAX_SOCKETS=16 -> httpd icin 12 (+3 dahili) uygun. */
     config.max_open_sockets = 12;
